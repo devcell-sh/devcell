@@ -1,13 +1,17 @@
 package serve
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/DimmKirr/devcell/internal/logger"
 )
 
 // agentForPrefix maps model prefix to the binary name.
@@ -19,7 +23,28 @@ var agentForPrefix = map[string]string{
 
 // Executor runs an agent command and returns the result.
 type Executor interface {
-	Run(agent, prompt, model string) ExecResult
+	Run(opts ExecOpts) ExecResult
+}
+
+// ExecOpts is the bundle of arguments passed to Executor.Run.
+//
+// Adding a new CLI-flag mapping (e.g. --max-budget-usd) means adding a field
+// here rather than widening Run's signature.
+type ExecOpts struct {
+	// Agent is the binary name ("claude" or "opencode").
+	Agent string
+	// Prompt is the assembled prompt string passed via -p / positional arg.
+	Prompt string
+	// Model is the optional sub-model (e.g. "sonnet" or "claude-sonnet-4-5"). Empty = agent default.
+	Model string
+	// Effort, when set, is passed as --effort to the claude CLI.
+	// Valid values: "low", "medium", "high". Empty = CLI default.
+	Effort string
+	// SystemPrompt, when set, is passed as --append-system-prompt to claude.
+	// Operator-level baseline (set on `cell serve` startup), composes with
+	// any per-request `instructions` / `system` role from the OpenAI body —
+	// it does NOT override them. Ignored for opencode (no equivalent flag).
+	SystemPrompt string
 }
 
 // ExecResult holds the output of an agent execution.
@@ -27,42 +52,123 @@ type ExecResult struct {
 	Stdout   string
 	Stderr   string
 	ExitCode int
+	// Usage carries token-and-cost telemetry parsed from the agent's
+	// machine-readable output (claude --output-format=json today).
+	// Zero-valued when the agent doesn't emit usage data (opencode) or
+	// when JSON parsing falls back to raw stdout.
+	Usage Usage
+}
+
+// Usage is the agent-side token/cost view for one request. Mapped into
+// OpenAI's per-API shape (ChatUsage / ResponsesUsage) at handler time.
+//
+// Field naming follows Anthropic's wire format so the parser is a 1:1
+// JSON decode of claude's `usage` object — the OpenAI mapping
+// (prompt_tokens = input + cache_creation + cache_read; completion = output)
+// is done in the handlers, not here, so other agents can plug in with
+// their own native shape.
+type Usage struct {
+	InputTokens              int
+	OutputTokens             int
+	CacheCreationInputTokens int
+	CacheReadInputTokens     int
+	// TotalCostUSD is what claude reports; opencode doesn't surface cost.
+	TotalCostUSD float64
+}
+
+// validEffort reports whether v is one of the OpenAI-spec effort levels.
+//
+// We deliberately accept only "low", "medium", "high" — the values OpenAI
+// documents — and silently drop unknown values (including Claude's "xhigh"
+// and "max" extensions) to match permissive parsing of other fields.
+func validEffort(v string) bool {
+	switch v {
+	case "low", "medium", "high":
+		return true
+	}
+	return false
 }
 
 // ChatMessage is an OpenAI-compatible message.
 type ChatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	// Role of the message author: "system", "user", or "assistant".
+	Role string `json:"role" example:"user"`
+	// The message content (prompt text for user, response text for assistant).
+	Content string `json:"content" example:"Explain the main function in this repo"`
 }
 
 // ChatRequest is the OpenAI-compatible chat completions request.
 type ChatRequest struct {
-	Model    string        `json:"model"`
+	// Model selects the agent. Use "claude", "anthropic", or "opencode" as a prefix.
+	// Append a sub-model with a slash: "claude/claude-sonnet-4-5".
+	Model string `json:"model" example:"claude"`
+	// Messages is the conversation history. The last user message is used as the prompt.
 	Messages []ChatMessage `json:"messages"`
+	// ReasoningEffort, when set, controls Claude's thinking budget for this request.
+	// Valid values: "low", "medium", "high". Other values are silently dropped.
+	// Maps to the `claude --effort` CLI flag. Has no effect on the opencode agent.
+	ReasoningEffort string `json:"reasoning_effort,omitempty" example:"high"`
+	// Stream, when true, emits Server-Sent Events with token-level deltas.
+	// Supported only for the claude agent (opencode falls back to buffered).
+	Stream bool `json:"stream,omitempty" example:"false"`
+	// StreamOptions configures streaming behavior. Honored only when Stream is true.
+	StreamOptions *ChatStreamOptions `json:"stream_options,omitempty"`
+}
+
+// ChatStreamOptions mirrors OpenAI's stream_options object.
+type ChatStreamOptions struct {
+	// IncludeUsage, when true, embeds the token-usage object in the
+	// final SSE chunk. Off by default to match OpenAI's contract.
+	IncludeUsage bool `json:"include_usage,omitempty" example:"true"`
 }
 
 // ChatChoice is a single choice in the response.
 type ChatChoice struct {
-	Index        int         `json:"index"`
-	Message      ChatMessage `json:"message"`
-	FinishReason string      `json:"finish_reason"`
+	// Index of this choice (always 0 — single-choice responses).
+	Index int `json:"index" example:"0"`
+	// The assistant's response message.
+	Message ChatMessage `json:"message"`
+	// Finish reason: "stop" on success, "error" if the agent exited non-zero.
+	FinishReason string `json:"finish_reason" example:"stop"`
 }
 
-// ChatUsage tracks token usage (stubbed for now).
+// ChatUsage tracks token usage. Populated from claude --output-format=json
+// (input + cache_creation + cache_read merged into prompt_tokens to match
+// OpenAI semantics). Zero-valued for opencode and for claude paths where
+// JSON parsing fell back to raw stdout.
 type ChatUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens     int `json:"prompt_tokens" example:"42"`
+	CompletionTokens int `json:"completion_tokens" example:"7"`
+	TotalTokens      int `json:"total_tokens" example:"49"`
+}
+
+// chatUsageFromExec maps the agent-native Usage into the OpenAI Chat
+// Completions shape. OpenAI's prompt_tokens is "input + cached input
+// (creation + read)" — Anthropic separates these on the wire, so we
+// flatten them here.
+func chatUsageFromExec(u Usage) ChatUsage {
+	prompt := u.InputTokens + u.CacheCreationInputTokens + u.CacheReadInputTokens
+	return ChatUsage{
+		PromptTokens:     prompt,
+		CompletionTokens: u.OutputTokens,
+		TotalTokens:      prompt + u.OutputTokens,
+	}
 }
 
 // ChatResponse is the OpenAI-compatible chat completions response.
 type ChatResponse struct {
-	ID      string       `json:"id"`
-	Object  string       `json:"object"`
-	Created int64        `json:"created"`
-	Model   string       `json:"model"`
+	// Unique completion ID (format: chatcmpl-<hex>).
+	ID string `json:"id" example:"chatcmpl-a1b2c3d4e5f6"`
+	// Object type (always "chat.completion").
+	Object string `json:"object" example:"chat.completion"`
+	// Unix timestamp of when the response was created.
+	Created int64 `json:"created" example:"1714000000"`
+	// The model that was requested.
+	Model string `json:"model" example:"claude"`
+	// Response choices (always a single element).
 	Choices []ChatChoice `json:"choices"`
-	Usage   ChatUsage    `json:"usage"`
+	// Token usage (stubbed, reserved for future use).
+	Usage ChatUsage `json:"usage"`
 }
 
 // parseModel extracts agent and submodel from the model string.
@@ -81,15 +187,52 @@ func chatcmplID() string {
 }
 
 // NewChatHandler returns an http.Handler for POST /v1/chat/completions.
-func NewChatHandler(exec Executor) http.Handler {
+//
+// @Summary Send a chat completion request
+// @Description Accepts an OpenAI-compatible chat completion request and routes it to the appropriate
+// @Description LLM agent binary (Claude Code or OpenCode) running inside the DevCell container.
+// @Description
+// @Description The `model` field determines which agent handles the request:
+// @Description - `"claude"` or `"anthropic"` — routes to Claude Code CLI
+// @Description - `"opencode"` — routes to OpenCode CLI
+// @Description - `"claude/claude-sonnet-4-5"` — routes to Claude Code with a specific sub-model
+// @Description
+// @Description Only the **last user message** in the `messages` array is sent as the prompt to the agent.
+// @Description The response is a single-choice completion with finish_reason "stop" on success or "error" on failure.
+// @Description
+// @Description **Honored fields:**
+// @Description - `reasoning_effort` (`low` / `medium` / `high`) → maps to the `claude --effort` CLI flag
+// @Description   to control thinking budget. Other values (including Claude's `xhigh`/`max`) are silently dropped.
+// @Description
+// @Description **Example request:**
+// @Description ```json
+// @Description {"model": "claude", "messages": [{"role": "user", "content": "explain this repo"}]}
+// @Description ```
+// @Tags chat
+// @Accept json
+// @Produce json
+// @Param request body ChatRequest true "Chat completion request"
+// @Success 200 {object} ChatResponse "Successful completion"
+// @Failure 400 {string} string "Invalid JSON, missing model, empty messages, or unknown model prefix"
+// @Failure 401 {string} string "Missing or invalid Bearer token"
+// @Failure 405 {string} string "Only POST is allowed"
+// @Security BearerAuth
+// @Router /v1/chat/completions [post]
+func NewChatHandler(exec Executor, logPrompts bool, systemPrompt string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("read body: %v", err), http.StatusBadRequest)
+			return
+		}
+
 		var req ChatRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := json.NewDecoder(bytes.NewReader(body)).Decode(&req); err != nil {
 			http.Error(w, fmt.Sprintf("invalid JSON: %v", err), http.StatusBadRequest)
 			return
 		}
@@ -114,7 +257,42 @@ func NewChatHandler(exec Executor) http.Handler {
 		// Use the last user message as the prompt.
 		prompt := req.Messages[len(req.Messages)-1].Content
 
-		result := exec.Run(agent, prompt, submodel)
+		// reasoning_effort is OpenAI's per-request thinking-budget hint
+		// (low|medium|high). Maps to claude's --effort flag. Silently drop
+		// unknown values rather than 400 — matches our permissive parsing
+		// of other not-fully-supported fields.
+		effort := req.ReasoningEffort
+		if effort != "" && !validEffort(effort) {
+			effort = ""
+		}
+
+		id := chatcmplID()
+
+		if logPrompts {
+			logger.Info("chat prompt",
+				"id", id, "model", req.Model, "agent", agent,
+				"effort", effort, "prompt", prompt,
+				"body", json.RawMessage(body))
+		}
+
+		opts := ExecOpts{
+			Agent:        agent,
+			Prompt:       prompt,
+			Model:        submodel,
+			Effort:       effort,
+			SystemPrompt: systemPrompt,
+		}
+
+		// Streaming path: only claude has a token-level streaming surface
+		// (claude --output-format=stream-json). Opencode falls through to
+		// the buffered path.
+		if req.Stream && agent == "claude" {
+			includeUsage := req.StreamOptions != nil && req.StreamOptions.IncludeUsage
+			streamChatCompletions(w, r, opts, id, req.Model, includeUsage)
+			return
+		}
+
+		result := exec.Run(opts)
 
 		finishReason := "stop"
 		content := result.Stdout
@@ -125,8 +303,13 @@ func NewChatHandler(exec Executor) http.Handler {
 			}
 		}
 
+		if logPrompts {
+			logger.Info("chat response",
+				"id", id, "finish_reason", finishReason, "content", content)
+		}
+
 		resp := ChatResponse{
-			ID:      chatcmplID(),
+			ID:      id,
 			Object:  "chat.completion",
 			Created: time.Now().Unix(),
 			Model:   req.Model,
@@ -137,6 +320,7 @@ func NewChatHandler(exec Executor) http.Handler {
 					FinishReason: finishReason,
 				},
 			},
+			Usage: chatUsageFromExec(result.Usage),
 		}
 
 		w.Header().Set("Content-Type", "application/json")

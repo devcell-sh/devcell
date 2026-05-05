@@ -12,7 +12,10 @@
   toml = pkgs.formats.toml {};
 
   # Only stdio servers — Codex doesn't support HTTP transport.
-  stdioServers = lib.filterAttrs (_: s: (s.type or "stdio") == "stdio") mcpCfg.servers;
+  # Also skip servers explicitly disabled (enabled = false). Default: enabled.
+  stdioServers = lib.filterAttrs (
+    _: s: (s.type or "stdio") == "stdio" && (s.enabled or true)
+  ) mcpCfg.servers;
 
   toCodexServer = _: s:
     {

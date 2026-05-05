@@ -11,21 +11,25 @@ import (
 
 // fakeExec records what was called and returns canned output.
 type fakeExec struct {
-	called bool
-	agent  string
-	prompt string
-	model  string
+	called       bool
+	agent        string
+	prompt       string
+	model        string
+	effort       string
+	systemPrompt string
 
 	stdout   string
 	stderr   string
 	exitCode int
 }
 
-func (f *fakeExec) Run(agent, prompt, model string) ExecResult {
+func (f *fakeExec) Run(opts ExecOpts) ExecResult {
 	f.called = true
-	f.agent = agent
-	f.prompt = prompt
-	f.model = model
+	f.agent = opts.Agent
+	f.prompt = opts.Prompt
+	f.model = opts.Model
+	f.effort = opts.Effort
+	f.systemPrompt = opts.SystemPrompt
 	return ExecResult{
 		Stdout:   f.stdout,
 		Stderr:   f.stderr,
@@ -44,7 +48,7 @@ func postChat(t *testing.T, handler http.Handler, body string) *httptest.Respons
 
 func TestHandler_ValidClaude(t *testing.T) {
 	fe := &fakeExec{stdout: "hello back", exitCode: 0}
-	h := NewChatHandler(fe)
+	h := NewChatHandler(fe, false, "")
 
 	rec := postChat(t, h, `{"model":"anthropic/sonnet","messages":[{"role":"user","content":"hello"}]}`)
 
@@ -83,7 +87,7 @@ func TestHandler_ValidClaude(t *testing.T) {
 
 func TestHandler_ValidOpencode(t *testing.T) {
 	fe := &fakeExec{stdout: "opencode result"}
-	h := NewChatHandler(fe)
+	h := NewChatHandler(fe, false, "")
 
 	rec := postChat(t, h, `{"model":"opencode","messages":[{"role":"user","content":"hello"}]}`)
 
@@ -97,7 +101,7 @@ func TestHandler_ValidOpencode(t *testing.T) {
 
 func TestHandler_ModelWithSubmodel(t *testing.T) {
 	fe := &fakeExec{stdout: "ok"}
-	h := NewChatHandler(fe)
+	h := NewChatHandler(fe, false, "")
 
 	rec := postChat(t, h, `{"model":"anthropic/opus","messages":[{"role":"user","content":"hello"}]}`)
 
@@ -114,7 +118,7 @@ func TestHandler_ModelWithSubmodel(t *testing.T) {
 
 func TestHandler_MissingModel(t *testing.T) {
 	fe := &fakeExec{}
-	h := NewChatHandler(fe)
+	h := NewChatHandler(fe, false, "")
 
 	rec := postChat(t, h, `{"messages":[{"role":"user","content":"hello"}]}`)
 
@@ -131,7 +135,7 @@ func TestHandler_MissingModel(t *testing.T) {
 
 func TestHandler_MissingMessages(t *testing.T) {
 	fe := &fakeExec{}
-	h := NewChatHandler(fe)
+	h := NewChatHandler(fe, false, "")
 
 	rec := postChat(t, h, `{"model":"anthropic/sonnet"}`)
 
@@ -145,7 +149,7 @@ func TestHandler_MissingMessages(t *testing.T) {
 
 func TestHandler_EmptyMessages(t *testing.T) {
 	fe := &fakeExec{}
-	h := NewChatHandler(fe)
+	h := NewChatHandler(fe, false, "")
 
 	rec := postChat(t, h, `{"model":"anthropic/sonnet","messages":[]}`)
 
@@ -159,7 +163,7 @@ func TestHandler_EmptyMessages(t *testing.T) {
 
 func TestHandler_UnknownAgent(t *testing.T) {
 	fe := &fakeExec{}
-	h := NewChatHandler(fe)
+	h := NewChatHandler(fe, false, "")
 
 	rec := postChat(t, h, `{"model":"foo","messages":[{"role":"user","content":"hello"}]}`)
 
@@ -174,7 +178,7 @@ func TestHandler_UnknownAgent(t *testing.T) {
 
 func TestHandler_EmptyBody(t *testing.T) {
 	fe := &fakeExec{}
-	h := NewChatHandler(fe)
+	h := NewChatHandler(fe, false, "")
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", &bytes.Buffer{})
 	req.Header.Set("Content-Type", "application/json")
@@ -188,7 +192,7 @@ func TestHandler_EmptyBody(t *testing.T) {
 
 func TestHandler_InvalidJSON(t *testing.T) {
 	fe := &fakeExec{}
-	h := NewChatHandler(fe)
+	h := NewChatHandler(fe, false, "")
 
 	rec := postChat(t, h, `{broken`)
 
@@ -199,7 +203,7 @@ func TestHandler_InvalidJSON(t *testing.T) {
 
 func TestHandler_MethodNotAllowed(t *testing.T) {
 	fe := &fakeExec{}
-	h := NewChatHandler(fe)
+	h := NewChatHandler(fe, false, "")
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/chat/completions", nil)
 	rec := httptest.NewRecorder()
@@ -212,7 +216,7 @@ func TestHandler_MethodNotAllowed(t *testing.T) {
 
 func TestHandler_MultipleMessages_UsesLast(t *testing.T) {
 	fe := &fakeExec{stdout: "ok"}
-	h := NewChatHandler(fe)
+	h := NewChatHandler(fe, false, "")
 
 	rec := postChat(t, h, `{"model":"anthropic/sonnet","messages":[{"role":"user","content":"first"},{"role":"user","content":"second"}]}`)
 
@@ -226,7 +230,7 @@ func TestHandler_MultipleMessages_UsesLast(t *testing.T) {
 
 func TestHandler_ExecFailure(t *testing.T) {
 	fe := &fakeExec{stderr: "something broke", exitCode: 1}
-	h := NewChatHandler(fe)
+	h := NewChatHandler(fe, false, "")
 
 	rec := postChat(t, h, `{"model":"anthropic/sonnet","messages":[{"role":"user","content":"hello"}]}`)
 
@@ -246,7 +250,7 @@ func TestHandler_ExecFailure(t *testing.T) {
 
 func TestHandler_ResponseHasID(t *testing.T) {
 	fe := &fakeExec{stdout: "ok"}
-	h := NewChatHandler(fe)
+	h := NewChatHandler(fe, false, "")
 
 	rec := postChat(t, h, `{"model":"anthropic/sonnet","messages":[{"role":"user","content":"hello"}]}`)
 
@@ -257,5 +261,78 @@ func TestHandler_ResponseHasID(t *testing.T) {
 	}
 	if !strings.HasPrefix(resp.ID, "chatcmpl-") {
 		t.Errorf("id = %q, want prefix 'chatcmpl-'", resp.ID)
+	}
+}
+
+// --- reasoning_effort → claude --effort mapping (Chat Completions) ---
+//
+// Mirrors the Responses-API tests. Chat Completions sends `reasoning_effort`
+// at the request root (flat), not nested under `reasoning`. Both endpoints
+// must produce identical executor behavior for the same effort value.
+
+func TestHandler_Effort_OpenAISpecValuesPassThrough(t *testing.T) {
+	for _, v := range []string{"low", "medium", "high"} {
+		t.Run(v, func(t *testing.T) {
+			fe := &fakeExec{stdout: "ok"}
+			h := NewChatHandler(fe, false, "")
+			body := `{"model":"anthropic/sonnet","reasoning_effort":"` + v +
+				`","messages":[{"role":"user","content":"hi"}]}`
+			rec := postChat(t, h, body)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+			}
+			if fe.effort != v {
+				t.Errorf("effort reaching executor = %q, want %q", fe.effort, v)
+			}
+		})
+	}
+}
+
+func TestHandler_Effort_ClaudeOnlyValuesDropped(t *testing.T) {
+	// Same rule as Responses: Claude's "xhigh"/"max" are not OpenAI spec, drop them.
+	for _, v := range []string{"xhigh", "max"} {
+		t.Run(v, func(t *testing.T) {
+			fe := &fakeExec{stdout: "ok"}
+			h := NewChatHandler(fe, false, "")
+			body := `{"model":"anthropic/sonnet","reasoning_effort":"` + v +
+				`","messages":[{"role":"user","content":"hi"}]}`
+			rec := postChat(t, h, body)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d", rec.Code)
+			}
+			if fe.effort != "" {
+				t.Errorf("non-OpenAI-spec effort %q leaked to executor (got %q)", v, fe.effort)
+			}
+		})
+	}
+}
+
+func TestHandler_Effort_UnknownValuesDropped(t *testing.T) {
+	for _, v := range []string{"extreme", "minimal", "LOW", "High", "auto"} {
+		t.Run(v, func(t *testing.T) {
+			fe := &fakeExec{stdout: "ok"}
+			h := NewChatHandler(fe, false, "")
+			body := `{"model":"anthropic/sonnet","reasoning_effort":"` + v +
+				`","messages":[{"role":"user","content":"hi"}]}`
+			rec := postChat(t, h, body)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d", rec.Code)
+			}
+			if fe.effort != "" {
+				t.Errorf("unknown effort %q leaked to executor (got %q)", v, fe.effort)
+			}
+		})
+	}
+}
+
+func TestHandler_Effort_AbsentNoFlag(t *testing.T) {
+	fe := &fakeExec{stdout: "ok"}
+	h := NewChatHandler(fe, false, "")
+	rec := postChat(t, h, `{"model":"anthropic/sonnet","messages":[{"role":"user","content":"hi"}]}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if fe.effort != "" {
+		t.Errorf("absent reasoning_effort produced executor effort=%q", fe.effort)
 	}
 }

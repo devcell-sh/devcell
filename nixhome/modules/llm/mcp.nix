@@ -12,7 +12,16 @@
     servers = lib.mkOption {
       type = lib.types.attrsOf lib.types.anything;
       default = {};
-      description = "Canonical MCP server definitions. Each entry: { command, args?, env? }.";
+      description = ''
+        Canonical MCP server definitions. Each entry:
+          { command, args?, env? }            # stdio (default)
+          { type = "http"; url; }             # http (Claude only)
+          { ...; enabled = false; }           # registered but skipped during merge
+
+        `enabled` defaults to true. Set `enabled = false` to keep an entry
+        documented in nix without staging it into Claude/OpenCode/Codex configs
+        (useful for opt-in / experimental / alternative-auth variants).
+      '';
     };
     backupBeforeMerge = lib.mkOption {
       type = lib.types.bool;
