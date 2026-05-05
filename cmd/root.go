@@ -243,6 +243,11 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 
 	cellCfg := cfg.LoadFromOS(c.ConfigDir, c.BaseDir)
 
+	// Set stack/modules so UserImageTag() produces stack-based tags.
+	runner.Stack = cellCfg.Cell.ResolvedStack()
+	runner.Modules = cellCfg.Cell.Modules
+	runner.PerSessionImage = cellCfg.Cell.ResolvedPerSessionImage()
+
 	// Resolve available GUI ports — probe and bump if already bound
 	if cellCfg.Cell.ResolvedGUI() {
 		c.ResolveAvailablePorts()
@@ -356,10 +361,21 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 		imageID = ""
 	}
 
-	// Inject system prompt for Claude Code — describes container environment,
-	// bind mounts, and host path mappings so Claude understands its runtime context.
+	// Inject system prompt for Claude Code — container context (mounts,
+	// host paths, constraints) plus the operator/project prompt resolved
+	// from env vars and devcell.toml. See runner.AssembleSystemPrompt for
+	// the full source-precedence chain (cell claude doesn't expose flags
+	// today; cell serve does).
 	if binary == "claude" {
-		prompt := runner.BuildSystemPrompt(c, cellCfg)
+		prompt, err := runner.AssembleSystemPrompt(c, cellCfg, runner.ResolveOpts{
+			EnvFile:    os.Getenv("DEVCELL_SYSTEM_PROMPT_FILE"),
+			EnvInline:  os.Getenv("DEVCELL_SYSTEM_PROMPT"),
+			CellCfg:    cellCfg,
+			CfgBaseDir: c.BaseDir,
+		})
+		if err != nil {
+			return fmt.Errorf("system prompt: %w", err)
+		}
 		defaultFlags = append(defaultFlags, "--append-system-prompt", prompt)
 	}
 
@@ -392,18 +408,17 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 		}
 		ux.Debugf("1Password: resolving %d document(s): %v", len(opDocs), opDocs)
 		if _, err := exec.LookPath("op"); err == nil {
-			resolved, err := op.ResolveItems(opDocs)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "warning: 1Password: %v\n", err)
-			} else {
-				keys := make([]string, 0, len(resolved))
-				for k, v := range resolved {
-					os.Setenv(k, v)
-					inheritEnv = append(inheritEnv, k)
-					keys = append(keys, k)
-				}
-				ux.Debugf("1Password: resolved %d secret(s): %v", len(keys), keys)
+			resolved, errs := op.ResolveItems(opDocs)
+			for _, e := range errs {
+				fmt.Fprintf(os.Stderr, "warning: 1Password: %v\n", e)
 			}
+			keys := make([]string, 0, len(resolved))
+			for k, v := range resolved {
+				os.Setenv(k, v)
+				inheritEnv = append(inheritEnv, k)
+				keys = append(keys, k)
+			}
+			ux.Debugf("1Password: resolved %d secret(s) from %d document(s) (%d failed): %v", len(keys), len(opDocs)-len(errs), len(errs), keys)
 		} else {
 			ux.Debugf("1Password: op CLI not found, skipping secret resolution")
 		}

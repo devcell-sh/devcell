@@ -89,6 +89,18 @@ in {
     apkeep            # APK downloader from Google Play / APKPure (use: apkeep -a com.example.app .)
     jadx              # APK/DEX decompiler → readable Java source (use: jadx app.apk -d out/)
 
+    # binary analysis & reverse engineering (PE / ELF / Mach-O)
+    ghidra                      # NSA RE suite — best-in-class PE decompiler (use: ghidra)
+    radare2                     # swiss-army RE framework, strong PE support (use: r2 file.exe)
+    rizin                       # radare2 fork, cleaner codebase (use: rizin file.exe)
+    binwalk                     # firmware/binary analyzer + carving (use: binwalk -e file.exe)
+    yara                        # pattern matching for malware/PE ID (use: yara rules.yar file.exe)
+    upx                         # executable packer/unpacker (use: upx -d file.exe)
+    pev                         # PE-specific toolkit: pestr/pesec/pedis/pescan (use: readpe file.exe)
+    detect-it-easy              # PE compiler/packer/protector ID (use: diec file.exe)
+    capstone                    # multi-arch disassembly engine (lib + cstool: cstool x86 …)
+    python312Packages.ropper    # ROP gadget finder for exploit dev (use: ropper -f file.exe)
+
     # parameter discovery
     arjun             # HTTP parameter discovery (use: arjun -u https://target.com/endpoint)
 

@@ -36,12 +36,15 @@
       env = s.env or {};
     };
 
+  # Skip servers explicitly disabled (enabled = false). Default: enabled.
+  enabledServers = lib.filterAttrs (_: s: (s.enabled or true)) mcpCfg.servers;
+
   claudeConfig = json.generate "claude-nix-mcp-servers.json" {
     backupBeforeMerge = mcpCfg.backupBeforeMerge;
-    mcpServers = lib.mapAttrs toClaudeServer mcpCfg.servers;
+    mcpServers = lib.mapAttrs toClaudeServer enabledServers;
   };
 
-  hasServers = mcpCfg.servers != {};
+  hasServers = enabledServers != {};
 in {
   options.devcell.managedClaude = {
     settings = lib.mkOption {

@@ -15,6 +15,15 @@
     exec ${pkgs.uv}/bin/uvx awslabs.cloudwatch-mcp-server "$@"
   '';
 
+  # Notion MCP — official local stdio server (https://github.com/makenotion/notion-mcp-server).
+  # Wraps `npx -y @notionhq/notion-mcp-server@<version>` so cold starts pull from the
+  # persistent npm cache (~/.npm) instead of redownloading. Same pattern as the AWS
+  # MCPs above (uvx wrapper).
+  notionMcpVersion = "2.2.1";
+  notionMcpServer = pkgs.writeShellScriptBin "notion-mcp-server" ''
+    exec ${pkgs.nodejs_22}/bin/npx -y @notionhq/notion-mcp-server@${notionMcpVersion} "$@"
+  '';
+
   # AWS read-only session policy — used by credential_process to scope down creds.
   # Based on AWS managed ReadOnlyAccess: allows all read/list/describe/get actions.
   awsReadOnlyPolicy = pkgs.writeText "aws-readonly-policy.json" (builtins.toJSON {
@@ -195,6 +204,7 @@ in {
     opentofuMcp  # OpenTofu Registry MCP server (use: opentofu-mcp-server)
     awsApiMcpServer  # AWS API MCP server via uvx (use: aws-api-mcp-server)
     cloudwatchMcpServer  # CloudWatch MCP server via uvx (use: cloudwatch-mcp-server)
+    notionMcpServer  # Notion API MCP server via npx (use: notion-mcp-server)
   ];
 
   # AWS API MCP — wraps all 200+ AWS services. Uses standard AWS credential chain.
@@ -214,9 +224,27 @@ in {
     command = "${bin}/opentofu-mcp-server";
     args = [];
   };
-  # Notion — remote HTTP MCP server.
-  # Auth: OAuth 2.1 flow on first use (run /mcp in Claude session to authenticate).
-  devcell.managedMcp.servers.notion = {
+  # Notion — two variants registered side-by-side.
+  #
+  # `notion-api` (default, enabled): official local stdio server
+  # (@notionhq/notion-mcp-server). Auth via NOTION_TOKEN env var, sourced from
+  # NOTION_API_KEY (DEVCELL_SECRET_KEYS). Token must be a Notion *internal
+  # integration* token (ntn_…) with relevant pages/databases shared to it.
+  # Non-interactive — works for headless agents and skills.
+  devcell.managedMcp.servers."notion-api" = {
+    command = "${bin}/notion-mcp-server";
+    args = [];
+    env = {
+      NOTION_TOKEN = "\${NOTION_API_KEY}";
+    };
+  };
+
+  # `notion-oauth` (disabled by default): hosted remote MCP at mcp.notion.com,
+  # OAuth 2.1 flow on first use (run /mcp in a Claude session to authenticate).
+  # Useful when per-user OAuth scopes are preferred over a workspace-wide
+  # integration token. Flip `enabled = true` to stage it.
+  devcell.managedMcp.servers."notion-oauth" = {
+    enabled = false;
     type = "http";
     url = "https://mcp.notion.com/mcp";
   };

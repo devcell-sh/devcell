@@ -20,7 +20,10 @@
 
   # OpenCode MCP config derivation (from mcp.nix servers)
   # Only stdio servers — OpenCode doesn't support HTTP transport.
-  stdioServers = lib.filterAttrs (_: s: (s.type or "stdio") == "stdio") mcpCfg.servers;
+  # Also skip servers explicitly disabled (enabled = false). Default: enabled.
+  stdioServers = lib.filterAttrs (
+    _: s: (s.type or "stdio") == "stdio" && (s.enabled or true)
+  ) mcpCfg.servers;
 
   toOpenCodeServer = _: s:
     {
