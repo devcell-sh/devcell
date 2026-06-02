@@ -35,6 +35,23 @@ tools inside a consistent Docker dev environment.`,
 		if debug {
 			fmt.Fprintf(os.Stderr, "cell %s\n", version.Full())
 		}
+		// Set runner globals BEFORE any subcommand RunE so that
+		// runner.UserImageTag() / UserImageTagPure() / PickImageTag() reflect
+		// the project's stack from .devcell.toml. Without this, `cell build`
+		// (which fires buildCmd.RunE, NOT rootCmd.RunE) leaves Stack="" and
+		// tags every image as devcell-user:base-pure regardless of what
+		// stack the nix derivation actually built.
+		//
+		// Best-effort: silently skips when config can't be loaded (e.g.,
+		// `cell --help` before cwd has a .devcell.toml, or stray cwd).
+		// Subcommands that need a working config fail with a better error
+		// later in their own RunE.
+		if c, err := config.LoadFromOS(); err == nil {
+			cellCfg := cfg.LoadFromOS(c.ConfigDir, c.BaseDir)
+			runner.Stack = cellCfg.Cell.ResolvedStack()
+			runner.Modules = cellCfg.Cell.Modules
+			runner.PerSessionImage = cellCfg.Cell.ResolvedPerSessionImage()
+		}
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) > 0 {
@@ -75,6 +92,7 @@ func init() {
 		claudeCmd,
 		codexCmd,
 		opencodeCmd,
+		geminiCmd,
 		shellCmd,
 		chromeCmd,
 		loginCmd,
@@ -117,6 +135,10 @@ var cellBoolFlags = map[string]bool{
 	"--debug":      true,
 	"--macos":      true,
 	"--ollama":     true,
+	"--impure":     true, // legacy Dockerfile path (DIMM-213 canonical name)
+	"--debian":     true, // deprecated alias for --impure (kept stripping for one release)
+	"--pure":       true, // silent no-op after flip; kept stripped from forwarded args
+	"--nix-daemon": true, // enable nix-daemon inside container for runtime package installs
 }
 
 // cellStringFlags are string flags consumed by devcell: strip the flag token
@@ -184,7 +206,10 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 		os.Setenv("DEVCELL_SESSION_NAME", sn)
 	}
 
-	// First-run: scaffold if .devcell.toml absent in project dir
+	// First-run: scaffold .devcell.toml + .devcell/ files. Image acquisition
+	// is owned by the unified pure-path orchestrator below — scaffolding
+	// must not eagerly invoke a docker build that the next step won't even
+	// use (the orchestrator's first try is a registry pull of the pure tag).
 	if !scaffold.IsInitialized(c.BaseDir) {
 		globalCfg := cfg.LoadFromOS(c.ConfigDir, c.BaseDir)
 		result, err := RunInitFlow(InitFlowOptions{
@@ -198,10 +223,6 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 		}
 		c.BuildDir = config.ResolveBuildDir(c.BaseDir, c.ConfigDir, true)
 		fmt.Printf(" First run — scaffolding %s (stack: %s)\n", c.BaseDir, result.Stack)
-
-		if err := buildImageWithSpinner(c.BuildDir, false, "Building devcell image", false); err != nil {
-			return err
-		}
 	}
 
 	// Vagrant engine branch
@@ -248,66 +269,98 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 	runner.Modules = cellCfg.Cell.Modules
 	runner.PerSessionImage = cellCfg.Cell.ResolvedPerSessionImage()
 
+	// After the 2026-05-15 flip (DIMM-204), pure is the default for every
+	// agent (claude, shell, codex, gemini). `--impure` (DIMM-213 canonical;
+	// `--debian` is a deprecated alias) opts into the legacy Dockerfile
+	// build path. `--pure` is kept as a silent no-op (same as default).
+	impure := scanFlag("--impure") || scanFlag("--debian")
+	imageTag := func() string { return runner.PickImageTag(impure) }
+	dryRun := scanFlag("--dry-run")
+	explicitBuild := scanFlag("--build")
+
 	// Resolve available GUI ports — probe and bump if already bound
 	if cellCfg.Cell.ResolvedGUI() {
 		c.ResolveAvailablePorts()
 	}
 
-	needsBuild := scanFlag("--build") && !scanFlag("--dry-run")
-	autoDetect := !scanFlag("--dry-run") && !scanFlag("--build") &&
-		!runner.ImageExists(context.Background(), runner.UserImageTag())
-	// DIMM-124: also rebuild when build context is newer than the existing image
-	// (catches stale images left after a failed build or config change)
-	var changedFiles []string
-	staleImage := false
-	if !scanFlag("--dry-run") && !scanFlag("--build") && !autoDetect {
-		changedFiles, staleImage = runner.ChangedBuildFiles(c.BuildDir)
-	}
+	// ── Image acquisition ────────────────────────────────────────────────────
+	// Default (pure): runner.AcquireImage walks the fallback chain —
+	// local → pull-pure → pull-impure → build (pure if host nix, otherwise
+	// impure docker build). Each closure performs its action; on the last
+	// action's failure the user sees a joined chain error.
+	//
+	// --impure (legacy CLI flag): autoDetect (missing image) + staleness check.
+	// Staleness is not consulted for the pure path: pure images are
+	// content-addressed, so a local tag equals what a rebuild would produce
+	// from the same flake.lock.
+	if !impure {
+		// HasNix means "nix is on PATH AND can build the target arch from
+		// this host" (the preflight catches macOS-without-linux-builder).
+		// When false the orchestrator skips ActionBuildPure and runs
+		// ActionBuildImpure instead — docker build still works without nix
+		// on the host because nix runs inside the build.
+		_, nixErr := exec.LookPath("nix")
+		hasNix := nixErr == nil && runner.PreflightNixBuilder(runner.Stack) == nil
 
-	if needsBuild || autoDetect || staleImage {
-		if autoDetect {
-			fmt.Printf(" No %s image found — building automatically\n", runner.UserImageTag())
-		} else if staleImage {
-			fmt.Printf(" Build context changed (%s in %s) — rebuilding %s\n",
-				strings.Join(changedFiles, ", "), c.BuildDir, runner.UserImageTag())
-			if ux.Verbose {
-				for _, f := range changedFiles {
-					if diff := runner.DiffBuildFile(c.BuildDir, f); diff != "" {
-						fmt.Printf("\n%s\n", diff)
-					}
-				}
-			}
-		}
-		if err := config.EnsureBuildDir(c.BuildDir); err != nil {
-			return fmt.Errorf("ensure build dir: %w", err)
-		}
-		if nixhomePath := cellCfg.Cell.NixhomePath; nixhomePath != "" {
-			// Check if nixhome source changed since last sync.
-			prevSource := scaffold.NixhomeSource(c.BuildDir)
-			if prevSource != "" && prevSource != nixhomePath {
-				ux.Debugf("nixhome source changed: %s → %s", prevSource, nixhomePath)
-				fmt.Printf(" ⚠ nixhome source changed: %s → %s\n", prevSource, nixhomePath)
-				overwrite, cErr := ux.GetConfirmation("Overwrite .devcell/nixhome with new source?")
-				if cErr != nil || !overwrite {
-					ux.Debugf("Skipping nixhome sync (user declined or error)")
-				} else {
-					ux.Debugf("Syncing nixhome: %s → %s/nixhome/", nixhomePath, c.BuildDir)
-					if err := scaffold.SyncNixhome(nixhomePath, c.BuildDir); err != nil {
-						return fmt.Errorf("sync nixhome: %w", err)
-					}
-				}
-			} else {
-				ux.Debugf("Syncing nixhome: %s → %s/nixhome/", nixhomePath, c.BuildDir)
-				if err := scaffold.SyncNixhome(nixhomePath, c.BuildDir); err != nil {
-					return fmt.Errorf("sync nixhome: %w", err)
-				}
-			}
-		}
-		if err := scaffold.RegenerateBuildContext(c.BuildDir, cellCfg); err != nil {
-			return fmt.Errorf("regenerate build context: %w", err)
-		}
-		if err := buildImageWithSpinner(c.BuildDir, needsBuild, "Building devcell image", false); err != nil {
+		err := runner.AcquireImage(context.Background(), runner.AcquireDeps{
+			Inputs: runner.LaunchInputs{
+				DryRun:        dryRun,
+				ExplicitBuild: explicitBuild,
+				LocalExists:   runner.ImageExists(context.Background(), imageTag()),
+				HasNix:        hasNix,
+			},
+			PullPure: pullWithSpinner(
+				runner.StackImageTagPure(runner.Stack), runner.PullAndTagPure),
+			PullImpure: pullWithSpinner(
+				runner.StackImageTagImpure(runner.Stack), runner.PullAndTagImpure),
+			BuildPure: func(context.Context) error {
+				// Passing "" means runBuildPure falls back to the TOML-resolved
+				// stack (see DIMM-246). The user overrides via `cell build
+				// --stack <name>` explicitly.
+				return runBuildPure(c, "")
+			},
+			BuildImpure: func(ctx context.Context) error {
+				return runFallbackImpureBuild(ctx, c, cellCfg)
+			},
+		})
+		if err != nil {
 			return err
+		}
+	} else {
+		needsBuild := explicitBuild && !dryRun
+		autoDetect := !dryRun && !explicitBuild &&
+			!runner.ImageExists(context.Background(), imageTag())
+		var changedFiles []string
+		staleImage := false
+		if !dryRun && !explicitBuild && !autoDetect {
+			changedFiles, staleImage = runner.ChangedBuildFiles(c.BuildDir)
+		}
+		if needsBuild || autoDetect || staleImage {
+			if autoDetect {
+				fmt.Printf(" No %s image found — building automatically\n", imageTag())
+			} else if staleImage {
+				fmt.Printf(" Build context changed (%s in %s) — rebuilding %s\n",
+					strings.Join(changedFiles, ", "), c.BuildDir, imageTag())
+				if ux.Verbose {
+					for _, f := range changedFiles {
+						if diff := runner.DiffBuildFile(c.BuildDir, f); diff != "" {
+							fmt.Printf("\n%s\n", diff)
+						}
+					}
+				}
+			}
+			if err := config.EnsureBuildDir(c.BuildDir); err != nil {
+				return fmt.Errorf("ensure build dir: %w", err)
+			}
+			if err := syncNixhomeWithConfirmation(c, cellCfg); err != nil {
+				return err
+			}
+			if err := scaffold.RegenerateBuildContext(c.BuildDir, cellCfg); err != nil {
+				return fmt.Errorf("regenerate build context: %w", err)
+			}
+			if err := buildImageWithSpinner(c.BuildDir, needsBuild, "Building devcell image", false); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -324,6 +377,37 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 		if baseVer == "" && userVer == "" {
 			fmt.Printf(" Image versions: not available (missing /etc/devcell/*-image-version)\n")
 		}
+
+		// Identity / network — surfaces the values bot-detection-relevant
+		// settings will resolve to inside the container, so the user can
+		// confirm at boot whether MAC / hostname / TZ / locale match the
+		// expected persistent identity.
+		mac := cellCfg.Cell.MacAddress
+		if mac == "" {
+			mac = "(auto by docker)"
+		}
+		hostname := cellCfg.Cell.ResolvedHostname(c.AppName)
+		if envHost := os.Getenv("DEVCELL_HOSTNAME"); envHost != "" {
+			hostname = envHost
+		}
+		tz := cellCfg.Cell.Timezone
+		if tz == "" {
+			if envTZ := os.Getenv("TZ"); envTZ != "" {
+				tz = envTZ + " (from host $TZ)"
+			} else {
+				tz = "(unset → container default)"
+			}
+		}
+		locale := cellCfg.Cell.Locale
+		if locale == "" {
+			if envLang := os.Getenv("LANG"); envLang != "" && envLang != "POSIX" && envLang != "C" {
+				locale = envLang + " (from host $LANG)"
+			} else {
+				locale = "en_US.UTF-8 (default)"
+			}
+		}
+		fmt.Printf(" MAC: %s | hostname: %s | network: devcell-network\n", mac, hostname)
+		fmt.Printf(" Timezone: %s | Locale: %s\n", tz, locale)
 	}
 
 	// Show a spinner during pre-launch setup (network, cleanup, backup, etc.).
@@ -355,10 +439,12 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 
 	// Pin the container to the exact image ID just built so a concurrent
 	// cell build on another terminal can't swap the tag under us mid-launch.
-	imageID, err := runner.LocalImageID(context.Background())
+	// --pure uses the -pure tagged image.
+	imageID, err := runner.LocalImageIDFor(context.Background(), imageTag())
 	if err != nil {
-		// Non-fatal: fall back to the mutable tag.
-		imageID = ""
+		// Non-fatal: fall back to the mutable tag. In --pure mode this is
+		// the -pure tag; in normal mode it's the standard tag.
+		imageID = imageTag()
 	}
 
 	// Inject system prompt for Claude Code — container context (mounts,
@@ -436,6 +522,7 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 		DefaultFlags: defaultFlags,
 		UserArgs:     userArgs,
 		Debug:        ux.Verbose,
+		NixDaemon:    scanFlag("--nix-daemon"),
 		Image:        imageID,
 		ExtraEnv:     extraEnv,
 		InheritEnv:   inheritEnv,
@@ -532,6 +619,90 @@ func buildImageWithSpinner(configDir string, noCache bool, label string, silent 
 		sp.Stop()
 	} else {
 		sp.Success(label)
+	}
+	return nil
+}
+
+// pullWithSpinner returns an AcquireDeps closure that calls pullFn with the
+// active stack, wrapping it in a spinner for non-verbose mode. Used to build
+// both the pure-pull and impure-pull dependencies from a single shape.
+func pullWithSpinner(
+	remoteTag string,
+	pullFn func(context.Context, string, bool) error,
+) func(context.Context) error {
+	return func(ctx context.Context) error {
+		label := fmt.Sprintf("Pulling %s", remoteTag)
+		var sp *ux.ProgressSpinner
+		if !ux.Verbose {
+			sp = ux.NewProgressSpinner(label)
+		} else {
+			ux.Debugf("%s", label)
+		}
+		if err := pullFn(ctx, runner.Stack, ux.Verbose); err != nil {
+			if sp != nil {
+				sp.Stop()
+			}
+			ux.Debugf("pull %s failed: %v", remoteTag, err)
+			return err
+		}
+		if sp != nil {
+			sp.Success("Pulled " + remoteTag)
+		}
+		return nil
+	}
+}
+
+// syncNixhomeWithConfirmation syncs the configured nixhome path into the
+// build context, prompting the user before overwriting an existing sync that
+// came from a different source. No-op when no nixhome path is configured.
+//
+// Only the impure (Dockerfile) build path needs this — runBuildPure resolves
+// and consumes nixhome internally via runner.ResolvePureNixhomeRef.
+func syncNixhomeWithConfirmation(c config.Config, cellCfg cfg.CellConfig) error {
+	nixhomePath := cellCfg.Cell.NixhomePath
+	if nixhomePath == "" {
+		return nil
+	}
+	prevSource := scaffold.NixhomeSource(c.BuildDir)
+	if prevSource != "" && prevSource != nixhomePath {
+		ux.Debugf("nixhome source changed: %s → %s", prevSource, nixhomePath)
+		fmt.Printf(" ⚠ nixhome source changed: %s → %s\n", prevSource, nixhomePath)
+		overwrite, cErr := ux.GetConfirmation("Overwrite .devcell/nixhome with new source?")
+		if cErr != nil || !overwrite {
+			ux.Debugf("Skipping nixhome sync (user declined or error)")
+			return nil
+		}
+	}
+	ux.Debugf("Syncing nixhome: %s → %s/nixhome/", nixhomePath, c.BuildDir)
+	if err := scaffold.SyncNixhome(nixhomePath, c.BuildDir); err != nil {
+		return fmt.Errorf("sync nixhome: %w", err)
+	}
+	return nil
+}
+
+// runFallbackImpureBuild is the BuildImpure closure for the pure path's
+// final fallback: docker-build the scaffolded Dockerfile and retag the
+// result under the pure tag so a subsequent launch finds it locally without
+// retrying the whole pull chain. Reached when both registry pulls failed
+// and the host has no usable nix.
+func runFallbackImpureBuild(ctx context.Context, c config.Config, cellCfg cfg.CellConfig) error {
+	if err := config.EnsureBuildDir(c.BuildDir); err != nil {
+		return fmt.Errorf("ensure build dir: %w", err)
+	}
+	if err := syncNixhomeWithConfirmation(c, cellCfg); err != nil {
+		return err
+	}
+	if err := scaffold.RegenerateBuildContext(c.BuildDir, cellCfg); err != nil {
+		return fmt.Errorf("regenerate build context: %w", err)
+	}
+	if err := buildImageWithSpinner(
+		c.BuildDir, false, "Building devcell image (impure fallback)", false); err != nil {
+		return err
+	}
+	if err := exec.CommandContext(ctx, "docker", "tag",
+		runner.UserImageTag(), runner.UserImageTagPure()).Run(); err != nil {
+		ux.Debugf("retag %s → %s failed: %v",
+			runner.UserImageTag(), runner.UserImageTagPure(), err)
 	}
 	return nil
 }

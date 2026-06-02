@@ -20,7 +20,7 @@ type CellSection struct {
 	GUI             *bool    `toml:"gui"`               // default: true (nil = not set → true)
 	Timezone        string   `toml:"timezone"`          // IANA tz (e.g. "Europe/Prague"); default: host $TZ
 	Locale          string   `toml:"locale"`            // POSIX locale (e.g. "en_US.UTF-8"); default: "en_US.UTF-8"
-	Stack           string   `toml:"stack"`             // nix stack name (e.g. "go", "python"); default: "ultimate"
+	Stack           string   `toml:"stack"`             // nix stack name (e.g. "go", "python"); default: "base" (see ResolvedStack)
 	Modules         []string `toml:"modules"`           // extra nix modules to compose on top of stack
 	NixhomePath     string   `toml:"nixhome"`           // local nixhome path; overridden by DEVCELL_NIXHOME_PATH env
 	Engine          string   `toml:"engine"`            // execution engine: "docker" (default) or "vagrant"
@@ -28,6 +28,8 @@ type CellSection struct {
 	VagrantBox      string   `toml:"vagrant_box"`       // vagrant box name override (default: "utm/bookworm")
 	DockerPrivileged  bool     `toml:"docker_privileged"`   // run container with --privileged; default: false
 	PerSessionImage   *bool    `toml:"per_session_image"`   // tag user image per tmux session instead of per stack; default: false
+	Hostname          string   `toml:"hostname"`            // override container hostname; default: computed "cell-<basename>-<cellID>"; env: DEVCELL_HOSTNAME
+	MacAddress        string   `toml:"mac_address"`         // MAC for the container's NIC (XX:XX:XX:XX:XX:XX); pinned across restarts for infra-side identity persistence. Honored on user-defined bridge networks (devcell uses --network devcell-network). Empty → docker auto-assigns a random MAC per launch.
 }
 
 // ResolvedRegistry returns the effective registry: env > toml > default.
@@ -63,6 +65,19 @@ func (c CellSection) ResolvedStack() string {
 		return c.Stack
 	}
 	return "base"
+}
+
+// ResolvedHostname returns the effective container hostname.
+// Precedence: DEVCELL_HOSTNAME env > [cell] hostname in TOML > computed default
+// (typically "cell-<basename>-<cellID>" assembled by config.Load).
+func (c CellSection) ResolvedHostname(computed string) string {
+	if v := os.Getenv("DEVCELL_HOSTNAME"); v != "" {
+		return v
+	}
+	if c.Hostname != "" {
+		return c.Hostname
+	}
+	return computed
 }
 
 // VolumeMount holds a single [[volumes]] entry.
@@ -134,7 +149,20 @@ func (g GitSection) ResolvedCommitterEmail() string {
 
 // PortsSection holds [ports] config for port forwarding.
 type PortsSection struct {
-	Forward []string `toml:"forward"` // port mappings: "3000", "8080:3000"
+	Forward   []string `toml:"forward"`    // port mappings: "3000", "8080:3000"
+	PublishIP string   `toml:"publish_ip"` // host interface for `docker run -p`; default "0.0.0.0". Applies to VNC, RDP, and all forward entries.
+}
+
+// ResolvedPublishIP returns the effective host IP for `docker run -p`.
+// Defaults to "0.0.0.0" when unset so cells are reachable from other hosts
+// regardless of dockerd's bind default (some Docker Desktop / rootless setups
+// default to 127.0.0.1, which would silently break remote RDP/VNC). Override
+// in TOML to bind a specific NIC or "127.0.0.1" for loopback-only.
+func (p PortsSection) ResolvedPublishIP() string {
+	if p.PublishIP == "" {
+		return "0.0.0.0"
+	}
+	return p.PublishIP
 }
 
 // OpSection holds [op] config for 1Password secret injection.
@@ -261,6 +289,12 @@ func Merge(global, project CellConfig) CellConfig {
 	if project.Cell.PerSessionImage != nil {
 		out.Cell.PerSessionImage = project.Cell.PerSessionImage
 	}
+	if project.Cell.Hostname != "" {
+		out.Cell.Hostname = project.Cell.Hostname
+	}
+	if project.Cell.MacAddress != "" {
+		out.Cell.MacAddress = project.Cell.MacAddress
+	}
 
 	// LLM: project wins for scalars, providers accumulate
 	out.LLM = global.LLM
@@ -320,6 +354,12 @@ func Merge(global, project CellConfig) CellConfig {
 		if !portSeen[p] {
 			out.Ports.Forward = append(out.Ports.Forward, p)
 		}
+	}
+
+	// Ports.PublishIP: scalar, project wins when non-empty
+	out.Ports.PublishIP = global.Ports.PublishIP
+	if project.Ports.PublishIP != "" {
+		out.Ports.PublishIP = project.Ports.PublishIP
 	}
 
 	// Slices accumulate: global first, then project

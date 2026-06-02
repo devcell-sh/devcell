@@ -278,7 +278,7 @@ func ResolveNixhome(source, buildDir, ver string, force bool) error {
 		ref = ver
 	}
 	if ref == "" || ref == "v0.0.0" {
-		ref = "main"
+		ref = runner.DefaultNixhomeGitRef
 	}
 	subdir := gs.Subdir
 
@@ -424,7 +424,23 @@ func SyncNixhome(srcPath, configDir string) error {
 		return err
 	}
 	// Record source origin for change detection.
-	return os.WriteFile(filepath.Join(dest, NixhomeSourceFile), []byte(srcPath+"\n"), 0644)
+	if err := os.WriteFile(filepath.Join(dest, NixhomeSourceFile), []byte(srcPath+"\n"), 0644); err != nil {
+		return err
+	}
+	ux.Debugf("SyncNixhome: copied %s → %s", srcPath, dest)
+
+	// Nix path: flakes filter sources via git ls-files, walking up to find
+	// the nearest .git. If the dest is inside a gitignored directory (e.g.
+	// .devcell/), nix sees no files. Create a standalone git context so nix
+	// treats the synced copy as its own repo with all files tracked.
+	if err := exec.Command("git", "init", "-q", dest).Run(); err != nil {
+		return fmt.Errorf("git init synced nixhome: %w", err)
+	}
+	if err := exec.Command("git", "-C", dest, "add", ".").Run(); err != nil {
+		return fmt.Errorf("git add synced nixhome: %w", err)
+	}
+	ux.Debugf("SyncNixhome: git init + add in %s (nix flake visibility fix)", dest)
+	return nil
 }
 
 // CopyDir recursively copies src directory to dst.
@@ -586,7 +602,7 @@ func resolveBaseImage(stack string) string {
 	// Explicit override wins — user knows what they want.
 	if tag := os.Getenv("DEVCELL_BASE_IMAGE"); tag != "" {
 		if stack != "base" && cfg.ValidateStack(stack) == nil {
-			ux.Debugf("Stack cache candidate: %s (skipped — DEVCELL_BASE_IMAGE override)", runner.StackImageTag(stack))
+			ux.Debugf("Stack cache candidate: %s (skipped — DEVCELL_BASE_IMAGE override)", runner.StackImageTagDebian(stack))
 		}
 		ux.Debugf("FROM image: %s (DEVCELL_BASE_IMAGE override)", tag)
 		return tag
@@ -595,7 +611,7 @@ func resolveBaseImage(stack string) string {
 	// Try pre-built stack image for nix store cache reuse.
 	// "base" stack doesn't benefit — it's tiny and core already has nix.
 	if stack != "base" && cfg.ValidateStack(stack) == nil {
-		stackTag := runner.StackImageTag(stack)
+		stackTag := runner.StackImageTagDebian(stack)
 
 		// Check local first, then try pull.
 		ctx := context.Background()

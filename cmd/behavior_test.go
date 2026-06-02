@@ -35,8 +35,8 @@ func TestScenarioA_ContainerNameAndVNC(t *testing.T) {
 	if !hasConsecutive(argv, "--name", "cell-myproject-3-run") {
 		t.Errorf("expected --name cell-myproject-3-run: %v", argv)
 	}
-	if !hasConsecutive(argv, "-p", "350:5900") {
-		t.Errorf("expected -p 350:5900: %v", argv)
+	if !hasConsecutive(argv, "-p", "0.0.0.0:350:5900") {
+		t.Errorf("expected -p 0.0.0.0:350:5900: %v", argv)
 	}
 }
 
@@ -108,8 +108,8 @@ func TestScenarioA_RDPPortPublished(t *testing.T) {
 	argv := buildBehaviourArgv("/tmp/myproject", []string{"TMUX_PANE", "%3"},
 		"claude", nil, nil, guiCfg)
 
-	if !hasConsecutive(argv, "-p", "389:3389") {
-		t.Errorf("expected -p 389:3389: %v", argv)
+	if !hasConsecutive(argv, "-p", "0.0.0.0:389:3389") {
+		t.Errorf("expected -p 0.0.0.0:389:3389: %v", argv)
 	}
 	if !hasArg(argv, "EXT_RDP_PORT=389") {
 		t.Errorf("expected EXT_RDP_PORT=389 in argv: %v", argv)
@@ -130,6 +130,67 @@ func TestScenarioA_ConfigDirVolume(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected config dir volume mount: %v", argv)
+	}
+}
+
+// Scenario: [ports].publish_ip prefixes -p for VNC, RDP, and forward entries.
+func TestPublishIP_PrefixesAllPublishedPorts(t *testing.T) {
+	c := cfg.CellConfig{
+		Cell: cfg.CellSection{GUI: ptrBool(true)},
+		Ports: cfg.PortsSection{
+			PublishIP: "0.0.0.0",
+			Forward:   []string{"3000", "8080:3000"},
+		},
+	}
+	argv := buildBehaviourArgv("/tmp/myproject", []string{"TMUX_PANE", "%3"},
+		"claude", nil, nil, c)
+
+	if !hasConsecutive(argv, "-p", "0.0.0.0:350:5900") {
+		t.Errorf("expected -p 0.0.0.0:350:5900: %v", argv)
+	}
+	if !hasConsecutive(argv, "-p", "0.0.0.0:389:3389") {
+		t.Errorf("expected -p 0.0.0.0:389:3389: %v", argv)
+	}
+	if !hasConsecutive(argv, "-p", "0.0.0.0:3000:3000") {
+		t.Errorf("expected -p 0.0.0.0:3000:3000 (bare-port forward): %v", argv)
+	}
+	if !hasConsecutive(argv, "-p", "0.0.0.0:8080:3000") {
+		t.Errorf("expected -p 0.0.0.0:8080:3000 (host:container forward): %v", argv)
+	}
+}
+
+// Scenario: empty publish_ip resolves to "0.0.0.0" so cells are reachable
+// from other hosts regardless of dockerd's bind default.
+func TestPublishIP_EmptyDefaultsToAllInterfaces(t *testing.T) {
+	c := cfg.CellConfig{
+		Cell:  cfg.CellSection{GUI: ptrBool(true)},
+		Ports: cfg.PortsSection{Forward: []string{"3000"}},
+	}
+	argv := buildBehaviourArgv("/tmp/myproject", []string{"TMUX_PANE", "%3"},
+		"claude", nil, nil, c)
+
+	if !hasConsecutive(argv, "-p", "0.0.0.0:350:5900") {
+		t.Errorf("expected -p 0.0.0.0:350:5900 (default publish_ip): %v", argv)
+	}
+	if !hasConsecutive(argv, "-p", "0.0.0.0:3000:3000") {
+		t.Errorf("expected -p 0.0.0.0:3000:3000 (default publish_ip): %v", argv)
+	}
+}
+
+// Scenario: explicit publish_ip="127.0.0.1" overrides the default for loopback-only binding.
+func TestPublishIP_LoopbackOverride(t *testing.T) {
+	c := cfg.CellConfig{
+		Cell:  cfg.CellSection{GUI: ptrBool(true)},
+		Ports: cfg.PortsSection{PublishIP: "127.0.0.1", Forward: []string{"3000"}},
+	}
+	argv := buildBehaviourArgv("/tmp/myproject", []string{"TMUX_PANE", "%3"},
+		"claude", nil, nil, c)
+
+	if !hasConsecutive(argv, "-p", "127.0.0.1:350:5900") {
+		t.Errorf("expected -p 127.0.0.1:350:5900: %v", argv)
+	}
+	if !hasConsecutive(argv, "-p", "127.0.0.1:3000:3000") {
+		t.Errorf("expected -p 127.0.0.1:3000:3000: %v", argv)
 	}
 }
 

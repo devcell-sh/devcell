@@ -105,7 +105,12 @@ func runChrome(cmd *cobra.Command, args []string) error {
 	}
 
 	chromeProfile := filepath.Join(c.CellHome, ".chrome", appName)
-	storageStatePath := filepath.Join(c.CellHome, "storage-state.json")
+	storageStatePath := filepath.Join(c.CellHome, ".playwright", "storage-state.json")
+	// Parent dir must exist before openExtractAndClose's first write attempt
+	// (extractCookiesViaCDP -> os.WriteFile). Idempotent.
+	if err := os.MkdirAll(filepath.Dir(storageStatePath), 0700); err != nil {
+		return fmt.Errorf("create playwright dir: %w", err)
+	}
 
 	ux.Debugf("session: %s, cellID: %s, appName: %s", c.SessionName, c.CellID, c.AppName)
 	ux.Debugf("chrome profile: %s", chromeProfile)
@@ -204,6 +209,9 @@ func openExtractAndClose(profile, storageStatePath string, urls []string, noSync
 	if ux.Verbose {
 		proc.Stderr = os.Stderr
 	}
+	// Capture before Phase 1 starts so flushCookieDb's mtime check has a
+	// reliable lower bound for "during this login session".
+	phase1Start := time.Now()
 	if err := proc.Start(); err != nil {
 		return fmt.Errorf("start browser: %w", err)
 	}
@@ -239,6 +247,13 @@ func openExtractAndClose(profile, storageStatePath string, urls []string, noSync
 		}
 
 		if !noSync {
+			// Force WAL checkpoint + check freshness BEFORE Phase 2 launches.
+			// Phase 1 just exited gracefully; sqlite is unlocked.
+			status := flushCookieDb(profile, phase1Start)
+			if status.cookiesExist && !status.fresh {
+				ux.Info("⚠ Cookies database wasn't modified during this session — did you actually log in? Proceeding anyway.")
+			}
+
 			spMsg := "Extracting cookies"
 			if len(urls) > 0 {
 				spMsg = "Refreshing session and extracting cookies"
@@ -249,6 +264,28 @@ func openExtractAndClose(profile, storageStatePath string, urls []string, noSync
 				sp.Fail(fmt.Sprintf("cookie extraction failed: %v", err))
 			} else {
 				sp.Success(fmt.Sprintf("Exported %d cookies for %s", count, sites))
+
+				// Kick patchright MCP in every running cell that shares this
+				// cell-home bind mount — they cached the pre-relog
+				// storage-state.json in their Playwright BrowserContext at
+				// startup. Killing forces Claude/etc to respawn with the
+				// fresh file on next browser tool call. Best-effort; never
+				// blocks login completion.
+				kickHostUser := os.Getenv("USER")
+				if kickHostUser == "" {
+					kickHostUser = "dmitry" // sensible default; only used for /home/<user> mount-source lookup
+				}
+				cellHome := filepath.Dir(filepath.Dir(storageStatePath))
+				kicked := kickMcpInCellsSharingCellHome(kickDeps{
+					cellHome:       cellHome,
+					hostUser:       kickHostUser,
+					listContainers: dockerListCellContainers,
+					mountSource:    func(id string) (string, error) { return dockerMountSourceForUserHome(id, kickHostUser) },
+					killMcp:        dockerKillPatchrightMcp,
+				})
+				if len(kicked) > 0 {
+					ux.Debugf("kicked patchright MCP in %d cell(s): %v", len(kicked), kicked)
+				}
 			}
 		}
 
@@ -264,6 +301,50 @@ func openExtractAndClose(profile, storageStatePath string, urls []string, noSync
 	}
 
 	return nil
+}
+
+// cookieDbStatus reports on the per-profile Cookies sqlite database between
+// Phase 1 (interactive login) and Phase 2 (CDP cookie extraction).
+type cookieDbStatus struct {
+	cookiesExist bool // Default/Cookies file is present
+	fresh        bool // mtime > phase1Start (user actually wrote to it during the session)
+}
+
+// flushCookieDb runs between Phase 1 exit and Phase 2 launch. Two jobs:
+//
+//  1. Force a sqlite WAL checkpoint on the Cookies db so Phase 2's chromium
+//     reads a consistent snapshot. Without this, recent cookie writes may
+//     still live in `Cookies-wal` and Phase 2 silently extracts stale data.
+//     Best-effort: if `sqlite3` is missing or returns nonzero, we proceed —
+//     stale data is better than no data and the rest of the pipeline handles
+//     it.
+//
+//  2. Report mtime freshness vs phase1Start so the caller can warn the user
+//     when their session didn't touch the Cookies db (e.g. they closed the
+//     browser without logging in). NOT an error — the user may have logged
+//     in some other way that doesn't update mtime (e.g. session-cookie-only
+//     site), so caller decides what to do with the signal.
+//
+// Safe to call concurrently with NO other chromium process on the profile;
+// caller MUST ensure Phase 1 has exited before invoking.
+func flushCookieDb(profile string, phase1Start time.Time) cookieDbStatus {
+	cookiesPath := filepath.Join(profile, "Default", "Cookies")
+	info, err := os.Stat(cookiesPath)
+	if err != nil {
+		// File missing — Phase 1 never wrote cookies, or wrong profile path.
+		// Caller's existing CDP extraction will surface its own error.
+		return cookieDbStatus{}
+	}
+
+	// WAL checkpoint — consolidate Cookies-wal into Cookies. Best-effort.
+	// TRUNCATE mode also resets the -wal file size so we don't leave stale
+	// pages around.
+	_ = exec.Command("sqlite3", cookiesPath, "PRAGMA wal_checkpoint(TRUNCATE)").Run()
+
+	return cookieDbStatus{
+		cookiesExist: true,
+		fresh:        info.ModTime().After(phase1Start),
+	}
 }
 
 // extractCookiesViaCDP launches a headless Chrome against the same profile with
@@ -534,7 +615,13 @@ func isURL(s string) bool {
 	return len(s) > 8 && (s[:7] == "http://" || s[:8] == "https://")
 }
 
-const fingerprintFile = "playwright-fingerprint.json"
+// playwrightSubdir is the per-CellHome directory holding all Playwright-format
+// state files (storage-state.json, fingerprint.json). Per DIMM-208 — namespaced
+// by format author, not by consumer tool.
+const (
+	playwrightSubdir = ".playwright"
+	fingerprintFile  = "fingerprint.json"
+)
 
 // playwrightFingerprint holds the full browser fingerprint saved for Patchright.
 type playwrightFingerprint struct {
@@ -584,7 +671,9 @@ func chromeFingerprint(bin string) *playwrightFingerprint {
 }
 
 func ensureFingerprint(bin, storageStatePath string) *playwrightFingerprint {
-	cellHome := filepath.Dir(storageStatePath)
+	// storageStatePath = $CellHome/.playwright/storage-state.json
+	// → cellHome = $CellHome (go up two levels: file → .playwright/ → CellHome)
+	cellHome := filepath.Dir(filepath.Dir(storageStatePath))
 	fp := chromeFingerprint(bin)
 	if fp == nil {
 		// Fallback: generic recent macOS Chrome fingerprint — matches Client Hints platform.
@@ -606,7 +695,7 @@ func ensureFingerprint(bin, storageStatePath string) *playwrightFingerprint {
 }
 
 func readPlaywrightFingerprint(cellHome string) *playwrightFingerprint {
-	data, err := os.ReadFile(filepath.Join(cellHome, fingerprintFile))
+	data, err := os.ReadFile(filepath.Join(cellHome, playwrightSubdir, fingerprintFile))
 	if err != nil {
 		return nil
 	}
@@ -622,7 +711,11 @@ func readPlaywrightFingerprint(cellHome string) *playwrightFingerprint {
 
 func savePlaywrightFingerprint(cellHome string, fp *playwrightFingerprint) {
 	data, _ := json.MarshalIndent(fp, "", "  ")
-	path := filepath.Join(cellHome, fingerprintFile)
+	dir := filepath.Join(cellHome, playwrightSubdir)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return
+	}
+	path := filepath.Join(dir, fingerprintFile)
 	tmpFile := path + ".tmp"
 	if err := os.WriteFile(tmpFile, data, 0600); err != nil {
 		return

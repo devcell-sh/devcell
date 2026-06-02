@@ -1,5 +1,5 @@
 # base.nix — utilities present in every stack
-{pkgs, lib, pkgsUnstable, ...}: {
+{pkgs, lib, pkgsUnstable, self, ...}: {
   imports = [
     ./shell.nix
     ./llm
@@ -10,6 +10,20 @@
   # and correct text handling. LOCALE_ARCHIVE tells glibc where to find locales.
   home.sessionVariables = lib.mkIf pkgs.stdenv.isLinux {
     LOCALE_ARCHIVE = "${pkgs.glibcLocales}/lib/locale/locale-archive";
+    # nix-ld points at the real nix glibc loader. Used by the shim mounted at
+    # /lib/ld-linux-<arch>.so.<n> for non-nix binaries (mise-downloaded
+    # node/go, pip wheels, downloaded gpg keychains).
+    #
+    # Pure-image OCI Env (packages/image.nix) sets this directly with the
+    # same value — sessionVariables only fires through shell rc and home.
+    # activation, so the OCI Env baking is what makes `docker exec` sessions
+    # see NIX_LD. NIX_LD_LIBRARY_PATH is similarly OCI-Env-baked for pure;
+    # for impure it's set by the migrated 06-nix-ldpath.sh fragment.
+    NIX_LD = "${pkgs.glibc}/lib/${
+      if pkgs.stdenv.hostPlatform.isAarch64
+      then "ld-linux-aarch64.so.1"
+      else "ld-linux-x86-64.so.2"
+    }";
   };
 
   # ── Stage entrypoint fragments to /etc/devcell/entrypoint.d/ ───────────────
@@ -23,10 +37,16 @@
   #   90-* — late setup (future: custom user hooks)
   home.activation.stageEntrypoints = lib.hm.dag.entryAfter ["writeBoundary"] ''
     export PATH="/usr/bin:/bin:$PATH"
-    $DRY_RUN_CMD sudo mkdir -p /etc/devcell/entrypoint.d
-    if [ -d "$HOME/.config/devcell/entrypoint.d" ]; then
-      $DRY_RUN_CMD sudo ${pkgs.rsync}/bin/rsync -a --chmod=+x --delete \
-        "$HOME/.config/devcell/entrypoint.d/" /etc/devcell/entrypoint.d/
+    # Skip when image was built by nix2container — fragments are already
+    # staged at /etc/devcell/entrypoint.d/ by the image-build derivation.
+    if [ -f /etc/devcell/.image-built-with-nix2container ]; then
+      $DRY_RUN_CMD echo "stageEntrypoints: skipped (nix2container-built image)"
+    else
+      $DRY_RUN_CMD sudo mkdir -p /etc/devcell/entrypoint.d
+      if [ -d "$HOME/.config/devcell/entrypoint.d" ]; then
+        $DRY_RUN_CMD sudo ${pkgs.rsync}/bin/rsync -a --chmod=+x --delete \
+          "$HOME/.config/devcell/entrypoint.d/" /etc/devcell/entrypoint.d/
+      fi
     fi
   '';
 
@@ -37,7 +57,11 @@
   # report build provenance via `cell status`.
   home.activation.writeMetadata = lib.hm.dag.entryAfter ["writeBoundary"] ''
     export PATH="/usr/bin:/bin:$PATH"
-    if [ -n "''${DEVCELL_STACK:-}" ]; then
+    # Skip when image was built by nix2container — metadata.json is
+    # generated at image-build time, not switch time.
+    if [ -f /etc/devcell/.image-built-with-nix2container ]; then
+      $DRY_RUN_CMD echo "writeMetadata: skipped (nix2container-built image)"
+    elif [ -n "''${DEVCELL_STACK:-}" ]; then
       $DRY_RUN_CMD sudo mkdir -p /etc/devcell
       $DRY_RUN_CMD ${pkgs.jq}/bin/jq -n \
         --arg base_image "''${DEVCELL_BASE_IMAGE:-unknown}" \
@@ -53,9 +77,44 @@
 
   home.file =
     {
+      # ── nix-ld stable symlinks ─────────────────────────────────────────────
+      # Pure (nix2container) images have NIX_LD/NIX_LD_LIBRARY_PATH baked into
+      # OCI Env with eval-time nix interpolation — these stable symlinks are
+      # the impure (Dockerfile) path's equivalent: the Dockerfile ENV points
+      # at these fixed paths under $HOME, home-manager populates them at
+      # `home-manager switch` time, and the values resolve through nix-ld
+      # at runtime. No /nix/store hashes hardcoded into the Dockerfile.
+      #
+      # .nix-ld-loader → real nix glibc loader (what nix-ld defers to)
+      # .nix-ld-shim   → nix-ld bridge binary (what /lib/ld-linux-* points to)
+      ".nix-ld-loader" = {
+        source = "${pkgs.glibc}/lib/${
+          if pkgs.stdenv.hostPlatform.isAarch64
+          then "ld-linux-aarch64.so.1"
+          else "ld-linux-x86-64.so.2"
+        }";
+      };
+      ".nix-ld-shim" = {
+        source = "${pkgs.nix-ld}/libexec/nix-ld";
+      };
+
+      # Bake the flake source that built this image. Store-pinned snapshot —
+      # the exact tree home-manager evaluated, not the host's working copy.
+      # Enables offline `nix eval /opt/devcell/nixhome#...` for inventory,
+      # stack diffs, and re-evaluation inside the container. Mirrors what
+      # the impure (Dockerfile) variant already does at /opt/nixhome/.
+      "nixhome".source = self;
+
       # ── Entrypoint fragments ───────────────────────────────────────────────
       # Standalone shell scripts sourced by entrypoint.sh at container start.
       # See fragments/ directory for the actual shell code.
+      # nix-daemon — runs as root, mediates /nix/store writes for the
+      # session user. Without it, `nix profile install` etc. fail because
+      # /nix/store is root-owned in the pure image.
+      ".config/devcell/entrypoint.d/04-nix-daemon.sh" = {
+        executable = true;
+        source = ./fragments/04-nix-daemon.sh;
+      };
       ".config/devcell/entrypoint.d/05-shell-rc.sh" = {
         executable = true;
         source = ./fragments/05-shell-rc.sh;
@@ -63,6 +122,14 @@
       ".config/devcell/entrypoint.d/20-homedir.sh" = {
         executable = true;
         source = ./fragments/20-homedir.sh;
+      };
+      # 22 — sweep stale Chromium SingletonLock/Cookie/Socket files at boot
+      # (DIMM-208). Required for the unified ~/.chrome/<app>/ profile layout:
+      # without cleanup, a SIGKILL'd chromium leaves locks pointing at a dead
+      # PID from a prior container generation, blocking future launches.
+      ".config/devcell/entrypoint.d/22-chromium-singleton.sh" = {
+        executable = true;
+        source = ./fragments/22-chromium-singleton.sh;
       };
     }
     // lib.optionalAttrs pkgs.stdenv.isLinux {
@@ -84,6 +151,15 @@
     noto-fonts     # comprehensive Unicode incl. Noto Sans Mono
 
     aria2 # download tool
+    # nix-ld — dynamic linker shim for non-nix binaries (mise-downloaded node/go,
+    # pip wheels, downloaded gpg keychains). Resolves the standard
+    # `/lib/ld-linux-<arch>.so.<n>` interpreter path that precompiled tarballs
+    # hardcode; defers to the real nix glibc loader (via NIX_LD env) and
+    # consults NIX_LD_LIBRARY_PATH (NOT LD_LIBRARY_PATH) for shared libs.
+    # The separate var keeps nix-built tools on their RPATH chains untouched —
+    # fixes the `gpg: GLIBC_2.42 not found (libgpg-error-1.59)` collision that
+    # the legacy `06-nix-ldpath.sh` export was creating on impure cells.
+    nix-ld
     dnsutils # DNS tools (use: dig, nslookup, host)
     dasel # JSON/TOML/YAML/XML processor with TOML output support
     ffmpeg # media processing
@@ -103,6 +179,11 @@
     tmuxp # tmux session manager
     tree # directory listing
     unzip # archive extraction
+    _7zz # 7-Zip official upstream (use: 7zz x archive.7z)
+    p7zip # POSIX 7-Zip port — broader format support (use: 7z x archive.7z)
+    tinyxxd # standalone xxd hex dumper (use: xxd file.bin)
+    hexedit # interactive TUI hex editor (use: hexedit file.bin)
+    gnutar # GNU tar — POSIX archiver (use: tar). Was on Debian base, lost on slim.
     wget # HTTP downloader
     rsync # fast file sync (used by entrypoint fragment staging)
     yq-go # TOML/YAML/JSON processor

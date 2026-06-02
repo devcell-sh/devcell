@@ -17,6 +17,52 @@ func TestStripCellFlags_BoolFlagStripped(t *testing.T) {
 	}
 }
 
+// --impure is the canonical opt-in to the legacy Dockerfile (impure) build path
+// after the DIMM-213 vocabulary rename. Like --pure (silent no-op), it must
+// not leak through to the inner binary.
+func TestStripCellFlags_ImpureBoolFlagStripped(t *testing.T) {
+	got := stripCellFlags([]string{"--impure", "claude", "--resume"})
+	want := []string{"claude", "--resume"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("want %v, got %v", want, got)
+	}
+}
+
+// --debian is retained as a deprecated alias for --impure for one release
+// (post DIMM-213). Must still strip from forwarded args so existing scripts
+// don't leak it to the inner agent and trip "zsh: bad option".
+func TestStripCellFlags_DebianAliasStillStripped(t *testing.T) {
+	got := stripCellFlags([]string{"--debian", "claude", "--resume"})
+	want := []string{"claude", "--resume"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("want %v, got %v", want, got)
+	}
+}
+
+// --pure is consumed by cell to switch to the nix2container image path —
+// it MUST NOT leak through to the inner binary (claude, codex, zsh, …).
+// A regression where zsh sees `--pure` would print a confusing
+// "zsh: bad option" error and exit, so this test pins the contract.
+func TestStripCellFlags_PureBoolFlagStripped(t *testing.T) {
+	got := stripCellFlags([]string{"--pure", "claude", "--resume"})
+	want := []string{"claude", "--resume"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("want %v, got %v", want, got)
+	}
+}
+
+// `cell shell --pure -- ls -la` must launch the pure image and exec
+// `zsh -- ls -la` inside it. The --pure flag is cell's; everything after
+// `--` is the user's command. This test reflects the arg-shape shell.go
+// produces before handing off to runAgent.
+func TestStripCellFlags_PureWithShellCommand(t *testing.T) {
+	got := stripCellFlags([]string{"--pure", "ls", "-la"})
+	want := []string{"ls", "-la"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("want %v, got %v", want, got)
+	}
+}
+
 func TestStripCellFlags_MacosBoolFlagStripped(t *testing.T) {
 	got := stripCellFlags([]string{"--macos", "claude", "--resume"})
 	want := []string{"claude", "--resume"}

@@ -1,4 +1,14 @@
 # DevCell Taskfile. See README.md
+#
+# Taxonomy (post DIMM-205 refactor):
+#   noun-first, variant-first inside `image:*`
+#   image:impure:*  ← Dockerfile/bake path (legacy, opt-in)
+#   image:pure:*    ← nix2container path (default)
+#   image:{build,push}        — aggregates over both variants
+#   image:{mirror,manifest}   — variant-agnostic utilities
+#
+# Back-compat aliases for muscle memory + external refs are preserved
+# on each renamed task. See `task --list` for the full canonical surface.
 version: '3'
 
 vars:
@@ -13,68 +23,24 @@ env:
 
 tasks:
 
-  swag:generate:
-    desc: Regenerate Swagger docs from annotations
+  # ── Generation (artefacts derived from source) ─────────────────────────
+  swagger:generate:
+    aliases: [swag:generate]                    # back-compat
+    desc: Regenerate Swagger docs from Go annotations
     dir: "{{.TASKFILE_DIR}}"
+    silent: true
     cmds:
       - go run github.com/swaggo/swag/cmd/swag@latest init -g cmd/serve.go -o docs --parseDependency --parseInternal
 
-  cell:build:
-    desc: Build cell CLI binary
+  docs:generate:
+    aliases: [web:docs]                         # back-compat
+    desc: Generate cell CLI markdown reference for the web site (requires Go)
     dir: "{{.TASKFILE_DIR}}"
-    deps: [swag:generate]
-    cmds:
-      - CGO_ENABLED=0 go build -ldflags "{{.CELL_LDFLAGS}}" -o ~/.local/bin/cell ./cmd/
-
-  cell:install:
-    aliases: [install]
-    desc: Build and install cell binary to ~/.local/bin/cell
-    dir: "{{.TASKFILE_DIR}}"
-    cmds:
-      - task: cell:build
-      - mkdir -p ~/.local/bin
-      - echo "Installed to ~/.local/bin/cell"
-
-  image:build:base:
-    desc: Build local base images into local Docker daemon (host platform only, no push)
-    aliases: [image:build, bake:local]
     silent: true
     cmds:
-      - USER_UID=$(id -u) USER_GID=$(id -g) GIT_COMMIT={{.GIT_COMMIT_HASH}} NIX_CACHE_IMAGE=public.ecr.aws/docker/library/debian:trixie-slim PLATFORMS="" docker buildx bake --file {{.TASKFILE_DIR}}/docker-bake.hcl --load local {{.CLI_ARGS}}
+      - go run $(ls cmd/*.go | grep -Ev '(_test|main)\.go') web/src/content/cell
 
-  image:build:ultimate:
-    desc: Build ultimate base image locally (FROM base, adds nix ultimate stack + KiCad)
-    silent: true
-    cmds:
-      - USER_UID=$(id -u) USER_GID=$(id -g) GIT_COMMIT={{.GIT_COMMIT_HASH}} NIX_CACHE_IMAGE=public.ecr.aws/docker/library/debian:trixie-slim PLATFORMS="" docker buildx bake --file {{.TASKFILE_DIR}}/docker-bake.hcl --load local-ultimate {{.CLI_ARGS}}
-
-  image:build:user-local:dev:
-    desc: "Build user image for dev/test (wraps: cell init --force --yes --local-nixhome)"
-    aliases: [image:dev]
-    dir: "{{.TASKFILE_DIR}}"
-    env:
-      XDG_CONFIG_HOME: "{{.TASKFILE_DIR}}/test/testdata/devcell-config-simple"
-      DEVCELL_BASE_IMAGE: "ghcr.io/dimmkirr/devcell:core-local"
-      DEVCELL_NIXHOME_PATH: "{{.TASKFILE_DIR}}/nixhome"
-    cmds:
-      - cell build --debug {{.CLI_ARGS}}
-
-  image:build:user-local:force:
-    desc: "Build user image for dev/test (wraps: cell init --force --yes --local-nixhome)"
-    aliases: [image:dev]
-    dir: "{{.TASKFILE_DIR}}"
-    env:
-      XDG_CONFIG_HOME: "{{.TASKFILE_DIR}}/test/testdata/devcell-config-simple"
-      DEVCELL_BASE_IMAGE: "ghcr.io/dimmkirr/devcell:core-local"
-    cmds:
-      - cell init --force --yes --local-nixhome {{.TASKFILE_DIR}}/nixhome --debug {{.CLI_ARGS}}
-
-  image:push:
-    desc: Build ci group and push to registry (multi-arch)
-    silent: true
-    cmds:
-      - GIT_COMMIT={{.GIT_COMMIT_HASH}} docker buildx bake --file {{.TASKFILE_DIR}}/docker-bake.hcl --push ci {{.CLI_ARGS}}
-
+  # ── Validation (CI-cheap, no build) ────────────────────────────────────
   nix:validate:
     desc: Validate all nixhome stacks — syntax check then attr check (no build, no activation)
     dir: "{{.TASKFILE_DIR}}"
@@ -115,9 +81,249 @@ tasks:
         echo ""
         echo "All stacks valid."
 
-  test:
-    desc: Run the full container integration test suite
+  bake:validate:
+    desc: Print resolved docker-bake config (HCL parse check, no build)
+    dir: "{{.TASKFILE_DIR}}"
     silent: true
+    cmds:
+      - GIT_COMMIT={{.GIT_COMMIT_HASH}} docker buildx bake --file {{.TASKFILE_DIR}}/docker-bake.hcl --print ci
+
+  # ── cell CLI binary ────────────────────────────────────────────────────
+  # macOS Sequoia (15.x) launch-constraint guard: after `go build`, the OS-
+  # recorded provenance for the freshly written file doesn't match the new
+  # binary's content → kernel SIGKILLs the process at exec time, before
+  # main() runs. Symptom: `cell --version` dies with `zsh: killed`, exit 137,
+  # no output. Strip xattrs + re-sign ad-hoc so the OS re-registers the
+  # binary's current state. No-op on Linux (uname guard) where neither
+  # `xattr` nor `codesign` exists.
+  cell:build:
+    desc: Build cell CLI binary → ./bin/cell
+    dir: "{{.TASKFILE_DIR}}"
+    deps: [swagger:generate]
+    silent: true
+    cmds:
+      - mkdir -p bin
+      - CGO_ENABLED=0 go build -ldflags "{{.CELL_LDFLAGS}}" -o ./bin/cell ./cmd/
+      - '[ "$(uname -s)" != "Darwin" ] || xattr -c ./bin/cell'
+      - '[ "$(uname -s)" != "Darwin" ] || codesign --force --sign - ./bin/cell'
+
+  cell:install:
+    aliases: [install]
+    desc: Build + copy ./bin/cell → ~/.local/bin/cell
+    dir: "{{.TASKFILE_DIR}}"
+    deps: [cell:build]
+    silent: true
+    cmds:
+      - mkdir -p ~/.local/bin
+      - cp ./bin/cell ~/.local/bin/cell
+      # Re-apply xattr/codesign at the destination — OS provenance is path-
+      # keyed, so the just-copied file needs its own re-registration even
+      # though the source was already cleaned.
+      - '[ "$(uname -s)" != "Darwin" ] || xattr -c ~/.local/bin/cell'
+      - '[ "$(uname -s)" != "Darwin" ] || codesign --force --sign - ~/.local/bin/cell'
+      - echo "Installed to ~/.local/bin/cell"
+
+  # ── image (aggregates over both variants) ──────────────────────────────
+  # When we deprecate the impure path, `rm -rf image:impure:*` and these
+  # aggregates degrade gracefully to pure-only.
+  image:build:
+    desc: Build both impure + pure images (host platform, no push)
+    cmds:
+      - task: image:impure:build
+      - task: image:pure:build
+
+  image:push:
+    desc: Push both impure + pure images to registry
+    cmds:
+      - task: image:impure:push
+      - task: image:pure:push
+
+  # ── image:impure (Dockerfile/bake — legacy, opt-in) ────────────────────
+  image:impure:build:
+    desc: Build all impure local images (base + ultimate)
+    cmds:
+      - task: image:impure:build:base
+      - task: image:impure:build:ultimate
+
+  image:impure:build:base:
+    aliases: [bake:local, image:build:base]    # back-compat
+    desc: Build local impure base image (host platform only, no push)
+    silent: true
+    cmds:
+      - >-
+        USER_UID=$(id -u) USER_GID=$(id -g)
+        GIT_COMMIT={{.GIT_COMMIT_HASH}}
+        NIX_CACHE_IMAGE=public.ecr.aws/docker/library/debian:trixie-slim
+        PLATFORMS=""
+        docker buildx bake --file {{.TASKFILE_DIR}}/docker-bake.hcl --load local-core {{.CLI_ARGS}}
+
+  image:impure:build:ultimate:
+    aliases: [image:build:ultimate]            # back-compat
+    desc: Build local impure ultimate image (FROM base, adds nix ultimate stack + KiCad)
+    silent: true
+    cmds:
+      - >-
+        USER_UID=$(id -u) USER_GID=$(id -g)
+        GIT_COMMIT={{.GIT_COMMIT_HASH}}
+        NIX_CACHE_IMAGE=public.ecr.aws/docker/library/debian:trixie-slim
+        PLATFORMS=""
+        docker buildx bake --file {{.TASKFILE_DIR}}/docker-bake.hcl --load local-ultimate {{.CLI_ARGS}}
+
+  image:impure:push:
+    aliases: [image:push:debian]               # back-compat (pre-rename name)
+    desc: Build + push impure ci group to registry with OCI manifest (fixes skopeo zstd/v2s2 — DIMM-212)
+    silent: true
+    cmds:
+      # oci-mediatypes=true: publish with OCI manifest so zstd-compressed
+      # layers are legal. Without this, downstream skopeo trips:
+      #   "unsupported docker v2s2 media type:
+      #    application/vnd.docker.image.rootfs.diff.tar.zstd"
+      # because zstd is not a legal media type under Docker v2s2 (gzip only).
+      - >-
+        GIT_COMMIT={{.GIT_COMMIT_HASH}}
+        docker buildx bake --file {{.TASKFILE_DIR}}/docker-bake.hcl --push
+        --set '*.output=type=image,push=true,oci-mediatypes=true,compression=zstd,compression-level=3,force-compression=true'
+        ci {{.CLI_ARGS}}
+
+  # ── image:pure (nix2container — default) ───────────────────────────────
+  image:pure:build:
+    desc: Build all pure local images (base + ultimate, load into Docker daemon)
+    cmds:
+      - task: image:pure:build:base
+      - task: image:pure:build:ultimate
+
+  image:pure:build:base:
+    desc: Build pure base image locally
+    cmds:
+      - task: image:pure:build:stack
+        vars: { STACK: base }
+
+  image:pure:build:ultimate:
+    desc: Build pure ultimate image locally
+    cmds:
+      - task: image:pure:build:stack
+        vars: { STACK: ultimate }
+
+  image:pure:build:stack:
+    aliases: [image:build:pure]                # back-compat (cited in internal/runner/pure_build.go:381)
+    desc: "Build a pure image (single stack), load to Docker. STACK={base|ultimate|go|node|python|fullstack|electronics}"
+    dir: "{{.TASKFILE_DIR}}"
+    silent: true
+    vars:
+      STACK: '{{.STACK | default "base"}}'
+      # SUDO: empty in CI (Determinate Systems single-user nix on PATH) and on
+      # the host (Determinate or upstream single-user). Override SUDO=sudo for
+      # devcell containers where DEVCELL_NIX_DAEMON=false (pre-DIMM-210 builds).
+      SUDO: '{{.SUDO | default ""}}'
+      # NIX: defaults to "nix" on PATH. Override NIX=/full/path/to/nix when the
+      # binary isn't on PATH (uncommon — devcell, CI, and host all expose nix).
+      NIX: '{{.NIX | default "nix"}}'
+      NIX_ARCH:
+        sh: '[ "$(uname -m)" = "aarch64" ] && echo aarch64-linux || echo x86_64-linux'
+    env:
+      DEVCELL_BUILD_DATE: '{{.DEVCELL_BUILD_DATE | default "auto"}}'
+      DEVCELL_BUILD_REV:  '{{.DEVCELL_BUILD_REV  | default .GIT_COMMIT_HASH}}'
+    cmds:
+      - echo ">> Building devcell-{{.STACK}}-pure-image for {{.NIX_ARCH}}"
+      # --impure required so image.nix can read DEVCELL_BUILD_{DATE,REV} via builtins.getEnv.
+      - '{{.SUDO}} {{.NIX}} build --impure "path:{{.TASKFILE_DIR}}/nixhome#packages.{{.NIX_ARCH}}.devcell-{{.STACK}}-pure-image" --out-link "{{.TASKFILE_DIR}}/result-{{.STACK}}-pure"'
+      - echo ">> Loading into Docker daemon as devcell-user:{{.STACK}}-pure"
+      - '{{.SUDO}} {{.NIX}} run --impure "path:{{.TASKFILE_DIR}}/nixhome#packages.{{.NIX_ARCH}}.devcell-{{.STACK}}-pure-image.copyToDockerDaemon"'
+      - docker images devcell-user:{{.STACK}}-pure
+
+  image:pure:push:
+    desc: Build + push all pure images (base + ultimate)
+    cmds:
+      - task: image:pure:push:base
+      - task: image:pure:push:ultimate
+
+  image:pure:push:base:
+    desc: Build + push pure base image to registry
+    cmds:
+      - task: image:pure:push:stack
+        vars: { STACK: base }
+
+  image:pure:push:ultimate:
+    desc: Build + push pure ultimate image to registry
+    cmds:
+      - task: image:pure:push:stack
+        vars: { STACK: ultimate }
+
+  image:pure:push:stack:
+    desc: "Build + push a pure image (single stack). STACK= ARCH=auto|amd64|arm64 TAG= REGISTRY=… SUDO= NIX="
+    dir: "{{.TASKFILE_DIR}}"
+    silent: true
+    vars:
+      STACK:    '{{.STACK    | default "ultimate"}}'
+      REGISTRY: '{{.REGISTRY | default "ghcr.io/dimmkirr/devcell"}}'
+      TAG:      '{{.TAG      | default (printf "v0.0.0-%s-pure" .STACK)}}'
+      SUDO:     '{{.SUDO     | default ""}}'      # see image:pure:build:stack notes
+      NIX:      '{{.NIX      | default "nix"}}'
+      NIX_ARCH:
+        sh: |
+          case "{{.ARCH | default ""}}" in
+            amd64|x86_64) echo x86_64-linux ;;
+            arm64|aarch64) echo aarch64-linux ;;
+            *) [ "$(uname -m)" = "aarch64" ] && echo aarch64-linux || echo x86_64-linux ;;
+          esac
+    env:
+      DEVCELL_BUILD_DATE: '{{.DEVCELL_BUILD_DATE | default "auto"}}'
+      DEVCELL_BUILD_REV:  '{{.DEVCELL_BUILD_REV  | default .GIT_COMMIT_HASH}}'
+    cmds:
+      # nix2container's `.copyTo` runs skopeo from the derivation closure with
+      # OCI media types end-to-end — zstd layers are legal, no v2s2 mismatch.
+      # Auth: docker/login-action writes ~/.docker/config.json; --authfile reuses it.
+      # --retry-times 5 + --retry-delay 5: GHCR occasionally returns 504 Gateway
+      # Timeout uploading large blobs (~hundreds of MB); without retries skopeo
+      # bails after a single failure and we lose all the upload progress on the
+      # remaining blobs. 5×5s = 25s max retry budget per blob is well below the
+      # GHA job timeout and covers the typical GHCR recovery window.
+      - >-
+        {{.SUDO}} {{.NIX}} run --impure
+        "path:{{.TASKFILE_DIR}}/nixhome#packages.{{.NIX_ARCH}}.devcell-{{.STACK}}-pure-image.copyTo"
+        --
+        --authfile "${DOCKER_CONFIG:-$HOME/.docker}/config.json"
+        --retry-times 5
+        --retry-delay 5s
+        "docker://{{.REGISTRY}}:{{.TAG}}"
+
+  # ── image: variant-agnostic utilities ──────────────────────────────────
+  image:mirror:
+    desc: "Copy a tag between registries (e.g. GHCR → ECR Public). SRC=<full-ref> DST=<full-ref>"
+    silent: true
+    cmds:
+      - docker buildx imagetools create -t "{{.DST}}" "{{.SRC}}"
+
+  image:manifest:
+    desc: "Stitch per-arch tags into multi-arch manifest. REPO= VERSION= SUFFIX=<-core|-ultimate|-base-pure|-ultimate-pure|''> ARCHES=amd64,arm64"
+    silent: true
+    vars:
+      ARCHES: '{{.ARCHES | default "amd64,arm64"}}'
+    cmds:
+      - |
+        srcs=""
+        for arch in $(echo "{{.ARCHES}}" | tr ',' ' '); do
+          srcs="$srcs {{.REPO}}:{{.VERSION}}-${arch}{{.SUFFIX}}"
+        done
+        docker buildx imagetools create \
+          -t "{{.REPO}}:{{.VERSION}}{{.SUFFIX}}" \
+          -t "{{.REPO}}:latest{{.SUFFIX}}" \
+          -t "{{.REPO}}:dev{{.SUFFIX}}" \
+          $srcs
+
+  # ── Tests ──────────────────────────────────────────────────────────────
+  test:unit:
+    desc: Run Go unit tests (cmd/, internal/) — no Docker, no nix
+    silent: true
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - go test -timeout 120s ./cmd/... ./internal/... {{.CLI_ARGS}}
+
+  test:integration:
+    aliases: [test]                            # back-compat (cited in README)
+    desc: Run the full container integration test suite (./test/...)
+    silent: true
+    dir: "{{.TASKFILE_DIR}}"
     cmds:
       - go test -v -timeout 120s ./test/... {{.CLI_ARGS}}
 
@@ -130,13 +336,7 @@ tasks:
     env:
       CELL_VERSION: '{{.CELL_VERSION | default "0.0.0"}}'
 
-  web:docs:
-    desc: Generate cell CLI markdown reference for the website (requires Go)
-    silent: true
-    dir: "{{.TASKFILE_DIR}}"
-    cmds:
-      - go run $(ls cmd/*.go | grep -Ev '(_test|main)\.go') web/src/content/cell
-
+  # ── Web site ───────────────────────────────────────────────────────────
   web:start:
     desc: Start Astro dev server for the DevCell landing page
     silent: true

@@ -2,6 +2,7 @@ package serve
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -363,7 +364,15 @@ func buildPrompt(instructions string, input json.RawMessage) (string, error) {
 // @Description is accepted for compatibility but ignored — clients must send full conversation
 // @Description history every request.
 // @Description
-// @Description **Streaming is not supported.** Requests with `"stream": true` return 400.
+// @Description **Streaming** is supported for the claude agent: set `"stream": true` and the
+// @Description handler returns Server-Sent Events with token-level deltas. Opencode falls back to
+// @Description the buffered path even when stream is set.
+// @Description
+// @Description **Background mode** is supported: set `"background": true` to receive `202 Accepted`
+// @Description with a stub response containing only `id` and `status: "in_progress"`. Poll
+// @Description `GET /v1/responses/{id}` until `status` is terminal (`completed`, `failed`, or
+// @Description `cancelled`). Use `POST /v1/responses/{id}/cancel` to abort in-progress jobs.
+// @Description Combining `stream: true` with `background: true` returns 400 — pick one mode.
 // @Description
 // @Description **Honored fields beyond core:**
 // @Description - `reasoning.effort` (`low` / `medium` / `high`) → maps to the `claude --effort` CLI flag
@@ -385,13 +394,14 @@ func buildPrompt(instructions string, input json.RawMessage) (string, error) {
 // @Accept json
 // @Produce json
 // @Param request body ResponsesRequest true "Responses API request"
-// @Success 200 {object} ResponsesObject "Successful response"
-// @Failure 400 {object} APIError "Invalid JSON, missing model/input, unknown model, or streaming requested"
+// @Success 200 {object} ResponsesObject "Successful response (synchronous)"
+// @Success 202 {object} ResponsesObject "Background job accepted; poll GET /v1/responses/{id}"
+// @Failure 400 {object} APIError "Invalid JSON, missing model/input, unknown model, or unsupported stream+background combination"
 // @Failure 401 {string} string "Missing or invalid Bearer token"
 // @Failure 405 {object} APIError "Only POST is allowed"
 // @Security BearerAuth
 // @Router /v1/responses [post]
-func NewResponsesHandler(exec Executor, logPrompts bool, systemPrompt string) http.Handler {
+func NewResponsesHandler(exec Executor, store *JobStore, logPrompts bool, systemPrompt string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeAPIError(w, http.StatusMethodNotAllowed,
@@ -468,6 +478,30 @@ func NewResponsesHandler(exec Executor, logPrompts bool, systemPrompt string) ht
 			Model:        submodel,
 			Effort:       effort,
 			SystemPrompt: systemPrompt,
+		}
+
+		// stream + background together is unsupported in the first pass:
+		// OpenAI lets clients re-stream a stored response after a background
+		// submit, but that requires event replay which we haven't built.
+		// Reject loudly so clients pick one mode.
+		if req.Stream && req.Background != nil && *req.Background {
+			writeAPIError(w, http.StatusBadRequest,
+				"invalid_request_error", "unsupported_combination",
+				`"stream": true and "background": true cannot be combined`)
+			return
+		}
+
+		// Background path: spawn a detached goroutine and return 202 + stub.
+		// The goroutine must NOT inherit r.Context() — that ctx is cancelled
+		// the moment we write the 202 response, which would immediately kill
+		// the claude subprocess. We bind to context.Background() instead and
+		// store the per-job cancel func on the Job for explicit cancellation.
+		if req.Background != nil && *req.Background && store != nil {
+			jobCtx, cancel := context.WithCancel(context.Background())
+			store.Create(id, cancel)
+			go runBackgroundJob(jobCtx, store, id, exec, opts, req)
+			writeBackgroundStub(w, id, req)
+			return
 		}
 
 		// Streaming path: claude has a token-level surface; opencode
@@ -571,4 +605,156 @@ func NewResponsesHandler(exec Executor, logPrompts bool, systemPrompt string) ht
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
 	})
+}
+
+// writeBackgroundStub returns the 202 body for a freshly accepted background
+// job. The shape matches the terminal ResponsesObject so SDK clients can
+// deserialize the same struct for both 202 and 200 responses — only `status`,
+// `output`, `output_text`, and `usage` differ until the job completes.
+func writeBackgroundStub(w http.ResponseWriter, id string, req ResponsesRequest) {
+	var instructionsEcho *string
+	if req.Instructions != "" {
+		s := req.Instructions
+		instructionsEcho = &s
+	}
+	temperature := 1.0
+	if req.Temperature != nil {
+		temperature = *req.Temperature
+	}
+	topP := 1.0
+	if req.TopP != nil {
+		topP = *req.TopP
+	}
+	store := true
+	if req.Store != nil {
+		store = *req.Store
+	}
+	parallel := true
+	if req.ParallelToolCalls != nil {
+		parallel = *req.ParallelToolCalls
+	}
+	truncation := "disabled"
+	if req.Truncation != "" {
+		truncation = req.Truncation
+	}
+
+	resp := ResponsesObject{
+		ID:                 id,
+		Object:             "response",
+		CreatedAt:          time.Now().Unix(),
+		Status:             "in_progress",
+		Model:              req.Model,
+		Output:             []ResponsesOutputItem{},
+		OutputText:         "",
+		Error:              nil,
+		IncompleteDetails:  nil,
+		Instructions:       instructionsEcho,
+		Metadata:           map[string]string{},
+		ParallelToolCalls:  parallel,
+		PreviousResponseID: nil,
+		Reasoning:          req.Reasoning,
+		Store:              store,
+		Temperature:        temperature,
+		ToolChoice:         "auto",
+		Tools:              []any{},
+		TopP:               topP,
+		Truncation:         truncation,
+		User:               req.User,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(resp)
+}
+
+// runBackgroundJob executes the agent for a background-mode request and
+// stores the terminal ResponsesObject in the job store. Runs in its own
+// goroutine; must not touch the HTTP response writer.
+//
+// ctx is bound to context.Background() (not the request ctx) so that the
+// goroutine survives the 202 response being written.
+func runBackgroundJob(ctx context.Context, store *JobStore, id string, exec Executor, opts ExecOpts, req ResponsesRequest) {
+	_ = ctx // reserved for future ContextExecutor wiring (subprocess kill on cancel)
+
+	result := exec.Run(opts)
+
+	status := "completed"
+	text := result.Stdout
+	var apiErr *ResponsesError
+	var output []ResponsesOutputItem
+	if result.ExitCode != 0 {
+		status = "failed"
+		msg := result.Stderr
+		if msg == "" {
+			msg = "agent failed"
+		}
+		apiErr = &ResponsesError{Code: "server_error", Message: msg}
+		text = ""
+		output = []ResponsesOutputItem{}
+	} else {
+		output = []ResponsesOutputItem{
+			{
+				Type:   "message",
+				ID:     messageID(),
+				Status: "completed",
+				Role:   "assistant",
+				Content: []ResponsesOutputContentPart{
+					{Type: "output_text", Text: text, Annotations: []any{}},
+				},
+			},
+		}
+	}
+
+	var instructionsEcho *string
+	if req.Instructions != "" {
+		s := req.Instructions
+		instructionsEcho = &s
+	}
+	temperature := 1.0
+	if req.Temperature != nil {
+		temperature = *req.Temperature
+	}
+	topP := 1.0
+	if req.TopP != nil {
+		topP = *req.TopP
+	}
+	storeFlag := true
+	if req.Store != nil {
+		storeFlag = *req.Store
+	}
+	parallel := true
+	if req.ParallelToolCalls != nil {
+		parallel = *req.ParallelToolCalls
+	}
+	truncation := "disabled"
+	if req.Truncation != "" {
+		truncation = req.Truncation
+	}
+
+	resp := &ResponsesObject{
+		ID:                 id,
+		Object:             "response",
+		CreatedAt:          time.Now().Unix(),
+		Status:             status,
+		Model:              req.Model,
+		Output:             output,
+		OutputText:         text,
+		Usage:              responsesUsageFromExec(result.Usage),
+		Error:              apiErr,
+		IncompleteDetails:  nil,
+		Instructions:       instructionsEcho,
+		Metadata:           map[string]string{},
+		ParallelToolCalls:  parallel,
+		PreviousResponseID: nil,
+		Reasoning:          req.Reasoning,
+		Store:              storeFlag,
+		Temperature:        temperature,
+		ToolChoice:         "auto",
+		Tools:              []any{},
+		TopP:               topP,
+		Truncation:         truncation,
+		User:               req.User,
+	}
+
+	store.Complete(id, status, resp)
 }

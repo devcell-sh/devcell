@@ -938,6 +938,163 @@ func TestMerge_PortsDeduped(t *testing.T) {
 	}
 }
 
+func TestLoadFile_PortsPublishIP(t *testing.T) {
+	dir := t.TempDir()
+	writeTOML(t, dir, "devcell.toml", `
+[ports]
+publish_ip = "0.0.0.0"
+forward = ["3000"]
+`)
+	c, err := cfg.LoadFile(filepath.Join(dir, "devcell.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Ports.PublishIP != "0.0.0.0" {
+		t.Errorf("publish_ip: want %q, got %q", "0.0.0.0", c.Ports.PublishIP)
+	}
+}
+
+func TestLoadFile_PortsPublishIPDefaultsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	writeTOML(t, dir, "devcell.toml", `[cell]`)
+	c, err := cfg.LoadFile(filepath.Join(dir, "devcell.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Ports.PublishIP != "" {
+		t.Errorf("publish_ip should default empty, got %q", c.Ports.PublishIP)
+	}
+}
+
+func TestMerge_PortsPublishIP_ProjectWins(t *testing.T) {
+	global := cfg.CellConfig{Ports: cfg.PortsSection{PublishIP: "127.0.0.1"}}
+	project := cfg.CellConfig{Ports: cfg.PortsSection{PublishIP: "0.0.0.0"}}
+	merged := cfg.Merge(global, project)
+	if merged.Ports.PublishIP != "0.0.0.0" {
+		t.Errorf("project publish_ip should win: want 0.0.0.0, got %q", merged.Ports.PublishIP)
+	}
+}
+
+func TestMerge_PortsPublishIP_GlobalKeptWhenProjectEmpty(t *testing.T) {
+	global := cfg.CellConfig{Ports: cfg.PortsSection{PublishIP: "127.0.0.1"}}
+	project := cfg.CellConfig{}
+	merged := cfg.Merge(global, project)
+	if merged.Ports.PublishIP != "127.0.0.1" {
+		t.Errorf("global publish_ip should be retained when project empty, got %q", merged.Ports.PublishIP)
+	}
+}
+
+func TestResolvedPublishIP(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty defaults to all-interfaces", "", "0.0.0.0"},
+		{"explicit 0.0.0.0 passes through", "0.0.0.0", "0.0.0.0"},
+		{"loopback override", "127.0.0.1", "127.0.0.1"},
+		{"specific NIC override", "192.168.1.50", "192.168.1.50"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := cfg.PortsSection{PublishIP: tc.in}.ResolvedPublishIP()
+			if got != tc.want {
+				t.Errorf("ResolvedPublishIP(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// --- Hostname resolver ---
+
+func TestResolvedHostname_DefaultsToComputed(t *testing.T) {
+	t.Setenv("DEVCELL_HOSTNAME", "")
+	got := cfg.CellSection{}.ResolvedHostname("cell-myapp-0")
+	if got != "cell-myapp-0" {
+		t.Errorf("want computed default, got %q", got)
+	}
+}
+
+func TestResolvedHostname_TOMLOverridesComputed(t *testing.T) {
+	t.Setenv("DEVCELL_HOSTNAME", "")
+	got := cfg.CellSection{Hostname: "from-toml"}.ResolvedHostname("cell-myapp-0")
+	if got != "from-toml" {
+		t.Errorf("toml value should win over computed, got %q", got)
+	}
+}
+
+func TestResolvedHostname_EnvOverridesTOML(t *testing.T) {
+	t.Setenv("DEVCELL_HOSTNAME", "from-env")
+	got := cfg.CellSection{Hostname: "from-toml"}.ResolvedHostname("cell-myapp-0")
+	if got != "from-env" {
+		t.Errorf("env should win over toml, got %q", got)
+	}
+}
+
+func TestLoadFile_HostnameTOMLKey(t *testing.T) {
+	dir := t.TempDir()
+	writeTOML(t, dir, "devcell.toml", `
+[cell]
+hostname = "custom-host"
+`)
+	c, err := cfg.LoadFile(filepath.Join(dir, "devcell.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Cell.Hostname != "custom-host" {
+		t.Errorf("want custom-host, got %q", c.Cell.Hostname)
+	}
+}
+
+// Project [cell] hostname must survive Merge so that LoadLayered ->
+// LoadFromOS exposes the value to runner.BuildArgv. Previously Hostname
+// was loaded by LoadFile but dropped by Merge, so cell shell silently
+// used the computed default.
+func TestMerge_HostnameProjectWins(t *testing.T) {
+	global := cfg.CellConfig{Cell: cfg.CellSection{Hostname: "from-global"}}
+	project := cfg.CellConfig{Cell: cfg.CellSection{Hostname: "from-project"}}
+	got := cfg.Merge(global, project)
+	if got.Cell.Hostname != "from-project" {
+		t.Errorf("project hostname must override global; got %q", got.Cell.Hostname)
+	}
+}
+
+func TestMerge_MacAddressProjectWins(t *testing.T) {
+	global := cfg.CellConfig{Cell: cfg.CellSection{MacAddress: "aa:aa:aa:aa:aa:aa"}}
+	project := cfg.CellConfig{Cell: cfg.CellSection{MacAddress: "e2:2d:42:13:81:d2"}}
+	got := cfg.Merge(global, project)
+	if got.Cell.MacAddress != "e2:2d:42:13:81:d2" {
+		t.Errorf("project mac_address must override global; got %q", got.Cell.MacAddress)
+	}
+}
+
+func TestMerge_MacAddressInheritsGlobal(t *testing.T) {
+	global := cfg.CellConfig{Cell: cfg.CellSection{MacAddress: "aa:aa:aa:aa:aa:aa"}}
+	project := cfg.CellConfig{}
+	got := cfg.Merge(global, project)
+	if got.Cell.MacAddress != "aa:aa:aa:aa:aa:aa" {
+		t.Errorf("global mac_address must survive when project leaves it empty; got %q", got.Cell.MacAddress)
+	}
+}
+
+func TestMerge_HostnameFromProjectOnly(t *testing.T) {
+	global := cfg.CellConfig{}
+	project := cfg.CellConfig{Cell: cfg.CellSection{Hostname: "from-project"}}
+	got := cfg.Merge(global, project)
+	if got.Cell.Hostname != "from-project" {
+		t.Errorf("project hostname must propagate when global is empty; got %q", got.Cell.Hostname)
+	}
+}
+
+func TestMerge_HostnameInheritsGlobal(t *testing.T) {
+	global := cfg.CellConfig{Cell: cfg.CellSection{Hostname: "from-global"}}
+	project := cfg.CellConfig{}
+	got := cfg.Merge(global, project)
+	if got.Cell.Hostname != "from-global" {
+		t.Errorf("global hostname must survive when project leaves it empty; got %q", got.Cell.Hostname)
+	}
+}
+
 // --- Op section ---
 
 func TestLoadFile_OpDocuments(t *testing.T) {

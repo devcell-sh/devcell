@@ -292,6 +292,13 @@ func buildVagrantEnvVars(cellCfg cfg.CellConfig) []string {
 		e("TZ", os.Getenv("TZ"))
 	}
 
+	// MAC address: TODO — vagrant honors [cell].mac_address via `config.vm.network`
+	// in the generated Vagrantfile, not via env. Wiring requires touching the
+	// Vagrantfile template (internal/scaffold/templates/Vagrantfile.tmpl) so the
+	// VM's NIC is created with `:mac => "<value>"`. Tracked for parity with the
+	// docker runner; until then, vagrant cells get a random MAC per `vagrant up`.
+	_ = cellCfg.Cell.MacAddress
+
 	// Locale: config wins, then host $LANG, then default
 	if loc := cellCfg.Cell.Locale; loc != "" {
 		e("LANG", loc)

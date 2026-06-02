@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -51,10 +52,18 @@ func BaseImageTag() string {
 	return fmt.Sprintf("%s:%s-core", Registry, version.Version)
 }
 
-// UserImageTag returns the user image tag.
+// UserImageTag returns the user's local image tag — the bare-name local
+// devcell image. Unchanged across the 2026-05-15 flip: this name is the
+// user's "current image" concept and existing local images keep working.
+//
 // Default (stack-based): devcell-user:<stack> or devcell-user:<stack>-<mod1>-<mod2>-<sha8>
-// Legacy (per_session_image=true): devcell-user:<session> (one image per tmux session)
-// Override with DEVCELL_USER_IMAGE env var (used by tests).
+// Legacy (per_session_image=true): devcell-user:<session>
+//
+// Used by:
+//   - `cell <agent> --impure` (PickImageTag(true) → bare local tag)
+//   - `cell build --impure` (docker build → tags this name)
+//
+// Override with DEVCELL_USER_IMAGE env var.
 func UserImageTag() string {
 	if tag := os.Getenv("DEVCELL_USER_IMAGE"); tag != "" {
 		return tag
@@ -75,6 +84,61 @@ func UserImageTag() string {
 		tag += "-" + hex.EncodeToString(h[:])[:8]
 	}
 	return "devcell-user:" + tag
+}
+
+// UserImageTagPure returns the local tag for nix2container-built (pure)
+// images — the DEFAULT path after the 2026-05-15 flip (DIMM-202). Same
+// repo as UserImageTag with a "-pure" suffix.
+//
+// Example: UserImageTag()="devcell-user:ultimate" → UserImageTagPure()="devcell-user:ultimate-pure".
+func UserImageTagPure() string {
+	if tag := os.Getenv("DEVCELL_USER_IMAGE_PURE"); tag != "" {
+		return tag
+	}
+	return UserImageTag() + "-pure"
+}
+
+// StackImageTagPure returns the registry tag for a pre-built pure stack image.
+// Example: StackImageTagPure("ultimate") → "<registry>:v<ver>-ultimate-pure"
+func StackImageTagPure(stack string) string {
+	return fmt.Sprintf("%s:%s-%s-pure", Registry, version.Version, stack)
+}
+
+// StackImageTagImpure returns the registry tag for the multi-arch Dockerfile-
+// built (impure) stack image. The registry uses the explicit `-impure` suffix
+// (DIMM-213 vocabulary rename — was `-debian`) so the namespace is symmetric
+// with the pure variant.
+//
+// Used by scaffold's FROM-image fallback for the legacy Dockerfile build path.
+//
+// Example: StackImageTagImpure("ultimate") → "<registry>:v<ver>-ultimate-impure"
+func StackImageTagImpure(stack string) string {
+	return fmt.Sprintf("%s:%s-%s-impure", Registry, version.Version, stack)
+}
+
+// StackImageTagDebian is a deprecated alias for StackImageTagImpure, kept for
+// one release while internal callers migrate. Returns the same `-impure`-
+// suffixed tag.
+//
+// Deprecated: use StackImageTagImpure.
+func StackImageTagDebian(stack string) string {
+	return StackImageTagImpure(stack)
+}
+
+// PickImageTag is the single seam every runtime caller (`cell claude`,
+// `cell shell`, `cell codex`, `cell gemini`, …) uses to decide which local
+// image variant to exec into.
+//
+// After the 2026-05-15 flip (DIMM-204) + DIMM-213 vocab rename, pure is the
+// default and `impure` (was `debian`) is the opt-in legacy path:
+//
+//	impure=false (default):    UserImageTagPure() (nix2container, devcell-user:<stack>-pure)
+//	impure=true  (--impure):   UserImageTag()    (bare Dockerfile-built, devcell-user:<stack>)
+func PickImageTag(impure bool) string {
+	if impure {
+		return UserImageTag()
+	}
+	return UserImageTagPure()
 }
 
 // resolveSession returns the session name from env vars (legacy per-session mode).
@@ -112,6 +176,7 @@ type RunSpec struct {
 	DefaultFlags []string
 	UserArgs     []string
 	Debug        bool                // pass DEVCELL_DEBUG=true into the container
+	NixDaemon    bool                // pass DEVCELL_NIX_DAEMON=true into the container
 	Image        string              // image ID or tag to run; defaults to UserImageTag
 	ExtraEnv     map[string]string   // additional env vars injected by the command handler
 	InheritEnv   []string            // env var names to inherit from host (passed as -e KEY with no value)
@@ -146,7 +211,7 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 
 	// Identity
 	argv = append(argv, "--name", c.ContainerName)
-	argv = append(argv, "--hostname", c.Hostname)
+	argv = append(argv, "--hostname", spec.CellCfg.Cell.ResolvedHostname(c.Hostname))
 	argv = append(argv, "--user", "0")
 	argv = append(argv, "--group-add", "0")
 
@@ -226,6 +291,28 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 		argv = append(argv, "-e", "DEVCELL_DEBUG=true")
 	}
 
+	// Nix daemon — enables in-container package installation via nix-daemon
+	if spec.NixDaemon {
+		argv = append(argv, "-e", "DEVCELL_NIX_DAEMON=true")
+	}
+
+	// Pass the image tag/ID into the container for debug logging
+	if spec.Debug && spec.Image != "" {
+		argv = append(argv, "-e", "DEVCELL_IMAGE="+spec.Image)
+	}
+
+	// Build provenance from OCI manifest → container env. The entrypoint's
+	// "User image:" log line surfaces these so users can confirm at boot
+	// which build/commit they're running, without spawning a `docker inspect`
+	// from inside the container. Reads labels via the single `docker image
+	// inspect` call below — cheap (~ms, no container spawn).
+	if meta := ImageMetadataFromContainer(context.Background()); meta.BuildDate != "" {
+		argv = append(argv, "-e", "DEVCELL_BUILD_DATE="+meta.BuildDate)
+		if meta.GitCommit != "" && meta.GitCommit != "unknown" {
+			argv = append(argv, "-e", "DEVCELL_BUILD_REV="+meta.GitCommit)
+		}
+	}
+
 	// Timezone: config wins, then host $TZ
 	if tz := spec.CellCfg.Cell.Timezone; tz != "" {
 		argv = append(argv, "-e", "TZ="+tz)
@@ -292,18 +379,23 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 		argv = append(argv, "-v", vol.Mount)
 	}
 
+	// [ports].publish_ip — host interface prefix for `docker run -p`.
+	// Defaults to "0.0.0.0" (set by ResolvedPublishIP) so cells are reachable
+	// from other hosts on the LAN regardless of dockerd bind defaults.
+	publishPrefix := spec.CellCfg.Ports.ResolvedPublishIP() + ":"
+
 	// cfg [ports] entries
 	for _, port := range spec.CellCfg.Ports.Forward {
 		if !strings.Contains(port, ":") {
 			port = port + ":" + port
 		}
-		argv = append(argv, "-p", port)
+		argv = append(argv, "-p", publishPrefix+port)
 	}
 
 	// GUI port mapping
 	if spec.CellCfg.Cell.ResolvedGUI() {
-		argv = append(argv, "-p", c.VNCPort+":5900")
-		argv = append(argv, "-p", c.RDPPort+":3389")
+		argv = append(argv, "-p", publishPrefix+c.VNCPort+":5900")
+		argv = append(argv, "-p", publishPrefix+c.RDPPort+":3389")
 	}
 
 	// In-memory secrets mount — Playwright MCP reads .secrets-playwright from here
@@ -311,6 +403,14 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 
 	// Network
 	argv = append(argv, "--network", "devcell-network")
+
+	// MAC address — pinned across restarts for infra-side identity persistence
+	// (bot-protection rate-limit keys, persistent-ban identification, stable
+	// WebRTC-leaked IP via stable network slot). Honored on user-defined bridge
+	// networks like devcell-network. Empty → docker auto-assigns per launch.
+	if mac := spec.CellCfg.Cell.MacAddress; mac != "" {
+		argv = append(argv, "--mac-address", mac)
+	}
 
 	// Workdir
 	argv = append(argv, "--workdir", "/"+c.AppName)
@@ -358,6 +458,7 @@ func EnsureNetwork(ctx context.Context) error {
 }
 
 // BuildImage runs docker build to build UserImageTag from configDir.
+// Legacy Dockerfile path; reached via `cell build --impure` after DIMM-213.
 // verbose=true streams plain-text output to out; verbose=false suppresses all
 // docker output (quiet mode) and captures stderr to out for error replay.
 // --pull is always passed so Docker checks for a newer base image digest and
@@ -406,12 +507,6 @@ func BuildImage(ctx context.Context, configDir string, noCache bool, verbose boo
 // ImageExists returns true if a Docker image with the given tag exists locally.
 func ImageExists(ctx context.Context, tag string) bool {
 	return exec.CommandContext(ctx, "docker", "image", "inspect", tag).Run() == nil
-}
-
-// StackImageTag returns the registry tag for a pre-built stack image.
-// e.g. "go" → "ghcr.io/dimmkirr/devcell:v1.2.3-go"
-func StackImageTag(stack string) string {
-	return fmt.Sprintf("%s:%s-%s", Registry, version.Version, stack)
 }
 
 // PullImage attempts to pull a Docker image. Returns nil on success.
@@ -533,12 +628,53 @@ func DiffBuildFile(configDir, name string) string {
 // Used to pin the running container to the exact image just built,
 // rather than the mutable tag which could race with a concurrent build.
 func LocalImageID(ctx context.Context) (string, error) {
+	return LocalImageIDFor(ctx, UserImageTag())
+}
+
+// LocalImageIDFor returns the image ID for an arbitrary tag. Used with
+// UserImageTagPure() to pin pure-built runtime containers.
+func LocalImageIDFor(ctx context.Context, tag string) (string, error) {
 	out, err := exec.CommandContext(ctx, "docker", "image", "inspect",
-		UserImageTag(), "--format", "{{.Id}}").Output()
+		tag, "--format", "{{.Id}}").Output()
 	if err != nil {
-		return "", fmt.Errorf("inspect %s: %w", UserImageTag(), err)
+		return "", fmt.Errorf("inspect %s: %w", tag, err)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// LocalImageSize returns the on-daemon size in bytes of the local image with
+// the given tag. Used post-build to show "Loaded: 1.4 GB" alongside the
+// spinner success — skopeo's per-blob progress is empty when stdout isn't a
+// TTY, so we synthesize a summary from `docker image inspect` instead.
+//
+// Returns 0 on any error; callers treat 0 as "size unknown, skip the summary".
+func LocalImageSize(ctx context.Context, tag string) int64 {
+	out, err := exec.CommandContext(ctx, "docker", "image", "inspect",
+		tag, "--format", "{{.Size}}").Output()
+	if err != nil {
+		return 0
+	}
+	n, err := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// HumanBytes formats a byte count as "1.4 GB" / "237 MB" / "812 KB" / "42 B".
+// Uses 1024-based units (KiB/MiB/GiB semantics) but the conventional
+// abbreviations users expect from `docker images`.
+func HumanBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for x := n / unit; x >= unit; x /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
 // ImageMetadata holds structured build metadata from /etc/devcell/metadata.json.
@@ -558,29 +694,149 @@ func ParseImageMetadata(data []byte) ImageMetadata {
 	return m
 }
 
-// ImageMetadataFromContainer reads /etc/devcell/metadata.json from the user image.
-// Falls back to legacy base-image-version + user-image-version files.
+// ImageMetadataFromContainer reads build metadata for the current launch's image.
+//
+// Source-of-truth flip (2026-05-16): the date/rev now come from the OCI
+// image manifest (labels + Created field) rather than /etc/devcell/metadata.json
+// inside the image. Why: when metadata.json carried a real per-build timestamp,
+// every `cell build` invocation perturbed homeRoot's tar hash and forced
+// skopeo to re-push the ~3.9GB customization layer even when no source had
+// changed. Pinning metadata.json to static placeholders eliminates that;
+// the date moves to OCI manifest labels (which only affect the tiny manifest
+// blob, not layer content).
+//
+// Reads:
+//   - .Created          — OCI manifest creation timestamp (= our buildDate)
+//   - .Config.Labels    — devcell.stack, org.opencontainers.image.revision, etc.
+//   - .Config.Env       — DEVCELL_PROFILE for stack fallback
+//
+// Falls back to a runtime `cat /etc/devcell/metadata.json` for older images
+// that predate the manifest-based stamping.
 func ImageMetadataFromContainer(ctx context.Context) ImageMetadata {
-	out, err := exec.CommandContext(ctx, "docker", "run", "--rm", "--entrypoint", "sh",
-		UserImageTag(), "-c",
+	tag := PickImageTag(false) // false = pure (default after DIMM-204)
+	if !ImageExists(ctx, tag) {
+		// Pure image not built/pulled yet; fall back to the debian tag if
+		// that's all we have locally.
+		tag = UserImageTag()
+	}
+
+	// Fast path — single `docker inspect`, no container spawn. JSON output
+	// covers everything we need from labels + the OCI manifest's Created.
+	type inspectConfig struct {
+		Labels map[string]string `json:"Labels"`
+		Env    []string          `json:"Env"`
+	}
+	type inspectImage struct {
+		Created string        `json:"Created"`
+		Config  inspectConfig `json:"Config"`
+	}
+
+	out, err := exec.CommandContext(ctx,
+		"docker", "image", "inspect", tag, "--format", "{{json .}}",
+	).Output()
+	if err == nil && len(out) > 0 {
+		var arr []inspectImage
+		// `docker image inspect` returns a JSON array; the --format we
+		// pass actually returns a single object per image, so try both.
+		if jsonErr := json.Unmarshal(out, &arr); jsonErr == nil && len(arr) > 0 {
+			return imageMetadataFromInspect(arr[0].Created, arr[0].Config.Labels, arr[0].Config.Env)
+		}
+		var single inspectImage
+		if jsonErr := json.Unmarshal(out, &single); jsonErr == nil {
+			return imageMetadataFromInspect(single.Created, single.Config.Labels, single.Config.Env)
+		}
+	}
+
+	// Legacy fallback for older images without OCI labels — runtime read.
+	legacyOut, legacyErr := exec.CommandContext(ctx, "docker", "run", "--rm", "--entrypoint", "sh",
+		tag, "-c",
 		"cat /etc/devcell/metadata.json 2>/dev/null",
 	).Output()
-	if err != nil || len(out) == 0 {
+	if legacyErr != nil || len(legacyOut) == 0 {
 		return ImageMetadata{}
 	}
-	return ParseImageMetadata(out)
+	return ParseImageMetadata(legacyOut)
+}
+
+// imageMetadataFromInspect synthesises ImageMetadata from `docker image inspect`
+// output. Pure helper, no I/O.
+func imageMetadataFromInspect(created string, labels map[string]string, env []string) ImageMetadata {
+	m := ImageMetadata{
+		BaseImage: labels["devcell.built-with"],   // "nix2container" / ""
+		Stack:     labels["devcell.stack"],
+		GitCommit: labels["org.opencontainers.image.revision"],
+		BuildDate: labels["org.opencontainers.image.created"],
+	}
+	// BuildDate fallback: if no label, use the OCI Created field — both
+	// surface the same thing in our build but the Created field is set
+	// at all pure builds whereas the label is a 2026-05-16+ addition.
+	if m.BuildDate == "" {
+		m.BuildDate = created
+	}
+	// Stack fallback: image config Env carries DEVCELL_PROFILE=devcell-<stack>.
+	if m.Stack == "" {
+		for _, kv := range env {
+			if strings.HasPrefix(kv, "DEVCELL_PROFILE=devcell-") {
+				m.Stack = strings.TrimPrefix(kv, "DEVCELL_PROFILE=devcell-")
+				break
+			}
+		}
+	}
+	if m.BaseImage == "" {
+		m.BaseImage = "nix2container"
+	}
+	return m
+}
+
+// formatImageVersionUser is the pure formatting half of ImageVersions —
+// extracted so tests can exercise it without mocking docker. Returns the
+// string for the "User image: <X>" log line, "" when only placeholders
+// are present (caller then falls through to legacy file read).
+func formatImageVersionUser(m ImageMetadata) string {
+	hasCommit := m.GitCommit != "" && m.GitCommit != "unknown" && m.GitCommit != "nix2container"
+	hasDate := m.BuildDate != "" && m.BuildDate != "1970-01-01T00:00:00Z" && m.BuildDate != "0001-01-01T00:00:00Z"
+	switch {
+	case hasCommit && hasDate:
+		return m.GitCommit + " built " + m.BuildDate
+	case hasDate:
+		return "built " + m.BuildDate
+	case hasCommit:
+		return m.GitCommit
+	}
+	return ""
+}
+
+// ImageMetadataFromInspectExport is the test seam for the pure helper —
+// exported so package_test.go can drive it without docker.
+func ImageMetadataFromInspectExport(created string, labels map[string]string, env []string) ImageMetadata {
+	return imageMetadataFromInspect(created, labels, env)
+}
+
+// FormatImageVersionUserExport is the test seam for formatImageVersionUser.
+func FormatImageVersionUserExport(m ImageMetadata) string {
+	return formatImageVersionUser(m)
 }
 
 // ImageVersions reads build metadata from the user image.
 // Returns (base, user) strings for backward compatibility with callers.
+// Format: user = "<commit> built <date>" when both known,
+//
+//	"built <date>" when only date,
+//	"<commit>" when only commit,
+//	"" otherwise (falls through to legacy file read).
 func ImageVersions(ctx context.Context) (base, user string) {
 	m := ImageMetadataFromContainer(ctx)
-	if m.GitCommit != "" {
-		return m.BaseImage, m.GitCommit + " " + m.BuildDate
+	if u := formatImageVersionUser(m); u != "" {
+		return m.BaseImage, u
 	}
-	// Fallback: legacy files (pre-metadata.json images).
+	// Fallback: legacy files (pre-metadata.json images). Uses same tag
+	// preference as ImageMetadataFromContainer above.
+	tag := PickImageTag(false)
+	if !ImageExists(ctx, tag) {
+		tag = UserImageTag()
+	}
 	out, err := exec.CommandContext(ctx, "docker", "run", "--rm", "--entrypoint", "sh",
-		UserImageTag(), "-c",
+		tag, "-c",
 		"cat /etc/devcell/base-image-version 2>/dev/null; echo '---'; cat /etc/devcell/user-image-version 2>/dev/null",
 	).Output()
 	if err != nil {
