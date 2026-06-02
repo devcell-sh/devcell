@@ -849,6 +849,99 @@ func TestRdp_ClipboardSync(t *testing.T) {
 	}
 }
 
+// TestRdp_ClientResolutionRequest -- xfreerdp /size:WxH requests a specific
+// session size; the Xvfb-backed xrdp+libvnc pipeline cannot honor it because
+// the framebuffer is fixed at 1920x1080 (see 50-gui.sh:11). This test
+// connects with three different client-requested sizes and asserts that the
+// resulting FreeRDP window is always 1920x1080 — demonstrating that no real
+// resolution negotiation happens.
+//
+// Once DIMM-28 (Xvnc replacement) lands, the assertion should be inverted:
+// the FreeRDP window should match the /size: request. When this test starts
+// failing, that is the signal the fix is in.
+func TestRdp_ClientResolutionRequest(t *testing.T) {
+	probeGUI(t)
+	c := startRdpContainer(t)
+	skipIfNoXfreerdp(t, c)
+
+	// xdotool is used to read the FreeRDP window geometry on :98.
+	if _, code := exec(t, c, []string{"sh", "-c", "command -v xdotool"}); code != 0 {
+		t.Skip("skipping: xdotool not on PATH")
+	}
+
+	// Roomy second Xvfb (:98) acts as the xfreerdp client display.
+	// 3200x1800 is larger than any size we request below, so the FreeRDP
+	// window never gets clipped by its own host display.
+	exec(t, c, []string{"sh", "-c", "Xvfb :98 -screen 0 3200x1800x24 2>/dev/null &"})
+	time.Sleep(1 * time.Second)
+	t.Cleanup(func() {
+		exec(t, c, []string{"sh", "-c", "pkill -f 'Xvfb :98' 2>/dev/null; true"})
+	})
+
+	cases := []struct {
+		name      string
+		reqWidth  int
+		reqHeight int
+	}{
+		{"smaller_than_server_1366x768", 1366, 768},
+		{"matches_server_1920x1080", 1920, 1080},
+		{"larger_than_server_2560x1440", 2560, 1440},
+	}
+
+	const (
+		wantWidth  = 1920 // Xvfb framebuffer width (50-gui.sh:11)
+		wantHeight = 1080 // Xvfb framebuffer height
+	)
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Connect xfreerdp on :98 with the requested /size:. No
+			// /smart-sizing — we want the window dimensions to reflect the
+			// negotiated session size, not client-side bitmap stretching.
+			cmd := fmt.Sprintf(
+				"DISPLAY=:98 xfreerdp /v:127.0.0.1:3389 /u:%s /p:rdp /cert:ignore /size:%dx%d 2>/dev/null &",
+				hostUser, tc.reqWidth, tc.reqHeight)
+			exec(t, c, []string{"sh", "-c", cmd})
+			t.Cleanup(func() {
+				exec(t, c, []string{"sh", "-c", "pkill -f 'xfreerdp.*127.0.0.1:3389' 2>/dev/null; true"})
+			})
+			// FreeRDP 3.x needs ~8s to fully establish the session and
+			// map its top-level window.
+			time.Sleep(8 * time.Second)
+
+			out, code := exec(t, c, []string{"sh", "-c",
+				"DISPLAY=:98 xdotool search --name FreeRDP 2>/dev/null | head -1 | " +
+					"xargs -I{} xdotool getwindowgeometry --shell {} 2>&1"})
+			if code != 0 || !strings.Contains(out, "WIDTH=") {
+				t.Fatalf("could not get FreeRDP window geometry on :98 (exit %d):\n%s", code, out)
+			}
+
+			actualW := parseShellVar(out, "WIDTH")
+			actualH := parseShellVar(out, "HEIGHT")
+			t.Logf("Client requested %dx%d → FreeRDP window is %dx%d",
+				tc.reqWidth, tc.reqHeight, actualW, actualH)
+
+			if actualW != wantWidth || actualH != wantHeight {
+				t.Errorf("expected %dx%d (Xvfb fixed framebuffer), got %dx%d — "+
+					"has DIMM-28 (Xvnc replacement) landed? If yes, flip this assertion to actual==requested.",
+					wantWidth, wantHeight, actualW, actualH)
+			}
+		})
+	}
+}
+
+// parseShellVar extracts the integer value of KEY=value lines emitted by
+// `xdotool getwindowgeometry --shell`.
+func parseShellVar(out, key string) int {
+	for _, line := range strings.Split(out, "\n") {
+		if v, ok := strings.CutPrefix(strings.TrimSpace(line), key+"="); ok {
+			n, _ := strconv.Atoi(strings.TrimSpace(v))
+			return n
+		}
+	}
+	return 0
+}
+
 // --- VNC ---
 
 // TestVnc_ListensOn5900 -- with DEVCELL_GUI_ENABLED=true, x11vnc must bind port 5900.

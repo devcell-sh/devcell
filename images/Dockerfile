@@ -9,7 +9,7 @@ ARG NIX_CACHE_IMAGE=public.ecr.aws/docker/library/debian:trixie-slim
 # Stage: builder
 # Compile the cell CLI binary from repo source (CI context = repo root).
 ###############################################################################
-FROM public.ecr.aws/docker/library/golang:1.24-alpine AS builder
+FROM public.ecr.aws/docker/library/golang:1.25-alpine AS builder
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -60,7 +60,14 @@ RUN \
     chmod 755 /opt/devcell && \
     mkdir -p /opt/devcell/.local/bin && \
     chown -R ${USER_UID}:${USER_GID} /opt/devcell && \
-    echo "${USER_NAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+    echo "${USER_NAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
+    # Parity with pure-image sudoers (nixhome/packages/image.nix:288-295):
+    # without env_keep, Debian's default `env_reset` strips nix/SSL/locale
+    # vars across sudo, breaking `sudo nix profile add nixpkgs#foo` with
+    # "SSL peer certificate ... was not OK" against cache.nixos.org. Single-
+    # user cell with NOPASSWD:ALL → env_reset's privilege-escalation
+    # protection for these vars is moot; keeping them is a UX fix.
+    echo 'Defaults env_keep += "SSL_CERT_FILE NIX_SSL_CERT_FILE NIX_PATH NIX_CONFIG NIX_REMOTE NIX_USER_CONF_FILES LOCALE_ARCHIVE"' >> /etc/sudoers
 
 COPY --from=builder --chmod=755 /cell /opt/devcell/.local/bin/cell
 
@@ -85,6 +92,33 @@ ENV PATH="/opt/devcell/.local/bin:${PATH}"
 ENV HOME=/opt/devcell
 # USER env var is required by nix.sh and nix profile management to locate per-user profiles.
 ENV USER=${USER_NAME}
+
+# SSL + locale env. Parity with pure image (nixhome/packages/image.nix:790-792)
+# so docker exec sessions and `sudo env_keep` see the same values regardless
+# of image build path. SSL_CERT_FILE / NIX_SSL_CERT_FILE point at Debian's
+# apt-installed CA bundle (`ca-certificates` package, line ~33) — stable path
+# present from the core stage forward, works for nix, curl, and any TLS
+# client that respects SSL_CERT_FILE. LOCALE_ARCHIVE points at the
+# home-manager-installed glibc-locales archive — stable path materialized by
+# the per-stack home-manager switch later in the build.
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+ENV NIX_SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+ENV LOCALE_ARCHIVE=/opt/devcell/.nix-profile/lib/locale/locale-archive
+
+# nix-ld bridge for non-nix binaries (mise-downloaded node/go/terraform, pip
+# wheels, downloaded gpg keychains). The stable paths under $HOME are created
+# by home-manager via `home.file.".nix-ld-loader"` and `.nix-ld-shim` (see
+# nixhome/modules/base.nix). At runtime, the entrypoint creates the
+# `/lib/ld-linux-<arch>.so.<n>` symlink → .nix-ld-shim so precompiled
+# binaries find their interpreter; nix-ld then reads NIX_LD to find the
+# real glibc loader.
+#
+# NIX_LD_LIBRARY_PATH points at a merged .nix-ld-libs/ directory (symlinks
+# to every .so* from the profile closure, glibc excluded). Created by
+# home.activation.generateNixLdLibs at `home-manager switch` time.
+# Short enough (~30 chars) to bake into ENV without hitting ARG_MAX.
+ENV NIX_LD=/opt/devcell/.nix-ld-loader
+ENV NIX_LD_LIBRARY_PATH=/opt/devcell/.nix-ld-libs
 
 # Install nix.
 # Pin to a specific version to avoid SHA-256 hash mismatches when upstream
@@ -127,7 +161,7 @@ RUN mkdir -p /etc/devcell && \
     echo "${GIT_COMMIT}-$(date -u +%Y%m%dT%H%M%SZ)" > /etc/devcell/base-image-version
 
 # Entrypoint last — changes here don't bust the nix/home-manager cache above
-COPY --chmod=755 images/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY --chmod=755 nixhome/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 # Restore to devcell user — child stages (go, node, etc.) inherit this USER
 USER ${USER_UID}:${USER_GID}
@@ -155,6 +189,9 @@ RUN ARCH=$(uname -m) && \
       version_dir=$(ls -1d "${tool_dir}"*/ 2>/dev/null | head -1); \
       if [ -n "$version_dir" ]; then ln -sfT "$version_dir" "/opt/mise/$tool"; fi; \
     done && \
+    mkdir -p /opt/devcell/.local/share/mise && \
+    ln -sfn /opt/mise/installs /opt/devcell/.local/share/mise/installs && \
+    MISE_DATA_DIR=/opt/devcell/.local/share/mise mise reshim && \
     { nix-collect-garbage -d; nix-store --optimise; true; }
 
 ENV DEVCELL_PROFILE=devcell-go
@@ -177,6 +214,9 @@ RUN ARCH=$(uname -m) && \
       version_dir=$(ls -1d "${tool_dir}"*/ 2>/dev/null | head -1); \
       if [ -n "$version_dir" ]; then ln -sfT "$version_dir" "/opt/mise/$tool"; fi; \
     done && \
+    mkdir -p /opt/devcell/.local/share/mise && \
+    ln -sfn /opt/mise/installs /opt/devcell/.local/share/mise/installs && \
+    MISE_DATA_DIR=/opt/devcell/.local/share/mise mise reshim && \
     { nix-collect-garbage -d; nix-store --optimise; true; }
 
 ENV DEVCELL_PROFILE=devcell-node
@@ -232,6 +272,9 @@ RUN ARCH=$(uname -m) && \
       if [ -n "$version_dir" ]; then ln -sfT "$version_dir" "/opt/mise/$tool"; fi; \
     done && \
     test -x /opt/mise/node/bin/npm || { echo "ERROR: npm not found at /opt/mise/node/bin/npm"; ls -la /opt/mise/ 2>/dev/null; exit 1; } && \
+    mkdir -p /opt/devcell/.local/share/mise && \
+    ln -sfn /opt/mise/installs /opt/devcell/.local/share/mise/installs && \
+    MISE_DATA_DIR=/opt/devcell/.local/share/mise mise reshim && \
     { nix-collect-garbage -d; nix-store --optimise; true; }
 
 ENV DEVCELL_PROFILE=devcell-fullstack
@@ -279,6 +322,9 @@ RUN --mount=from=nix-cache,source=/nix/store,target=/tmp/nix-cache \
       if [ -n "$version_dir" ]; then ln -sfT "$version_dir" "/opt/mise/$tool"; fi; \
     done && \
     test -x /opt/mise/node/bin/npm || { echo "ERROR: npm not found at /opt/mise/node/bin/npm"; ls -la /opt/mise/ 2>/dev/null; exit 1; } && \
+    mkdir -p /opt/devcell/.local/share/mise && \
+    ln -sfn /opt/mise/installs /opt/devcell/.local/share/mise/installs && \
+    MISE_DATA_DIR=/opt/devcell/.local/share/mise mise reshim && \
     { nix-collect-garbage -d; nix-store --optimise; \
       rm -rf /nix/store/*-nixpkgs/nixpkgs 2>/dev/null; \
       true; }

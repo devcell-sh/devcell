@@ -26,6 +26,7 @@ type Server struct {
 	apiKey       string // empty = no auth
 	logPrompts   bool   // when true, handlers log full prompt + response bodies
 	systemPrompt string // when non-empty, passed as --append-system-prompt to claude
+	jobStore     *JobStore
 }
 
 // NewServer creates a Server. Use port=0 to let the OS pick a free port.
@@ -36,6 +37,7 @@ func NewServer(exec Executor, port int) *Server {
 		port:      port,
 		lookPath:  execLookPath,
 		anthropic: &RealAnthropicClient{},
+		jobStore:  NewJobStore(),
 	}
 }
 
@@ -86,7 +88,9 @@ func execLookPath(name string) (string, error) {
 func (s *Server) Start(ctx context.Context) (addr string, errCh chan error) {
 	mux := http.NewServeMux()
 	mux.Handle("/v1/chat/completions", AuthMiddleware(s.apiKey, NewChatHandler(s.exec, s.logPrompts, s.systemPrompt)))
-	mux.Handle("/v1/responses", AuthMiddleware(s.apiKey, NewResponsesHandler(s.exec, s.logPrompts, s.systemPrompt)))
+	mux.Handle("/v1/responses", AuthMiddleware(s.apiKey, NewResponsesHandler(s.exec, s.jobStore, s.logPrompts, s.systemPrompt)))
+	mux.Handle("GET /v1/responses/{id}", AuthMiddleware(s.apiKey, NewResponseGetHandler(s.jobStore)))
+	mux.Handle("POST /v1/responses/{id}/cancel", AuthMiddleware(s.apiKey, NewResponseCancelHandler(s.jobStore)))
 	mux.Handle("/v1/models", AuthMiddleware(s.apiKey, NewModelsHandler(s.lookPath, s.anthropic)))
 	mux.HandleFunc("/healthz", healthHandler)
 	mux.HandleFunc("/api/v1/health", healthHandler)
@@ -118,6 +122,23 @@ func (s *Server) Start(ctx context.Context) (addr string, errCh chan error) {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		srv.Shutdown(shutdownCtx)
+	}()
+
+	// Background-job TTL sweeper. Evicts completed/failed/cancelled jobs
+	// older than 1h every minute, so the in-memory store doesn't grow
+	// unbounded in long-lived serve processes. In-progress jobs are never
+	// evicted regardless of age.
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case now := <-ticker.C:
+				s.jobStore.Sweep(now, time.Hour)
+			}
+		}
 	}()
 
 	return ln.Addr().String(), errCh

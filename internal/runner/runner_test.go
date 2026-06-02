@@ -118,6 +118,66 @@ func TestArgv_ContainerName(t *testing.T) {
 	}
 }
 
+func TestArgv_HostnameDefault(t *testing.T) {
+	t.Setenv("DEVCELL_HOSTNAME", "")
+	argv := buildArgv(t)
+	host, ok := findFlag(argv, "--hostname")
+	if !ok {
+		t.Fatal("missing --hostname flag")
+	}
+	if host != "cell-myproject-3" {
+		t.Errorf("want default cell-myproject-3, got %q", host)
+	}
+}
+
+func TestArgv_HostnameTOMLOverride(t *testing.T) {
+	t.Setenv("DEVCELL_HOSTNAME", "")
+	argv := buildArgv(t, func(s *runner.RunSpec) {
+		s.CellCfg.Cell.Hostname = "from-toml"
+	})
+	host, ok := findFlag(argv, "--hostname")
+	if !ok {
+		t.Fatal("missing --hostname flag")
+	}
+	if host != "from-toml" {
+		t.Errorf("want from-toml, got %q", host)
+	}
+}
+
+func TestArgv_MacAddressAbsentByDefault(t *testing.T) {
+	argv := buildArgv(t)
+	if _, ok := findFlag(argv, "--mac-address"); ok {
+		t.Error("--mac-address should not appear when cell.mac_address is empty (let docker auto-assign)")
+	}
+}
+
+func TestArgv_MacAddressFromTOML(t *testing.T) {
+	argv := buildArgv(t, func(s *runner.RunSpec) {
+		s.CellCfg.Cell.MacAddress = "e2:2d:42:13:81:d2"
+	})
+	got, ok := findFlag(argv, "--mac-address")
+	if !ok {
+		t.Fatal("missing --mac-address flag")
+	}
+	if got != "e2:2d:42:13:81:d2" {
+		t.Errorf("want e2:2d:42:13:81:d2, got %q", got)
+	}
+}
+
+func TestArgv_HostnameEnvOverridesTOML(t *testing.T) {
+	t.Setenv("DEVCELL_HOSTNAME", "from-env")
+	argv := buildArgv(t, func(s *runner.RunSpec) {
+		s.CellCfg.Cell.Hostname = "from-toml"
+	})
+	host, ok := findFlag(argv, "--hostname")
+	if !ok {
+		t.Fatal("missing --hostname flag")
+	}
+	if host != "from-env" {
+		t.Errorf("env should win over toml, got %q", host)
+	}
+}
+
 // --- Mandatory env vars ---
 
 func TestArgv_MandatoryEnvVars(t *testing.T) {
@@ -294,8 +354,8 @@ func TestArgv_CfgPortsSinglePort(t *testing.T) {
 	argv := buildArgv(t, func(s *runner.RunSpec) {
 		s.CellCfg.Ports = cfg.PortsSection{Forward: []string{"3000"}}
 	})
-	if !hasConsecutive(argv, "-p", "3000:3000") {
-		t.Errorf("expected -p 3000:3000 for bare port '3000': %v", argv)
+	if !hasConsecutive(argv, "-p", "0.0.0.0:3000:3000") {
+		t.Errorf("expected -p 0.0.0.0:3000:3000 for bare port '3000': %v", argv)
 	}
 }
 
@@ -303,8 +363,8 @@ func TestArgv_CfgPortsMappedPort(t *testing.T) {
 	argv := buildArgv(t, func(s *runner.RunSpec) {
 		s.CellCfg.Ports = cfg.PortsSection{Forward: []string{"8080:3000"}}
 	})
-	if !hasConsecutive(argv, "-p", "8080:3000") {
-		t.Errorf("expected -p 8080:3000: %v", argv)
+	if !hasConsecutive(argv, "-p", "0.0.0.0:8080:3000") {
+		t.Errorf("expected -p 0.0.0.0:8080:3000: %v", argv)
 	}
 }
 
@@ -312,11 +372,11 @@ func TestArgv_CfgPortsMultiple(t *testing.T) {
 	argv := buildArgv(t, func(s *runner.RunSpec) {
 		s.CellCfg.Ports = cfg.PortsSection{Forward: []string{"3000", "8080:3000"}}
 	})
-	if !hasConsecutive(argv, "-p", "3000:3000") {
-		t.Errorf("expected -p 3000:3000: %v", argv)
+	if !hasConsecutive(argv, "-p", "0.0.0.0:3000:3000") {
+		t.Errorf("expected -p 0.0.0.0:3000:3000: %v", argv)
 	}
-	if !hasConsecutive(argv, "-p", "8080:3000") {
-		t.Errorf("expected -p 8080:3000: %v", argv)
+	if !hasConsecutive(argv, "-p", "0.0.0.0:8080:3000") {
+		t.Errorf("expected -p 0.0.0.0:8080:3000: %v", argv)
 	}
 }
 
@@ -338,8 +398,8 @@ func TestArgv_VNCPort(t *testing.T) {
 	argv := buildArgv(t, func(s *runner.RunSpec) {
 		s.CellCfg.Cell.GUI = boolPtr(true)
 	})
-	if !hasConsecutive(argv, "-p", "350:5900") {
-		t.Errorf("expected -p 350:5900 in argv: %v", argv)
+	if !hasConsecutive(argv, "-p", "0.0.0.0:350:5900") {
+		t.Errorf("expected -p 0.0.0.0:350:5900 in argv: %v", argv)
 	}
 }
 
@@ -357,6 +417,9 @@ func TestArgv_WorkdirAndImage(t *testing.T) {
 	if !hasConsecutive(argv, "--workdir", "/myproject-3") {
 		t.Errorf("expected --workdir /myproject-3: %v", argv)
 	}
+	// BuildArgv's default image is the Debian variant — callers using --pure
+	// (the default after the DIMM-202 flip) override Image explicitly on the
+	// RunSpec, so the default path tested here is the legacy --debian one.
 	if !hasArg(argv, runner.UserImageTag()) {
 		t.Error("missing devcell-local image name")
 	}
@@ -532,11 +595,17 @@ func min(a, b int) int {
 	return b
 }
 
-// --- UserImageTag stack-based (default) ---
+// --- UserImageTag stack-based (legacy bare tag, used by --debian) ---
+//
+// UserImageTag() is unchanged across the 2026-05-15 flip — it remains the
+// user's "current image" concept (bare devcell-user:<stack>). After DIMM-202
+// it's reached only via `cell <agent> --debian` (legacy Dockerfile path);
+// the new default reaches UserImageTagPure() via PickImageTag(false).
 
 func withCleanImageState(t *testing.T) {
 	t.Helper()
 	t.Setenv("DEVCELL_USER_IMAGE", "")
+	t.Setenv("DEVCELL_USER_IMAGE_PURE", "")
 	t.Setenv("DEVCELL_SESSION_NAME", "")
 	t.Setenv("TMUX_SESSION_NAME", "")
 	origStack := runner.Stack
@@ -676,20 +745,130 @@ func TestParseImageMetadata_InvalidJSON(t *testing.T) {
 	}
 }
 
-// --- StackImageTag ---
+// --- ImageMetadataFromInspect (label-based, 2026-05-16 flip) ---
+//
+// New source-of-truth for build date / commit / stack: OCI manifest labels +
+// the manifest's Created field, NOT /etc/devcell/metadata.json. Pinning
+// metadata.json static eliminates the per-build 3.9GB customization-layer
+// re-push that real-timestamp interpolation was causing.
 
-func TestStackImageTag_GoStack(t *testing.T) {
-	got := runner.StackImageTag("go")
-	// version.Version is v0.0.0 in tests → v0.0.0-go
-	if got != "public.ecr.aws/w1l3v2k8/devcell:v0.0.0-go" {
-		t.Errorf("want public.ecr.aws/w1l3v2k8/devcell:v0.0.0-go, got %q", got)
+func TestImageMetadataFromInspect_LabelsPopulated(t *testing.T) {
+	m := runner.ImageMetadataFromInspectExport(
+		"2026-05-16T21:33:48Z",
+		map[string]string{
+			"devcell.built-with":                  "nix2container",
+			"devcell.stack":                       "ultimate",
+			"org.opencontainers.image.created":    "2026-05-16T21:33:48Z",
+			"org.opencontainers.image.revision":   "abc123",
+		},
+		nil,
+	)
+	if m.Stack != "ultimate" {
+		t.Errorf("Stack = %q, want ultimate", m.Stack)
+	}
+	if m.GitCommit != "abc123" {
+		t.Errorf("GitCommit = %q, want abc123", m.GitCommit)
+	}
+	if m.BuildDate != "2026-05-16T21:33:48Z" {
+		t.Errorf("BuildDate = %q, want 2026-05-16T21:33:48Z", m.BuildDate)
+	}
+	if m.BaseImage != "nix2container" {
+		t.Errorf("BaseImage = %q, want nix2container", m.BaseImage)
 	}
 }
 
-func TestStackImageTag_UltimateStack(t *testing.T) {
-	got := runner.StackImageTag("ultimate")
-	if got != "public.ecr.aws/w1l3v2k8/devcell:v0.0.0-ultimate" {
-		t.Errorf("want public.ecr.aws/w1l3v2k8/devcell:v0.0.0-ultimate, got %q", got)
+// When the org.opencontainers.image.created label is missing (older images
+// from before the 2026-05-16 label addition), the OCI manifest's Created
+// field should be the fallback — every pure build sets it via the
+// nix2container `created` parameter.
+func TestImageMetadataFromInspect_NoLabelDateFallsBackToCreated(t *testing.T) {
+	m := runner.ImageMetadataFromInspectExport(
+		"2026-05-16T12:00:00Z",
+		map[string]string{"devcell.stack": "go"},
+		nil,
+	)
+	if m.BuildDate != "2026-05-16T12:00:00Z" {
+		t.Errorf("BuildDate = %q, want fallback to Created", m.BuildDate)
+	}
+}
+
+// Stack label missing → fall back to DEVCELL_PROFILE env var (the image's
+// own config Env). This is the path for very old images without devcell.stack.
+func TestImageMetadataFromInspect_StackFromEnvFallback(t *testing.T) {
+	m := runner.ImageMetadataFromInspectExport(
+		"2026-05-16T12:00:00Z",
+		nil,
+		[]string{"PATH=/usr/bin", "DEVCELL_PROFILE=devcell-python", "HOME=/root"},
+	)
+	if m.Stack != "python" {
+		t.Errorf("Stack = %q, want python (from DEVCELL_PROFILE env)", m.Stack)
+	}
+}
+
+// Verify ImageVersions formats output sensibly given the new metadata shape.
+// This is what the CLI prints in the "User image: ..." line on error or at
+// `cell status` / `cell run` boot. With both date and real commit:
+//
+//	cell vX.X.X-... built 2026-05-16T...Z
+func TestImageVersions_Format(t *testing.T) {
+	// Direct call to the formatter via exposed helper: we synthesize an
+	// ImageMetadata and pass it through the same shape ImageVersions uses.
+	// The format string ImageVersions emits is "<commit> built <date>"
+	// when both fields are real, " built <date>" when only date, etc.
+	cases := []struct {
+		name   string
+		m      runner.ImageMetadata
+		wantHas string // substring we expect in the formatted "user" output
+	}{
+		{"commit+date", runner.ImageMetadata{GitCommit: "abc123", BuildDate: "2026-05-16T21:33:48Z", BaseImage: "nix2container"}, "abc123 built 2026-05-16T21:33:48Z"},
+		{"date only",   runner.ImageMetadata{GitCommit: "unknown", BuildDate: "2026-05-16T21:33:48Z", BaseImage: "nix2container"}, "built 2026-05-16T21:33:48Z"},
+		{"epoch date",  runner.ImageMetadata{GitCommit: "abc123", BuildDate: "1970-01-01T00:00:00Z"}, "abc123"},
+		{"placeholders only", runner.ImageMetadata{GitCommit: "unknown", BuildDate: "1970-01-01T00:00:00Z"}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := runner.FormatImageVersionUserExport(tc.m)
+			if tc.wantHas == "" {
+				if got != "" {
+					t.Errorf("want empty for placeholder-only, got %q", got)
+				}
+				return
+			}
+			if got != tc.wantHas {
+				t.Errorf("got %q, want %q", got, tc.wantHas)
+			}
+		})
+	}
+}
+
+// --- StackImageTagImpure / StackImageTagPure ---
+//
+// Pre-flip there was a single bare StackImageTag(stack). After DIMM-202 both
+// variants are explicit so scaffold's base-image fallback picks the right one.
+// DIMM-213 renamed the impure variant from `-debian` to `-impure` and added
+// a deprecated `StackImageTagDebian` alias that forwards to StackImageTagImpure.
+
+func TestStackImageTagImpure_GoStack(t *testing.T) {
+	got := runner.StackImageTagImpure("go")
+	// version.Version is v0.0.0 in tests → v0.0.0-go-impure
+	if got != "public.ecr.aws/w1l3v2k8/devcell:v0.0.0-go-impure" {
+		t.Errorf("want public.ecr.aws/w1l3v2k8/devcell:v0.0.0-go-impure, got %q", got)
+	}
+}
+
+func TestStackImageTagImpure_UltimateStack(t *testing.T) {
+	got := runner.StackImageTagImpure("ultimate")
+	if got != "public.ecr.aws/w1l3v2k8/devcell:v0.0.0-ultimate-impure" {
+		t.Errorf("want public.ecr.aws/w1l3v2k8/devcell:v0.0.0-ultimate-impure, got %q", got)
+	}
+}
+
+// Deprecated alias must forward to the canonical Impure tag.
+func TestStackImageTagDebian_AliasForwardsToImpure(t *testing.T) {
+	got := runner.StackImageTagDebian("ultimate")
+	want := runner.StackImageTagImpure("ultimate")
+	if got != want {
+		t.Errorf("Debian alias returned %q, want %q (same as Impure)", got, want)
 	}
 }
 

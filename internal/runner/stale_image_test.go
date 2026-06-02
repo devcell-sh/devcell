@@ -8,7 +8,7 @@ import (
 	"github.com/DimmKirr/devcell/internal/runner"
 )
 
-// DIMM-124: After a build failure, the next cell launch should detect that
+// After a build failure, the next cell launch should detect that
 // the build context is newer than the stale image and trigger a rebuild.
 
 func TestDockerfileChanged_MissingImage_ReturnsTrue(t *testing.T) {

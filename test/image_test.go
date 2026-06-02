@@ -297,6 +297,20 @@ func TestCell_Shell(t *testing.T) {
 		t.Skip("skipping in short mode")
 	}
 
+	// Regenerate Swagger docs/ package. cmd/serve.go imports
+	// github.com/DimmKirr/devcell/docs (swag-generated, .gitignored), so go
+	// build fails on a fresh checkout. task cell:build wires this via
+	// deps: [swagger:generate]; this test bypasses Task and must self-bootstrap.
+	gen := osexec.Command("go", "run", "github.com/swaggo/swag/cmd/swag@latest",
+		"init", "-g", "cmd/serve.go", "-o", "docs",
+		"--parseDependency", "--parseInternal")
+	gen.Dir = filepath.Join("..")
+	gen.Stdout = os.Stdout
+	gen.Stderr = os.Stderr
+	if err := gen.Run(); err != nil {
+		t.Fatalf("swag init: %v", err)
+	}
+
 	// Build cell binary.
 	cellBin := filepath.Join(t.TempDir(), "cell")
 	build := osexec.Command("go", "build", "-o", cellBin, "./cmd")
@@ -402,6 +416,93 @@ func TestCell_Shell(t *testing.T) {
 			t.Logf("PASS: command output 'done' found")
 		}
 	})
+
+	// hostname_from_toml verifies that `[cell] hostname = "..."` in .devcell.toml
+	// propagates to the container so that both $HOSTNAME (set by bash from the
+	// hostname syscall at shell startup) and `hostname` (the binary, reads
+	// /etc/hostname / uname()) inside the cell match the configured value.
+	t.Run("hostname_from_toml", func(t *testing.T) {
+		hostProjectDir := filepath.Join(testRunDir(), "cell-hostname-project")
+		if err := os.MkdirAll(hostProjectDir, 0o755); err != nil {
+			t.Fatalf("mkdir hostProjectDir: %v", err)
+		}
+		if err := scaffold.Scaffold(hostProjectDir, "", repoNixhome, false, "ultimate"); err != nil {
+			t.Fatalf("scaffold hostProjectDir: %v", err)
+		}
+
+		// Append the hostname setting under [cell]. The scaffolded TOML already
+		// contains a [cell] section, so add the key inside it.
+		tomlPath := filepath.Join(hostProjectDir, ".devcell.toml")
+		raw, err := os.ReadFile(tomlPath)
+		if err != nil {
+			t.Fatalf("read .devcell.toml: %v", err)
+		}
+		const wantHostname = "test-cell-host"
+		updated := strings.Replace(string(raw),
+			"[cell]\n",
+			"[cell]\nhostname = \""+wantHostname+"\"\n", 1)
+		if updated == string(raw) {
+			t.Fatalf("scaffolded .devcell.toml missing [cell] header; cannot inject hostname:\n%s", raw)
+		}
+		if err := os.WriteFile(tomlPath, []byte(updated), 0o644); err != nil {
+			t.Fatalf("write .devcell.toml: %v", err)
+		}
+
+		home := cellShellHome(t)
+		// Pin the pure-image tag so cell shell uses the local image instead of
+		// trying to pull <registry>:v<ver>-<stack>-pure. runCellShell only sets
+		// DEVCELL_USER_IMAGE, but cell shell defaults to pure mode and reads
+		// DEVCELL_USER_IMAGE_PURE.
+		t.Setenv("DEVCELL_USER_IMAGE_PURE", userImage)
+
+		// Use distinct markers that won't appear in the literal echoed
+		// command. The startup logs may include "Entrypoint ready — exec
+		// bash -c '<script>'" which would let extractMarker latch on to
+		// HOSTNAME_ENV= inside the script. Use unique tags and pick the
+		// LAST match in the stream.
+		// $HOSTNAME comes from bash, set from the hostname() syscall at
+		// shell startup. /etc/hostname is what Docker writes from --hostname
+		// (the GNU `hostname` binary is not in the nix profile, so we read
+		// the file directly). Both reflect the same kernel UTS namespace.
+		out := runCellShell(t, cellBin, hostProjectDir, configDir, home, userImage,
+			"--debug", "shell", "--",
+			"bash", "-c", `echo "_ENV_HN_TAG_:$HOSTNAME:"; echo "_CMD_HN_TAG_:$(cat /etc/hostname):"`)
+
+		envHost := extractTagged(out, "_ENV_HN_TAG_:", ":")
+		cmdHost := extractTagged(out, "_CMD_HN_TAG_:", ":")
+		if envHost == "" || cmdHost == "" {
+			t.Fatalf("could not parse HOSTNAME_ENV / HOSTNAME_CMD from output:\n%s", out)
+		}
+		if envHost != wantHostname {
+			t.Errorf("$HOSTNAME = %q; want %q", envHost, wantHostname)
+		}
+		if cmdHost != wantHostname {
+			t.Errorf("hostname = %q; want %q", cmdHost, wantHostname)
+		}
+		if envHost != cmdHost {
+			t.Errorf("$HOSTNAME (%q) and hostname (%q) disagree", envHost, cmdHost)
+		}
+	})
+}
+
+// extractTagged returns the substring between `start` and `end` from the LAST
+// line in s that contains the tag. PTY output may echo the original command
+// before the real output; the runtime line is always last.
+func extractTagged(s, start, end string) string {
+	var got string
+	for _, line := range strings.Split(s, "\n") {
+		i := strings.Index(line, start)
+		if i < 0 {
+			continue
+		}
+		rest := line[i+len(start):]
+		j := strings.Index(rest, end)
+		if j < 0 {
+			continue
+		}
+		got = rest[:j]
+	}
+	return strings.TrimSpace(got)
 }
 
 // runCellShell starts a cell command in a PTY (required for docker -it) with a

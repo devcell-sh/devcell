@@ -277,18 +277,22 @@ func TestImage_Default(t *testing.T) {
 
 // --- ResolveAvailablePorts ---
 
+// Use CELL_ID=42 → port 4250/4289 (≥1024, no privileged-port hoist).
+// CELL_ID=3 was privileged (350/389) and the new hoist breaks the
+// "free port unchanged" assertion — that case is covered separately.
+
 func TestResolveAvailablePorts_FreePortUnchanged(t *testing.T) {
-	c := config.Load("/cwd", env("CELL_ID", "3"))
+	c := config.Load("/cwd", env("CELL_ID", "42"))
 	orig := c.VNCPort
 	c.ResolveAvailablePorts()
-	// Port 350 is almost certainly free in test — should stay the same
+	// Port 4250 is almost certainly free in test — should stay the same
 	if c.VNCPort != orig {
 		t.Errorf("free port should not change: want %s, got %s", orig, c.VNCPort)
 	}
 }
 
 func TestResolveAvailablePorts_OccupiedPortBumps(t *testing.T) {
-	c := config.Load("/cwd", env("CELL_ID", "3"))
+	c := config.Load("/cwd", env("CELL_ID", "42"))
 	// Occupy the preferred VNC port
 	ln, err := net.Listen("tcp", ":"+c.VNCPort)
 	if err != nil {
@@ -297,12 +301,32 @@ func TestResolveAvailablePorts_OccupiedPortBumps(t *testing.T) {
 	defer ln.Close()
 
 	c.ResolveAvailablePorts()
-	if c.VNCPort == "350" {
-		t.Error("VNCPort should have been bumped away from occupied 350")
+	if c.VNCPort == "4250" {
+		t.Error("VNCPort should have been bumped away from occupied 4250")
 	}
 	port, err := strconv.Atoi(c.VNCPort)
-	if err != nil || port <= 350 {
-		t.Errorf("VNCPort should be > 350, got %q", c.VNCPort)
+	if err != nil || port <= 4250 {
+		t.Errorf("VNCPort should be > 4250, got %q", c.VNCPort)
+	}
+}
+
+// Single-digit TMUX panes (CELL_ID=3, =4, =9) compute ports in the
+// privileged range (350, 489, etc.). resolveAvailablePort now hoists
+// those to the user range BEFORE scanning so docker doesn't trip on
+// "port already allocated" from a sibling cell using the same pane id.
+// Regression for the bug user hit 2026-05-15 with cell-devcell-4-run +
+// cell-upe-ui-4-run both targeting port 489.
+func TestResolveAvailablePorts_PrivilegedHoistedAboveWall(t *testing.T) {
+	c := config.Load("/cwd", env("CELL_ID", "4"))
+	// Pre-hoist computation: VNC=450, RDP=489. Both privileged.
+	c.ResolveAvailablePorts()
+	vnc, _ := strconv.Atoi(c.VNCPort)
+	rdp, _ := strconv.Atoi(c.RDPPort)
+	if vnc < 1024 {
+		t.Errorf("VNCPort should be ≥1024 after hoist, got %d", vnc)
+	}
+	if rdp < 1024 {
+		t.Errorf("RDPPort should be ≥1024 after hoist, got %d", rdp)
 	}
 }
 

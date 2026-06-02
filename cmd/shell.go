@@ -23,7 +23,15 @@ Examples:
 				rest := args[i+1:]
 				cellFlags := args[:i]
 				if len(rest) > 0 {
-					return runAgent(rest[0], nil, append(cellFlags, rest[1:]...), nil)
+					// Copy into a fresh slice. `cellFlags` and `rest` share the
+					// args backing array; appending to cellFlags in place would
+					// overwrite rest[0] (the binary) with rest[1] before docker
+					// run sees it.
+					binary := rest[0]
+					userArgs := make([]string, 0, len(cellFlags)+len(rest)-1)
+					userArgs = append(userArgs, cellFlags...)
+					userArgs = append(userArgs, rest[1:]...)
+					return runAgent(binary, nil, userArgs, nil)
 				}
 				return runAgent("zsh", nil, cellFlags, nil)
 			}

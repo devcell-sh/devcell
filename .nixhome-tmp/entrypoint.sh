@@ -26,16 +26,23 @@ fi
 
 log "Entrypoint start (user=$HOST_USER app=${APP_NAME:-})"
 
-# Read build metadata — prefer structured metadata.json, fall back to legacy files
+# Read build metadata. /etc/devcell/metadata.json holds STATIC info (stack,
+# package count) that's stable across rebuilds. Per-build provenance (date,
+# git rev) comes from the runner-injected DEVCELL_BUILD_DATE / DEVCELL_BUILD_REV
+# env vars — sourced from the OCI manifest's labels at `cell ...` launch time.
+# Pre-2026-05-16 images don't set those env vars; we fall back to the file
+# values so older containers don't lose info.
 if [ -f /etc/devcell/metadata.json ] && command -v jq &>/dev/null; then
     _meta_base=$(jq -r '.base_image // "unknown"' /etc/devcell/metadata.json 2>/dev/null)
-    _meta_commit=$(jq -r '.git_commit // "unknown"' /etc/devcell/metadata.json 2>/dev/null)
-    _meta_date=$(jq -r '.build_date // ""' /etc/devcell/metadata.json 2>/dev/null)
     _meta_stack=$(jq -r '.stack // ""' /etc/devcell/metadata.json 2>/dev/null)
     _meta_modules=$(jq -r '.modules // [] | join(",")' /etc/devcell/metadata.json 2>/dev/null)
     _meta_pkgs=$(jq -r '.packages // 0' /etc/devcell/metadata.json 2>/dev/null)
+    # Per-build provenance: prefer runner-injected env (real values from
+    # OCI labels at launch time), fall back to placeholder JSON fields.
+    _meta_commit="${DEVCELL_BUILD_REV:-$(jq -r '.git_commit // "unknown"' /etc/devcell/metadata.json 2>/dev/null)}"
+    _meta_date="${DEVCELL_BUILD_DATE:-$(jq -r '.build_date // ""' /etc/devcell/metadata.json 2>/dev/null)}"
     log "Base image: $_meta_base"
-    log "User image: $_meta_commit $_meta_date"
+    log "User image: $_meta_commit${_meta_date:+ built $_meta_date}${DEVCELL_IMAGE:+ (tag: $DEVCELL_IMAGE)}"
     log "Stack: $_meta_stack | Modules: ${_meta_modules:-none} | Nix packages: $_meta_pkgs"
 else
     log "Base image: $(cat /etc/devcell/base-image-version 2>/dev/null || echo 'unknown')"
@@ -77,7 +84,7 @@ chown "$HOST_USER" "$GNUPGHOME"
 # ── Clean up stale nix-store symlinks from persistent $HOME ──────────────────
 # $HOME is a persistent bind mount. Home-manager symlinks from previous image
 # builds dangle after nix GC removes old store paths. Remove them so fragments
-# can write fresh configs. See DIMM-24.
+# can write fresh configs.
 if [ -d "$HOME" ]; then
     find "$HOME" -maxdepth 4 -type l -not -path "*/tmp/*" 2>/dev/null | while IFS= read -r _link; do
         _target=$(readlink "$_link" 2>/dev/null)

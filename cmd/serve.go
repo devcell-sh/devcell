@@ -46,10 +46,10 @@ import (
 // @description
 // @description ## Limitations
 // @description
-// @description - **Streaming is not supported.** Requests with `"stream": true` to `/v1/responses` return 400; `/v1/chat/completions` returns the full response synchronously regardless.
+// @description - **Streaming** (`"stream": true`) is supported for the claude agent on both `/v1/chat/completions` and `/v1/responses`. Opencode has no streaming surface and falls back to buffered.
+// @description - **Background mode** (`"background": true`) is supported on `/v1/responses`: returns 202 with an id; poll `GET /v1/responses/{id}` until terminal, or cancel with `POST /v1/responses/{id}/cancel`. Jobs are in-memory and do not survive a serve restart. Combining `stream: true` with `background: true` returns 400.
 // @description - **No tool calling.** The `tools` field is accepted for compatibility but never invokes a tool — the underlying CLI agents have their own internal tool loop.
-// @description - **Stateless.** `previous_response_id` is accepted and ignored; clients must re-send full conversation history each request.
-// @description - **Token usage is stubbed at zero** in responses.
+// @description - **Stateless across requests.** `previous_response_id` is accepted and ignored; clients must re-send full conversation history each request.
 // @description
 // @description ## Reasoning effort
 // @description
@@ -121,6 +121,14 @@ response.completed for responses. Heartbeat ":keepalive" comments are
 sent every 15s while idle so long-running agentic turns survive proxy
 idle timeouts. Opencode has no streaming surface and falls back to
 buffered. previous_response_id and tools are accepted but ignored.
+
+Background (async) mode is supported on /v1/responses: set
+"background": true to get back 202 + a stub response with an id and
+status="in_progress". Poll GET /v1/responses/{id} until status is
+terminal (completed | failed | cancelled). Cancel an in-progress job
+with POST /v1/responses/{id}/cancel. Jobs live in process memory only —
+they do NOT survive a serve restart. Terminal jobs are evicted after
+1h. Combining stream=true with background=true returns 400.
 
 The claude binary is invoked with --dangerously-skip-permissions (same
 default cell claude uses) — without it any tool call would block on the

@@ -4,6 +4,7 @@ package container_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -122,78 +123,63 @@ func removeVolume(name string) {
 
 // --- Environment ---
 
-// TestEnv_NixLdLibraryPath -- .nix-ld-library-path must include GUI libs from the
-// full profile closure, not just the base packages.
+// TestEnv_NixLdLibs -- .nix-ld-libs/ directory must contain symlinks to GUI
+// shared libraries from the full profile closure.
 // Regression: generateNixLdPath activation ran after writeBoundary but before
 // linkGeneration, scanning the old/empty profile generation instead of the current one.
-func TestEnv_NixLdLibraryPath(t *testing.T) {
+func TestEnv_NixLdLibs(t *testing.T) {
 	c := startEnvContainer(t)
 
-	// The file must exist and be non-empty.
-	out, code := exec(t, c, []string{"cat", "/opt/devcell/.nix-ld-library-path"})
+	// The directory must exist and contain .so files.
+	out, code := exec(t, c, []string{"ls", "/opt/devcell/.nix-ld-libs/"})
 	if code != 0 || out == "" {
-		t.Fatalf("FAIL: /opt/devcell/.nix-ld-library-path missing or empty (exit %d)", code)
+		t.Fatalf("FAIL: /opt/devcell/.nix-ld-libs/ missing or empty (exit %d)", code)
 	}
-	entries := strings.Split(out, ":")
-	t.Logf("INFO: .nix-ld-library-path has %d entries", len(entries))
+	libs := strings.Fields(out)
+	t.Logf("INFO: .nix-ld-libs has %d symlinks", len(libs))
 
-	// Critical GUI libraries that Electron/Chromium needs.
-	// These come from the desktop module's runtimeLibs and home.packages.
-	// If generateNixLdPath scans the wrong generation, none of these appear.
-	requiredSubstrings := []string{
-		"gtk+3",        // GTK 3
-		"cairo-",       // 2D rendering
-		"pango-",       // text layout
-		"nss-",         // network security
-		"nspr-",        // Netscape Portable Runtime
-		"alsa-lib-",    // audio
-		"dbus-",        // D-Bus IPC
-		"libxkbcommon", // keyboard handling
-		"mesa",         // OpenGL/Mesa
+	// Critical shared libraries that Electron/Chromium/non-nix binaries need.
+	requiredLibs := []string{
+		"libgtk-3.so",    // GTK 3
+		"libcairo.so",    // 2D rendering
+		"libpango",       // text layout (prefix — libpango-1.0.so etc.)
+		"libnss3.so",     // network security
+		"libnspr4.so",    // Netscape Portable Runtime
+		"libasound.so",   // audio
+		"libdbus-1.so",   // D-Bus IPC
+		"libxkbcommon.so", // keyboard handling
 	}
 
-	for _, sub := range requiredSubstrings {
+	for _, req := range requiredLibs {
 		found := false
-		for _, e := range entries {
-			if strings.Contains(e, sub) {
+		for _, lib := range libs {
+			if strings.Contains(lib, req) {
 				found = true
 				break
 			}
 		}
 		if !found {
-			t.Errorf("FAIL: .nix-ld-library-path missing %q — activation script likely scanned stale profile", sub)
+			t.Errorf("FAIL: .nix-ld-libs/ missing %q — activation script likely scanned stale profile", req)
 		} else {
-			t.Logf("PASS: found %q in .nix-ld-library-path", sub)
+			t.Logf("PASS: found %q in .nix-ld-libs/", req)
 		}
 	}
 }
 
-// TestEnv_LdLibraryPathSession -- session user's LD_LIBRARY_PATH must include
-// GUI libraries loaded from .nix-ld-library-path.
-func TestEnv_LdLibraryPathSession(t *testing.T) {
+// TestEnv_NixLdLibraryPathSession -- session user's NIX_LD_LIBRARY_PATH must
+// point at the merged .nix-ld-libs/ directory.
+func TestEnv_NixLdLibraryPathSession(t *testing.T) {
 	c := startEnvContainer(t)
 
-	out, code := asUser(t, c, "echo $LD_LIBRARY_PATH")
+	out, code := asUser(t, c, "echo $NIX_LD_LIBRARY_PATH")
 	if code != 0 || out == "" {
-		t.Fatalf("FAIL: LD_LIBRARY_PATH not set in user session (exit %d)", code)
+		t.Fatalf("FAIL: NIX_LD_LIBRARY_PATH not set in user session (exit %d)", code)
 	}
-	entries := strings.Split(out, ":")
-	t.Logf("INFO: LD_LIBRARY_PATH has %d entries", len(entries))
 
-	// Spot-check a few GUI libs that must be resolvable.
-	for _, sub := range []string{"gtk+3", "cairo-", "nss-"} {
-		found := false
-		for _, e := range entries {
-			if strings.Contains(e, sub) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("FAIL: LD_LIBRARY_PATH missing %q — GUI libs not exported to session", sub)
-		} else {
-			t.Logf("PASS: found %q in LD_LIBRARY_PATH", sub)
-		}
+	if !strings.Contains(out, "/opt/devcell/.nix-ld-libs") {
+		t.Errorf("FAIL: NIX_LD_LIBRARY_PATH=%q does not contain /opt/devcell/.nix-ld-libs", out)
+	} else {
+		t.Logf("PASS: NIX_LD_LIBRARY_PATH contains .nix-ld-libs")
 	}
 }
 
@@ -304,6 +290,9 @@ func TestEnv_WritePaths(t *testing.T) {
 }
 
 // TestEnv_BasePermissions -- /opt/devcell directories must be owned by devcell (uid 1000).
+// /opt/npm-tools and /opt/python-tools were removed when patchright-mcp (DIMM-94)
+// and codex (DIMM-96) moved to nix; neither variant creates them anymore, so they're
+// no longer part of the contract.
 func TestEnv_BasePermissions(t *testing.T) {
 	c := startEnvContainer(t)
 
@@ -314,8 +303,6 @@ func TestEnv_BasePermissions(t *testing.T) {
 		"/opt/devcell/.config/devcell",
 		"/opt/devcell/.nix-profile",
 		"/opt/mise",
-		"/opt/npm-tools",
-		"/opt/python-tools",
 	}
 
 	for _, dir := range dirs {
@@ -332,32 +319,38 @@ func TestEnv_BasePermissions(t *testing.T) {
 	}
 }
 
-// TestEnv_ImageVersionStamps -- /etc/devcell/base-image-version and
-// /etc/devcell/user-image-version must exist and contain a commit-date stamp.
+// TestEnv_ImageVersionStamps -- build metadata must be discoverable from
+// /etc/devcell/metadata.json (the canonical source per DIMM-84). Legacy
+// /etc/devcell/{base,user}-image-version files are no longer the contract:
+// base-image-version is impure-only (written by images/Dockerfile but absent
+// on pure images), and user-image-version was never written by any build path
+// (entrypoint.sh:49 reads it with `|| echo unknown` fallback). metadata.json
+// is staged by both variants (nixhome/packages/image.nix:258 for pure;
+// internal/scaffold writes it for impure user builds).
 func TestEnv_ImageVersionStamps(t *testing.T) {
 	c := startEnvContainer(t)
 
-	for _, tc := range []struct {
-		name string
-		path string
-	}{
-		{"base-image-version", "/etc/devcell/base-image-version"},
-		{"user-image-version", "/etc/devcell/user-image-version"},
-	} {
-		out, code := exec(t, c, []string{"cat", tc.path})
-		if code != 0 {
-			t.Errorf("FAIL %s: file not found at %s", tc.name, tc.path)
-			continue
-		}
-		out = strings.TrimSpace(out)
-		if out == "" {
-			t.Errorf("FAIL %s: file is empty", tc.name)
-		} else if !strings.Contains(out, "-") {
-			t.Errorf("FAIL %s: expected <sha>-<date> format, got %q", tc.name, out)
-		} else {
-			t.Logf("PASS %s: %s", tc.name, out)
-		}
+	out, code := exec(t, c, []string{"cat", "/etc/devcell/metadata.json"})
+	if code != 0 {
+		t.Fatalf("FAIL: /etc/devcell/metadata.json not found (exit %d) — canonical build metadata file missing", code)
 	}
+
+	// Smallest sufficient shape check: it parses as JSON and has at least
+	// build_date (the universally-required field). Other fields like
+	// git_commit, stack, modules, packages are variant-specific.
+	var meta struct {
+		BuildDate string `json:"build_date"`
+		GitCommit string `json:"git_commit"`
+		Stack     string `json:"stack"`
+	}
+	if err := json.Unmarshal([]byte(out), &meta); err != nil {
+		t.Fatalf("FAIL: /etc/devcell/metadata.json is not valid JSON: %v\nraw: %s", err, out)
+	}
+	if meta.BuildDate == "" {
+		t.Fatalf("FAIL: /etc/devcell/metadata.json missing required `build_date` field. raw: %s", out)
+	}
+	t.Logf("PASS metadata.json: build_date=%q git_commit=%q stack=%q",
+		meta.BuildDate, meta.GitCommit, meta.Stack)
 }
 
 // TestEnv_StartupTime -- container must reach ready state within budget.

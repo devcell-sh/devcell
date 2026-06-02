@@ -38,6 +38,7 @@ in {
     drawio-headless  # Draw.io headless CLI for .drawio → PNG/SVG/PDF export (use: drawio)
     inkscape         # vector graphics editor (use: inkscape)
     inkscape-mcp     # Inkscape MCP server for Claude
+    potrace          # bitmap → SVG tracer; ships mkbitmap preprocessor (use: potrace, mkbitmap)
   ];
 
   devcell.managedMcp.servers."inkscape-mcp" = {
@@ -45,6 +46,12 @@ in {
     args = [];
     env = {
       INKS_INKSCAPE_BIN = "${pkgs.inkscape}/bin/inkscape";
+      # Sandbox root = MCP server's cwd at spawn time = project root.
+      # Resolves to the absolute project path via Path("./").resolve(), giving
+      # the agent read/write access to any SVG anywhere in the project tree
+      # while still blocking traversal outside it (and blocking the upstream
+      # default "inkspace" which would litter cwd with a scratch directory).
+      INKS_WORKSPACE = "./";
     };
   };
 }

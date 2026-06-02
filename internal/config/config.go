@@ -133,10 +133,24 @@ func (c *Config) ResolveAvailablePorts() {
 
 // resolveAvailablePort returns preferred if it's free, otherwise scans
 // upward (up to 100 attempts) for the next available port.
+//
+// Privileged-range fix (2026-05-15): single-digit TMUX panes produce ports
+// like 489/450 (pane "4" + "89"/"50"), which are below 1024 — the kernel
+// only lets root bind there. `net.Listen` from a user-mode `cell` fails
+// with EACCES, and `isPortAvailable` can't distinguish that from EADDRINUSE
+// → every candidate looks "unavailable" → fallback to the conflicting port.
+// Bump <1024 to ≥1024 BEFORE the scan so dockerd's bind actually succeeds
+// (dockerd is root but the host already has the port allocated to another
+// container, which is the real collision we need to detect).
 func resolveAvailablePort(preferred string) string {
 	port, err := strconv.Atoi(preferred)
 	if err != nil {
 		return preferred
+	}
+	// Hoist privileged ports into the user range. +10000 keeps the
+	// last-3-digits-by-pane intuition while moving above the wall.
+	if port < 1024 {
+		port += 10000
 	}
 	for i := 0; i < 100; i++ {
 		candidate := port + i
@@ -147,7 +161,7 @@ func resolveAvailablePort(preferred string) string {
 			return strconv.Itoa(candidate)
 		}
 	}
-	return preferred
+	return strconv.Itoa(port)
 }
 
 // clampPort ensures a port string represents a valid TCP port (1024–65535).

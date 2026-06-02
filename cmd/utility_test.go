@@ -73,11 +73,13 @@ func TestVNCPort_DifferentPanesDifferentPorts(t *testing.T) {
 func extractPort(argv []string) string {
 	for i, a := range argv {
 		if a == "-p" && i+1 < len(argv) {
-			p := argv[i+1]
-			// "350:5900" → "350"
-			colon := strings.Index(p, ":")
-			if colon > 0 {
-				return p[:colon]
+			// "IP:HOST:CONTAINER" → HOST; "HOST:CONTAINER" → HOST.
+			parts := strings.Split(argv[i+1], ":")
+			switch len(parts) {
+			case 3:
+				return parts[1]
+			case 2:
+				return parts[0]
 			}
 		}
 	}

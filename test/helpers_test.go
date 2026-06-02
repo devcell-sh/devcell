@@ -91,29 +91,128 @@ func buildLocalImage(target, tagPrefix string) (string, error) {
 	return tag, nil
 }
 
-// image returns the test image tag.
-// Priority:
-//  1. DEVCELL_TEST_IMAGE env var (CI or explicit override)
-//  2. Build from testdata Dockerfile (home-manager switch on top of ultimate-local,
-//     uses current nixhome/ so local changes are tested)
-//  3. Fallback: build local-ultimate from scratch (slow, no nixhome iteration)
+// Local tag conventions (DIMM-219):
+//   - `task image:impure:build:ultimate` → ghcr.io/dimmkirr/devcell:ultimate-local
+//   - `task image:pure:build:ultimate`   → devcell-user:ultimate-pure
+const (
+	localImpureUltimateTag = "ghcr.io/dimmkirr/devcell:ultimate-local"
+	localPureUltimateTag   = "devcell-user:ultimate-pure"
+)
+
+// imageTagForVariant resolves the test image tag for a given variant
+// without touching docker — pure function so the priority order is
+// table-testable (DIMM-219).
+//
+// Returns (tag, skipReason). Caller semantics:
+//   - tag != "" → use it directly.
+//   - tag == "" && skipReason == "" → caller falls back to its variant-specific
+//     default (e.g. scratch bake for impure).
+//   - tag == "" && skipReason != "" → caller should t.Skip(skipReason) or panic.
+func imageTagForVariant(variant, pureEnv, impureEnv string, exists func(string) bool) (tag, skipReason string) {
+	switch variant {
+	case "pure":
+		if pureEnv != "" {
+			return pureEnv, ""
+		}
+		if exists(localPureUltimateTag) {
+			return localPureUltimateTag, ""
+		}
+		return "", "pure variant requested but neither DEVCELL_TEST_PURE_IMAGE nor local `" + localPureUltimateTag + "` is available; run `task image:pure:build:ultimate` to enable"
+	case "impure", "":
+		if impureEnv != "" {
+			return impureEnv, ""
+		}
+		if exists(localImpureUltimateTag) {
+			return localImpureUltimateTag, ""
+		}
+		return "", "" // caller falls back to scratch bake
+	default:
+		return "", "unknown DEVCELL_TEST_VARIANT: " + variant
+	}
+}
+
+// image returns the test image tag for the default variant (impure unless
+// DEVCELL_TEST_VARIANT=pure). Priority within a variant:
+//  1. Variant-specific env override (DEVCELL_TEST_PURE_IMAGE for pure,
+//     DEVCELL_TEST_IMAGE for impure)
+//  2. Locally-loaded variant tag (devcell-user:ultimate-pure or ultimate-local)
+//  3. Impure only: build from testdata Dockerfile on top of ultimate-local;
+//     or, last resort, scratch-bake `local-ultimate` (~10 min)
+//  4. Pure only: panic with a setup hint — no automatic bake for pure
+//     because nix2container builds are not safe to run unattended from go test
 func image() string {
-	if img := os.Getenv("DEVCELL_TEST_IMAGE"); img != "" {
-		return img
+	variant := os.Getenv("DEVCELL_TEST_VARIANT")
+	tag, skip := imageTagForVariant(
+		variant,
+		os.Getenv("DEVCELL_TEST_PURE_IMAGE"),
+		os.Getenv("DEVCELL_TEST_IMAGE"),
+		imageExists,
+	)
+	if tag != "" {
+		// For impure local tag, route through the testdata Dockerfile path so
+		// nixhome/ changes are picked up on every test run (~53s). Env overrides
+		// and pure tags are used as-is.
+		if tag == localImpureUltimateTag && os.Getenv("DEVCELL_TEST_IMAGE") == "" {
+			return testdataImage()
+		}
+		return tag
 	}
-	// Build from testdata Dockerfile if ultimate-local base exists.
-	// This re-applies home-manager switch with current nixhome/ (~53s),
-	// so config changes are tested on every run.
-	const ultimateLocal = "ghcr.io/dimmkirr/devcell:ultimate-local"
-	if imageExists(ultimateLocal) {
-		return testdataImage()
+	if skip != "" {
+		// `image()` can't t.Skip — it has no *testing.T. Panic with a clear
+		// setup hint. Tests that need a graceful skip should call pureImage(t)
+		// or impureImage(t) directly.
+		panic("image: " + skip)
 	}
-	// Fallback: build from scratch (slow)
+	// Empty tag + no skip = impure scratch-bake fallback.
 	ultimateOnce.Do(func() {
 		ultimateTag, ultimateErr = buildLocalImage("local-ultimate", "devcell-test")
 	})
 	if ultimateErr != nil {
 		panic(fmt.Sprintf("image: %v", ultimateErr))
+	}
+	return ultimateTag
+}
+
+// pureImage returns the pure (nix2container) variant tag for tests asserting
+// pure-image-specific behavior. Skips the test if no pure image is available
+// (env override or local tag from `task image:pure:build:ultimate`).
+func pureImage(t *testing.T) string {
+	t.Helper()
+	tag, skip := imageTagForVariant(
+		"pure",
+		os.Getenv("DEVCELL_TEST_PURE_IMAGE"),
+		"",
+		imageExists,
+	)
+	if tag == "" {
+		t.Skip(skip)
+	}
+	return tag
+}
+
+// impureImage returns the impure (Debian-based) variant tag explicitly,
+// bypassing DEVCELL_TEST_VARIANT. Useful for tests that assert
+// impure-specific behavior (e.g. /etc/devcell/base-image-version).
+func impureImage(t *testing.T) string {
+	t.Helper()
+	tag, _ := imageTagForVariant(
+		"impure",
+		"",
+		os.Getenv("DEVCELL_TEST_IMAGE"),
+		imageExists,
+	)
+	if tag != "" && tag == localImpureUltimateTag && os.Getenv("DEVCELL_TEST_IMAGE") == "" {
+		return testdataImage()
+	}
+	if tag != "" {
+		return tag
+	}
+	// Fall back to the same scratch-bake path image() uses for impure.
+	ultimateOnce.Do(func() {
+		ultimateTag, ultimateErr = buildLocalImage("local-ultimate", "devcell-test")
+	})
+	if ultimateErr != nil {
+		t.Fatalf("impureImage: %v", ultimateErr)
 	}
 	return ultimateTag
 }
