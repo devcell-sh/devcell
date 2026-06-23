@@ -34,7 +34,7 @@ jobs:
     name: Detect Secrets
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v2
@@ -56,7 +56,7 @@ jobs:
             platform: linux/arm64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set lowercase image name
         run: echo "IMAGE_NAME_LC=${IMAGE_NAME,,}" >> $GITHUB_ENV
@@ -93,39 +93,56 @@ jobs:
         with:
           registry-type: public
 
-      - name: Pre-pull nix-cache as OCI layout
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Install go-task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # task cell:build = swagger:generate → CGO_ENABLED=0 go build with ldflags
+      # for GitCommit + BuildDate. Single source of truth shared with local dev
+      # (`task cell:build` works the same on a developer machine).
+      - name: Build cell binary
+        run: task cell:build
+
+      # Cache /nix volume across runs. Key includes nixhome hash so flake
+      # changes invalidate. Saves ~5-10 min cold-build time.
+      - name: Restore /nix volume cache
         if: inputs.skip_nix_cache != true
-        run: |
-          skopeo copy --src-tls-verify=true \
-            docker://${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-ultimate \
-            oci:/tmp/nix-cache-oci:latest
-          echo "NIX_CACHE_OCI=/tmp/nix-cache-oci" >> "$GITHUB_ENV"
+        uses: actions/cache@v4
+        with:
+          path: /var/lib/docker/volumes/devcell-nix-store-${{ matrix.arch }}/_data
+          key: devcell-nix-store-${{ matrix.arch }}-${{ hashFiles('nixhome/**') }}
+          restore-keys: |
+            devcell-nix-store-${{ matrix.arch }}-
 
-      - name: Build and push ci group (GHCR)
-        run: >-
-          docker buildx bake
-          --set '*.output=type=image,push=true,oci-mediatypes=true,compression=zstd,compression-level=3,force-compression=true'
-          ${{ env.NIX_CACHE_OCI && format('--set ultimate.contexts.nix-cache=oci-layout://{0}', env.NIX_CACHE_OCI) || '' }}
-          ci
+      - name: Build thin image
+        id: build
         env:
-          VERSION: v0.0.0-${{ matrix.arch }}
-          PLATFORMS: ${{ matrix.platform }}
-          REGISTRY: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}
-          CACHE_ARCH: -${{ matrix.arch }}
-
-      - name: Push to ECR Public
+          DEVCELL_NIX_VOLUME: devcell-nix-store-${{ matrix.arch }}
+          DEVCELL_NIXHOME_PATH: ${{ github.workspace }}/nixhome
         run: |
-          GHCR=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}
-          ECR=${{ env.ECR_REGISTRY }}
-          V=v0.0.0-${{ matrix.arch }}
-          for suffix in "" "-core" "-ultimate"; do
-            SRC="${GHCR}:${V}${suffix}"
-            DST="${ECR}:${V}${suffix}"
-            docker buildx imagetools create -t "${DST}" "${SRC}"
-          done
+          TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}"
+          ./bin/cell build --thin --image "$TAG" --debug
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Push to GHCR
+        run: docker push ${{ steps.build.outputs.tag }}
+
+      - name: Mirror to ECR Public
+        run: |
+          GHCR="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}"
+          ECR="${{ env.ECR_REGISTRY }}:v0.0.0-${{ matrix.arch }}"
+          docker buildx imagetools create -t "${ECR}" "${GHCR}"
 
   docker-test:
-    name: Docker Test (${{ matrix.arch }}, ${{ matrix.variant }})
+    name: Docker Test (${{ matrix.arch }})
     needs: docker-build
     strategy:
       fail-fast: false
@@ -133,27 +150,11 @@ jobs:
         include:
           - runner: ubuntu-latest
             arch: amd64
-            variant: base
-            test_run: "TestBaseImage|TestDotenv"
-            timeout: 600s
           - runner: ubuntu-24.04-arm
             arch: arm64
-            variant: base
-            test_run: "TestBaseImage|TestDotenv"
-            timeout: 600s
-          - runner: ubuntu-latest
-            arch: amd64
-            variant: ultimate
-            test_run: ""
-            timeout: 1200s
-          - runner: ubuntu-24.04-arm
-            arch: arm64
-            variant: ultimate
-            test_run: ""
-            timeout: 1200s
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set lowercase image name
         run: echo "IMAGE_NAME_LC=${IMAGE_NAME,,}" >> $GITHUB_ENV
@@ -166,31 +167,22 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      - name: Pull test images
-        run: |
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-${{ matrix.variant }}
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-core
+      - name: Pull test image
+        run: docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}
 
       - name: Run container tests
         env:
-          DEVCELL_TEST_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-${{ matrix.variant }}
-          DEVCELL_BASE_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-core
-          DEVCELL_TEST_BASE_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-core
-          DEVCELL_USER_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-${{ matrix.variant }}
+          DEVCELL_TEST_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}
+          DEVCELL_USER_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}
           DEVCELL_TEST_PROJECT_DIR: ${{ runner.temp }}/devcell-test
           MCP_SECRET_TEST_PASSWORD: fake-secret-ci-value
           MCP_SECRET_GITHUB_TOKEN: fake-token-ci-value
-        run: |
-          if [ -n "${{ matrix.test_run }}" ]; then
-            go test -v -run "${{ matrix.test_run }}" -timeout ${{ matrix.timeout }} ./test/...
-          else
-            go test -v -timeout ${{ matrix.timeout }} ./test/...
-          fi
+        run: go test -v -timeout 1200s ./test/...
 
   docker-manifest:
     name: Docker Manifests
@@ -224,176 +216,22 @@ jobs:
       - name: Create GHCR manifests
         run: |
           R=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}
-          for suffix in "" "-core" "-ultimate"; do
-            docker buildx imagetools create \
-              -t "${R}:dev${suffix}" \
-              -t "${R}:latest${suffix}" \
-              -t "${R}:v0.0.0${suffix}" \
-              "${R}:v0.0.0-amd64${suffix}" \
-              "${R}:v0.0.0-arm64${suffix}"
-          done
+          docker buildx imagetools create \
+            -t "${R}:dev" \
+            -t "${R}:latest" \
+            -t "${R}:v0.0.0" \
+            "${R}:v0.0.0-amd64" \
+            "${R}:v0.0.0-arm64"
 
       - name: Create ECR Public manifests
         run: |
           ECR=${{ env.ECR_REGISTRY }}
-          for suffix in "" "-core" "-ultimate"; do
-            docker buildx imagetools create \
-              -t "${ECR}:dev${suffix}" \
-              -t "${ECR}:latest${suffix}" \
-              -t "${ECR}:v0.0.0${suffix}" \
-              "${ECR}:v0.0.0-amd64${suffix}" \
-              "${ECR}:v0.0.0-arm64${suffix}"
-          done
-
-  pure-build:
-    name: Pure Image (${{ matrix.arch }}, ${{ matrix.stack }})
-    needs: secrets
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { runner: ubuntu-latest,    arch: amd64, stack: base }
-          - { runner: ubuntu-latest,    arch: amd64, stack: ultimate }
-          - { runner: ubuntu-24.04-arm, arch: arm64, stack: base }
-          - { runner: ubuntu-24.04-arm, arch: arm64, stack: ultimate }
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set lowercase image name
-        run: echo "IMAGE_NAME_LC=${IMAGE_NAME,,}" >> $GITHUB_ENV
-
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          sudo docker image prune -af
-          df -h
-
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v14
-        with:
-          extra-conf: |
-            experimental-features = nix-command flakes
-            sandbox = false
-            filter-syscalls = false
-            max-substitution-jobs = 128
-            http-connections = 128
-
-      # Caches /nix/store between runs. Cache hit (flake.lock + nixhome unchanged) → instant restore;
-      # partial restore on miss via restore-prefixes-first-match seeds substituted layers so we only
-      # re-download what actually changed. GC caps the on-disk store at 5 GB so the GHA cache stays small.
-      - name: Cache /nix/store
-        uses: nix-community/cache-nix-action@v6
-        with:
-          primary-key: nix-${{ matrix.arch }}-${{ matrix.stack }}-${{ hashFiles('nixhome/flake.lock', 'nixhome/**/*.nix') }}
-          restore-prefixes-first-match: nix-${{ matrix.arch }}-${{ matrix.stack }}-
-          purge: true
-          purge-prefixes: nix-${{ matrix.arch }}-${{ matrix.stack }}-
-          purge-created: 604800        # 7 days
-          purge-primary-key: never
-          gc-max-store-size-linux: 5000000000   # 5 GB
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ECR_ROLE_ARN }}
-          aws-region: us-east-1
-
-      - name: Log in to ECR Public
-        uses: aws-actions/amazon-ecr-login@v2
-        with:
-          registry-type: public
-
-      - name: Install go-task
-        uses: arduino/setup-task@v2
-        with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build + push pure image to GHCR
-        run: task image:pure:push:${{ matrix.stack }}
-        env:
-          # Override Taskfile defaults so the task uses CI-installed nix directly,
-          # no sudo (single-user nix), and pushes to the per-arch tag.
-          ARCH: ${{ matrix.arch }}
-          STACK: ${{ matrix.stack }}
-          REGISTRY: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}
-          TAG: v0.0.0-${{ matrix.arch }}-${{ matrix.stack }}-pure
-          SUDO: ""
-          NIX: nix
-          DEVCELL_BUILD_DATE: ${{ github.event.head_commit.timestamp }}
-          DEVCELL_BUILD_REV:  ${{ github.sha }}
-
-      - name: Mirror pure image to ECR Public
-        run: task image:mirror
-        env:
-          SRC: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-${{ matrix.stack }}-pure
-          DST: ${{ env.ECR_REGISTRY }}:v0.0.0-${{ matrix.arch }}-${{ matrix.stack }}-pure
-
-  pure-manifest:
-    name: Pure Image Manifests
-    needs: pure-build
-    if: always() && needs.pure-build.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set lowercase image name
-        run: echo "IMAGE_NAME_LC=${IMAGE_NAME,,}" >> $GITHUB_ENV
-        env:
-          IMAGE_NAME: ${{ github.repository }}
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ECR_ROLE_ARN }}
-          aws-region: us-east-1
-
-      - name: Log in to ECR Public
-        uses: aws-actions/amazon-ecr-login@v2
-        with:
-          registry-type: public
-
-      - name: Install go-task
-        uses: arduino/setup-task@v2
-        with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Stitch multi-arch GHCR manifests (pure)
-        run: |
-          for stack in base ultimate; do
-            task image:manifest \
-              REPO=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }} \
-              VERSION=v0.0.0 \
-              SUFFIX=-${stack}-pure \
-              ARCHES=amd64,arm64
-          done
-
-      - name: Stitch multi-arch ECR Public manifests (pure)
-        run: |
-          for stack in base ultimate; do
-            task image:manifest \
-              REPO=${{ env.ECR_REGISTRY }} \
-              VERSION=v0.0.0 \
-              SUFFIX=-${stack}-pure \
-              ARCHES=amd64,arm64
-          done
+          docker buildx imagetools create \
+            -t "${ECR}:dev" \
+            -t "${ECR}:latest" \
+            -t "${ECR}:v0.0.0" \
+            "${ECR}:v0.0.0-amd64" \
+            "${ECR}:v0.0.0-arm64"
 
   cell-build:
     name: Cell CLI Dev Build
@@ -402,12 +240,12 @@ jobs:
     env:
       RELEASE_VERSION: v0.0.0
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum

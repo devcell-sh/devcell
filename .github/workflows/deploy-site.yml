@@ -18,7 +18,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Resolve stable version
         id: version
@@ -29,15 +29,20 @@ jobs:
           echo "stable_version=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+
+      - name: Generate Swagger docs
+        # cmd/serve.go imports the generated docs package; docs/ is gitignored
+        # so it must be regenerated before the cmd/*.go files are compiled below.
+        run: go run github.com/swaggo/swag/cmd/swag@latest init -g cmd/serve.go -o docs --parseDependency --parseInternal
 
       - name: Generate CLI docs
         run: go run $(ls cmd/*.go | grep -Ev '(_test|gendoc|main)\.go' | tr '\n' ' ') cmd/gendoc.go web/src/content/cell
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm

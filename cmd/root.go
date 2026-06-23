@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/DimmKirr/devcell/internal/op"
 	"github.com/DimmKirr/devcell/internal/runner"
 	"github.com/DimmKirr/devcell/internal/scaffold"
+	"github.com/DimmKirr/devcell/internal/session"
 	"github.com/DimmKirr/devcell/internal/ux"
 	"github.com/DimmKirr/devcell/internal/version"
 	"github.com/spf13/cobra"
@@ -50,7 +52,7 @@ tools inside a consistent Docker dev environment.`,
 			cellCfg := cfg.LoadFromOS(c.ConfigDir, c.BaseDir)
 			runner.Stack = cellCfg.Cell.ResolvedStack()
 			runner.Modules = cellCfg.Cell.Modules
-			runner.PerSessionImage = cellCfg.Cell.ResolvedPerSessionImage()
+			runner.PerCellImage = cellCfg.Cell.ResolvedPerCellImage()
 		}
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -87,7 +89,7 @@ func init() {
 	rootCmd.PersistentFlags().String("vagrant-provider", "utm", "Vagrant provider (e.g. utm)")
 	rootCmd.PersistentFlags().String("vagrant-box", "", "Vagrant box name override")
 	rootCmd.PersistentFlags().String("base-image", "", "core image for scaffold Dockerfile (default: ghcr.io/dimmkirr/devcell:core-local)")
-	rootCmd.PersistentFlags().String("session-name", "", "session name for persistent home (~/.devcell/<name>)")
+	rootCmd.PersistentFlags().String("cell-name", "", "cell name for persistent home (~/.devcell/<name>)")
 	rootCmd.AddCommand(
 		claudeCmd,
 		codexCmd,
@@ -137,10 +139,14 @@ var cellBoolFlags = map[string]bool{
 	"--debug":      true,
 	"--macos":      true,
 	"--ollama":     true,
-	"--impure":     true, // legacy Dockerfile path (DIMM-213 canonical name)
+	"--impure":     true, // legacy Dockerfile path (CELL-165 canonical name)
 	"--debian":     true, // deprecated alias for --impure (kept stripping for one release)
 	"--pure":       true, // silent no-op after flip; kept stripped from forwarded args
 	"--nix-daemon": true, // enable nix-daemon inside container for runtime package installs
+	"--thin":       true, // thin image mode — nix store on Docker volume (CELL-156)
+	"--no-thin":    true, // disable thin mode (thick image)
+	"--thick":      true, // alias for --no-thin
+	"--no-1password": true, // skip [op] documents resolution at cell-open (CELL-42)
 }
 
 // cellStringFlags are string flags consumed by devcell: strip the flag token
@@ -150,7 +156,7 @@ var cellStringFlags = map[string]bool{
 	"--vagrant-provider": true,
 	"--vagrant-box":      true,
 	"--base-image":       true,
-	"--session-name":     true,
+	"--cell-name":        true,
 	"--format":           true,
 }
 
@@ -203,9 +209,9 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 		os.Setenv("DEVCELL_BASE_IMAGE", bi)
 	}
 
-	// Override session name via --session-name flag.
-	if sn := scanStringFlag("--session-name"); sn != "" {
-		os.Setenv("DEVCELL_SESSION_NAME", sn)
+	// Override cell name via --cell-name flag.
+	if sn := scanStringFlag("--cell-name"); sn != "" {
+		os.Setenv("DEVCELL_CELL_NAME", sn)
 	}
 
 	// First-run: scaffold .devcell.toml + .devcell/ files. Image acquisition
@@ -312,7 +318,39 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 	// Staleness is not consulted for the pure path: pure images are
 	// content-addressed, so a local tag equals what a rebuild would produce
 	// from the same flake.lock.
-	if !impure {
+	//
+	// Daemon preflight: surface a single actionable error if docker is down
+	// before any pull/build attempt (CELL-44). Skip in dry-run.
+	if !dryRun {
+		if err := runner.DockerDaemonReachable(context.Background()); err != nil {
+			return err
+		}
+	}
+	// ── Thin image path (CELL-156) ──────────────────────────────────────────
+	if thin {
+		needsBuild := false
+		reason := ""
+		switch {
+		case explicitBuild:
+			needsBuild = true
+		case dryRun:
+			// no-op
+		case !runner.ImageExists(context.Background(), imageTag()):
+			needsBuild, reason = true, fmt.Sprintf(" No %s image found — building automatically (thin mode)", imageTag())
+		case !runner.VolumeHydrated(runner.ThinStoreVolume(), runner.ThinEntrypointSentinel,
+			func(v string) bool { return runner.VolumeExists(context.Background(), v) },
+			func(v, p string) bool { return runner.VolumeContains(context.Background(), v, p) }):
+			needsBuild, reason = true, " /nix volume is missing or unpopulated — rebuilding (thin mode, CELL-38)"
+		}
+		if needsBuild {
+			if reason != "" {
+				fmt.Println(reason)
+			}
+			if err := runBuildThin(c, "", "", false); err != nil {
+				return err
+			}
+		}
+	} else if !impure {
 		// HasNix means "nix is on PATH AND can build the target arch from
 		// this host" (the preflight catches macOS-without-linux-builder).
 		// When false the orchestrator skips ActionBuildPure and runs
@@ -334,7 +372,7 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 				runner.StackImageTagImpure(runner.Stack), runner.PullAndTagImpure),
 			BuildPure: func(context.Context) error {
 				// Passing "" means runBuildPure falls back to the TOML-resolved
-				// stack (see DIMM-246). The user overrides via `cell build
+				// stack (see CELL-93). The user overrides via `cell build
 				// --stack <name>` explicitly.
 				return runBuildPure(c, "")
 			},
@@ -383,38 +421,52 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 		}
 	}
 
-	if ux.Verbose {
-		fmt.Printf(" APP_NAME: %s | VNC: localhost:%s | RDP: localhost:%s | HOME: %s\n",
-			c.AppName, c.VNCPort, c.RDPPort, c.CellHome)
-		baseVer, userVer := runner.ImageVersions(context.Background())
-		if baseVer != "" {
-			fmt.Printf(" Base image: %s\n", baseVer)
-		}
-		if userVer != "" {
-			fmt.Printf(" User image: %s\n", userVer)
-		}
-		if baseVer == "" && userVer == "" {
-			fmt.Printf(" Image versions: not available (missing /etc/devcell/*-image-version)\n")
-		}
+	// Cell-open banner — CELL-48. Always print the compact header so users
+	// see "which cell · which project · which pane" at every launch. The cell
+	// name is always shown (including the `main` default) — it's a real
+	// persistent identity with its own `~/.devcell/<name>/` home, not a
+	// placeholder, and surfacing it teaches the cell model.
+	project := filepath.Base(c.BaseDir)
+	fmt.Println(" " + ux.Banner(c.CellName, project, c.Bunk))
 
+	if ux.Verbose {
+		fmt.Println()
+		const keyW = 8 // longest key is "Timezone" / "Modules" / "Network"
+		// Project / Cell
+		fmt.Println("   " + ux.KV(keyW, "Project", project+ux.StyleMuted.Render("  "+c.BaseDir)))
+		if c.CellName != "" {
+			fmt.Println("   " + ux.KV(keyW, "Cell", c.CellName+ux.StyleMuted.Render("  "+c.CellHome)))
+		}
+		// Image — current tag + size, more useful than the in-container
+		// /etc/devcell/*-image-version strings (which can be missing).
+		tag := imageTag()
+		imgLine := tag
+		if size := runner.LocalImageSize(context.Background(), tag); size > 0 {
+			imgLine += ux.StyleMuted.Render("  " + runner.HumanBytes(size))
+		}
+		fmt.Println("   " + ux.KV(keyW, "Image", imgLine))
+		// Modules source — CELL-48 core ask.
+		fmt.Println("   " + ux.KV(keyW, "Modules", cellCfg.Cell.DescribeModulesSource()))
 		// Identity / network — surfaces the values bot-detection-relevant
 		// settings will resolve to inside the container, so the user can
 		// confirm at boot whether MAC / hostname / TZ / locale match the
 		// expected persistent identity.
 		mac := cellCfg.Cell.MacAddress
 		if mac == "" {
-			mac = "(auto by docker)"
+			mac = "auto"
 		}
 		hostname := cellCfg.Cell.ResolvedHostname(c.AppName)
 		if envHost := os.Getenv("DEVCELL_HOSTNAME"); envHost != "" {
 			hostname = envHost
 		}
+		fmt.Println("   " + ux.KV(keyW, "Network", "devcell-network"+ux.StyleMuted.Render(" · hostname "+hostname+" · MAC "+mac)))
+		// Locale + timezone — combine on one row.
 		tz := cellCfg.Cell.Timezone
 		if tz == "" {
 			if envTZ := os.Getenv("TZ"); envTZ != "" {
 				tz = envTZ + " (from host $TZ)"
 			} else {
-				tz = "(unset → container default)"
+				tz = "(container default)"
 			}
 		}
 		locale := cellCfg.Cell.Locale
@@ -561,15 +613,55 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 				inheritEnv = append(inheritEnv, k)
 				keys = append(keys, k)
 			}
-			ux.Debugf("1Password: resolved %d secret(s) from %d document(s) (%d failed): %v", len(keys), len(opDocs)-len(errs), len(errs), keys)
-		} else {
-			ux.Debugf("1Password: op CLI not found, skipping secret resolution")
-		}
+			ux.Debugf("1Password: resolved %d secret(s) from %d document(s) (%d failed): %v",
+				len(keys), len(opDocs)-len(errs), len(errs), keys)
+			// Total failure (every item errored, nothing resolved) is a real
+			// boot failure — surface it as ✗ instead of a green ✓ with a
+			// misleading "0 resolved" detail. Partial success still renders
+			// as ✓ because the cell can boot with whatever secrets landed.
+			if len(resolved) == 0 && len(errs) > 0 {
+				if len(opDocs) == 1 {
+					return "", fmt.Errorf("could not read %q from 1Password", opDocs[0])
+				}
+				return "", fmt.Errorf("could not read any of %d 1Password documents", len(opDocs))
+			}
+			return ux.FormatSecretsPhase(len(resolved), len(errs)), nil
+		})
+	case len(opDocs) > 0 && (skipOp || noOpEnv != ""):
+		ux.Debugf("1Password: skipped (--no-1password / DEVCELL_NO_1PASSWORD)")
 	}
 
-	// Stop spinner before handing terminal to child process.
-	if openSp != nil {
-		openSp.Stop()
+	// Final ✓ row before docker exec takes the TTY. The phase checklist
+	// stays on screen — the child TUI (claude, codex, …) draws on the row
+	// immediately below `✓ Cell ready`, so users keep the full boot story
+	// as scrollback above their session.
+	pr.Seal("Cell ready")
+
+	// CELL-264: in-container progress via fsnotify sentinel files. Start
+	// a BootDirWatcher on a per-cell directory BEFORE docker run so the
+	// container's entrypoint fragments can `touch $DEVCELL_BOOT_DIR/<name>`
+	// as they boot. Each file CREATE becomes a row on the host between
+	// Cell ready and the TTY handoff.
+	//
+	// Directory bind-mounts work universally on every Docker platform —
+	// Linux native, macOS/Windows Docker Desktop, Lima, OrbStack — which
+	// is why we ditched CELL-263 (sd_notify unix-socket bind-mounts had
+	// transport issues through Docker Desktop's virtiofs).
+	//
+	// Stale-state hygiene: wipe the dir at the start of each launch so
+	// leftover sentinels from a crashed prior run don't fire spurious
+	// "ready" events before the new boot starts emitting them.
+	bootDir := filepath.Join(c.CellHome, "boot")
+	_ = os.RemoveAll(bootDir)
+	bootWatcher := &runner.BootDirWatcher{}
+	var bootDirEnv string
+	var bootEvents <-chan runner.BootEvent
+	if events, err := bootWatcher.Start(bootDir); err != nil {
+		ux.Debugf("boot watcher: %v (continuing without in-container progress)", err)
+	} else {
+		bootDirEnv = bootDir
+		bootEvents = events
+		defer bootWatcher.Close()
 	}
 
 	spec := runner.RunSpec{
@@ -583,6 +675,8 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 		Image:        imageID,
 		ExtraEnv:     extraEnv,
 		InheritEnv:   inheritEnv,
+		ThinImage:    thin,
+		BootDir:      bootDirEnv,
 	}
 	argv := runner.BuildArgv(spec, runner.OsFS, exec.LookPath)
 
@@ -596,8 +690,25 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
+	sess, sessErr := session.Begin(c.BaseDir, binary, userArgs)
+	if sessErr != nil {
+		ux.Debugf("session begin: %v", sessErr)
+	}
+
 	if err := cmd.Start(); err != nil {
+		if sess != nil {
+			_ = sess.Finish(c.BaseDir, err)
+		}
 		return fmt.Errorf("start %q: %w", argv[0], err)
+	}
+
+	// CELL-264: consume in-container boot events. Each sentinel file
+	// CREATE opens or seals a row. Entrypoint is mostly quiet in non-debug
+	// mode, so host rows and container stdout rarely interleave during
+	// boot; once the entrypoint emits boot.ready and exec's into the
+	// binary (claude/zsh), the consumer returns and stops rendering.
+	if bootEvents != nil {
+		go runner.ConsumeBootEvents(bootEvents)
 	}
 
 	// Forward signals to the child process.
@@ -609,11 +720,17 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 		}
 	}()
 
-	if err := cmd.Wait(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+	waitErr := cmd.Wait()
+	if sess != nil {
+		if err := sess.Finish(c.BaseDir, waitErr); err != nil {
+			ux.Debugf("session finish: %v", err)
+		}
+	}
+	if waitErr != nil {
+		if exitErr, ok := waitErr.(*exec.ExitError); ok {
 			os.Exit(exitErr.ExitCode())
 		}
-		return err
+		return waitErr
 	}
 	return nil
 }
