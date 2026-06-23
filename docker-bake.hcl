@@ -97,6 +97,22 @@ target "core" {
   cache-to   = ["type=registry,ref=${REGISTRY}:cache-core${CACHE_ARCH},mode=max"]
 }
 
+# dev — Modules 2.0 default seed (scraping + infra, ~3 GB).
+# Smallest published stack that demos value in session 1.
+target "dev" {
+  inherits   = ["_base-args"]
+  context    = "."
+  dockerfile = "images/Dockerfile"
+  target     = "dev"
+  platforms  = split(",", PLATFORMS)
+  tags       = ["${REGISTRY}:${VERSION}-dev"]
+  cache-from = [
+    "type=registry,ref=${REGISTRY}:cache-dev${CACHE_ARCH}",
+    "type=registry,ref=${REGISTRY}:cache-core${CACHE_ARCH}",
+  ]
+  cache-to   = ["type=registry,ref=${REGISTRY}:cache-dev${CACHE_ARCH},mode=max"]
+}
+
 target "go" {
   inherits   = ["_base-args"]
   context    = "."
@@ -199,14 +215,14 @@ group "default" {
   targets = ["core"]
 }
 
-# ci: PR and push-to-main builds
+# ci: PR and push-to-main builds (adds dev — Modules 2.0 seed)
 group "ci" {
-  targets = ["core", "ultimate"]
+  targets = ["core", "dev", "ultimate"]
 }
 
 # release: all published stacks for a tagged release
 group "release" {
-  targets = ["core", "ultimate"]
+  targets = ["core", "dev", "ultimate"]
 }
 
 # local-core: core image tagged for local scaffold Dockerfile use (FROM ghcr.io/dimmkirr/devcell:core-local)
