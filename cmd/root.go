@@ -101,7 +101,9 @@ func init() {
 		vncCmd,
 		rdpCmd,
 		modelsCmd,
+		modulesCmd,
 		serveCmd,
+		authCmd,
 	)
 }
 
@@ -264,17 +266,34 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 
 	cellCfg := cfg.LoadFromOS(c.ConfigDir, c.BaseDir)
 
+	// Expand ${VAR}/$VAR references in [env] against the host shell.
+	// Strict-miss: any unset (or empty) reference aborts boot with a
+	// consolidated error listing every miss + its [env].<key> path —
+	// fixing the user's shell, not the TOML, is the intended remedy.
+	if err := cfg.ExpandEnv(cellCfg.Env, os.LookupEnv); err != nil {
+		return fmt.Errorf("%w", err)
+	}
+
 	// Set stack/modules so UserImageTag() produces stack-based tags.
 	runner.Stack = cellCfg.Cell.ResolvedStack()
 	runner.Modules = cellCfg.Cell.Modules
-	runner.PerSessionImage = cellCfg.Cell.ResolvedPerSessionImage()
+	runner.PerCellImage = cellCfg.Cell.ResolvedPerCellImage()
 
-	// After the 2026-05-15 flip (DIMM-204), pure is the default for every
-	// agent (claude, shell, codex, gemini). `--impure` (DIMM-213 canonical;
+	// After the 2026-05-15 flip (CELL-183), pure is the default for every
+	// agent (claude, shell, codex, gemini). `--impure` (CELL-165 canonical;
 	// `--debian` is a deprecated alias) opts into the legacy Dockerfile
 	// build path. `--pure` is kept as a silent no-op (same as default).
 	impure := scanFlag("--impure") || scanFlag("--debian")
-	imageTag := func() string { return runner.PickImageTag(impure) }
+	thin := !scanFlag("--no-thin") && !scanFlag("--thick") && (scanFlag("--thin") || cellCfg.Cell.ResolvedThin())
+	if !thin {
+		runner.WarnThickDeprecation()
+	}
+	imageTag := func() string {
+		if thin {
+			return runner.PickImageTagThin()
+		}
+		return runner.PickImageTag(impure)
+	}
 	dryRun := scanFlag("--dry-run")
 	explicitBuild := scanFlag("--build")
 
@@ -406,97 +425,135 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 				locale = "en_US.UTF-8 (default)"
 			}
 		}
-		fmt.Printf(" MAC: %s | hostname: %s | network: devcell-network\n", mac, hostname)
-		fmt.Printf(" Timezone: %s | Locale: %s\n", tz, locale)
+		fmt.Println("   " + ux.KV(keyW, "Locale", locale))
+		fmt.Println("   " + ux.KV(keyW, "Timezone", tz))
+		fmt.Println("   " + ux.KV(keyW, "Ports", "VNC localhost:"+c.VNCPort+ux.StyleMuted.Render(" · ")+"RDP localhost:"+c.RDPPort))
+		// Boot dir — where the BootDirWatcher polls for in-container sentinels.
+		// Useful in --debug: `ls $bootdir/` after a boot shows the chain of
+		// fragments that fired (post-mortem). CELL-264.
+		fmt.Println("   " + ux.KV(keyW, "Boot", filepath.Join(c.CellHome, "boot")))
+		fmt.Println()
 	}
 
-	// Show a spinner during pre-launch setup (network, cleanup, backup, etc.).
-	// In verbose mode, just print the header — debug output follows.
-	var openSp *ux.ProgressSpinner
-	if !ux.Verbose {
-		openSp = ux.NewProgressSpinner(fmt.Sprintf("Opening Cell %s", c.AppName))
-	} else {
-		ux.Println(fmt.Sprintf("Opening Cell %s ...", c.AppName))
-	}
+	// CELL-262: cell-open phases as a permanent checklist via PhaseRunner.
+	// Each row lands as `✓ <name> [— <detail>] <elapsed>` and persists across
+	// the docker exec handoff, so the user sees the full boot story above
+	// claude's first prompt. Replaces the prior "Opening Cell" spinner +
+	// inline stderr warnings + silent successes mix.
+	//
+	// 7-phase set (Docker daemon and Volume hydrated stay as silent
+	// upstream gates — surfacing them as ✓ rows for work that already ran
+	// reads as noise). Non-fatal phases discard the returned error with `_ =`;
+	// fatal phases propagate via `if err := ...; err != nil { return err }`.
+	pr := &ux.PhaseRunner{}
+	ctx := context.Background()
 
-	// Ensure network
-	if err := runner.EnsureNetwork(context.Background()); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: network setup failed: %v\n", err)
-	}
+	_ = pr.Phase("Network", func() error { return runner.EnsureNetwork(ctx) })
 
-	// Remove orphaned stopped container from a previous crashed run
-	if err := runner.RemoveOrphanedContainer(context.Background(), c.ContainerName); err != nil {
-		if openSp != nil {
-			openSp.Fail("setup failed")
-		}
+	if err := pr.Phase("Orphan check", func() error {
+		return runner.RemoveOrphanedContainer(ctx, c.ContainerName)
+	}); err != nil {
 		return err
 	}
 
-	// Backup .claude.json (non-fatal)
-	if err := backup.Backup(c.CellHome, time.Now()); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: backup failed: %v\n", err)
-	}
+	_ = pr.Phase("Backup", func() error { return backup.Backup(c.CellHome, time.Now()) })
 
-	// Pin the container to the exact image ID just built so a concurrent
-	// cell build on another terminal can't swap the tag under us mid-launch.
-	// --pure uses the -pure tagged image.
-	imageID, err := runner.LocalImageIDFor(context.Background(), imageTag())
-	if err != nil {
-		// Non-fatal: fall back to the mutable tag. In --pure mode this is
-		// the -pure tag; in normal mode it's the standard tag.
-		imageID = imageTag()
-	}
+	// Pin the container to the exact image ID so a concurrent `cell build`
+	// can't swap the tag under us mid-launch. Falls back to the mutable tag
+	// on failure (current behaviour) — kept silent inside the closure so the
+	// row stays a ✓ either way.
+	var imageID string
+	_ = pr.PhaseDetailed("Image pin", func() (string, error) {
+		id, idErr := runner.LocalImageIDFor(ctx, imageTag())
+		if idErr != nil {
+			imageID = imageTag()
+			return imageID, nil
+		}
+		imageID = id
+		short := id
+		if len(short) > 19 { // "sha256:abcdef012345" = 19 chars
+			short = short[:19]
+		}
+		return short, nil
+	})
 
-	// Inject system prompt for Claude Code — container context (mounts,
-	// host paths, constraints) plus the operator/project prompt resolved
-	// from env vars and devcell.toml. See runner.AssembleSystemPrompt for
-	// the full source-precedence chain (cell claude doesn't expose flags
-	// today; cell serve does).
+	// Inject system prompt for Claude Code — container context (mounts, host
+	// paths, constraints) plus the operator/project prompt resolved from env
+	// vars and devcell.toml. See runner.AssembleSystemPrompt for the full
+	// source-precedence chain. Fatal: a bad system prompt produces a broken
+	// claude session, fail loudly here.
 	if binary == "claude" {
-		prompt, err := runner.AssembleSystemPrompt(c, cellCfg, runner.ResolveOpts{
-			EnvFile:    os.Getenv("DEVCELL_SYSTEM_PROMPT_FILE"),
-			EnvInline:  os.Getenv("DEVCELL_SYSTEM_PROMPT"),
-			CellCfg:    cellCfg,
-			CfgBaseDir: c.BaseDir,
-		})
-		if err != nil {
+		if err := pr.PhaseDetailed("System prompt", func() (string, error) {
+			prompt, spErr := runner.AssembleSystemPrompt(c, cellCfg, runner.ResolveOpts{
+				EnvFile:    os.Getenv("DEVCELL_SYSTEM_PROMPT_FILE"),
+				EnvInline:  os.Getenv("DEVCELL_SYSTEM_PROMPT"),
+				CellCfg:    cellCfg,
+				CfgBaseDir: c.BaseDir,
+			})
+			if spErr != nil {
+				return "", spErr
+			}
+			defaultFlags = append(defaultFlags, "--append-system-prompt", prompt)
+			return fmt.Sprintf("%d bytes", len(prompt)), nil
+		}); err != nil {
 			return fmt.Errorf("system prompt: %w", err)
 		}
-		defaultFlags = append(defaultFlags, "--append-system-prompt", prompt)
 	}
 
-	// Resolve git identity from host config (follows symlinks, includes, XDG paths).
-	// Only if no explicit git env or [git] toml section — those take priority in BuildArgv.
+	// Resolve git identity from host config — only when neither env nor TOML
+	// already provides it. Non-fatal; row is "not configured" when both
+	// `git config user.name` and `user.email` are absent.
 	if os.Getenv("GIT_AUTHOR_NAME") == "" && !cellCfg.Git.HasIdentity() {
-		if extraEnv == nil {
-			extraEnv = make(map[string]string)
-		}
-		if out, err := exec.Command("git", "config", "user.name").Output(); err == nil {
-			if name := strings.TrimSpace(string(out)); name != "" {
+		_ = pr.PhaseDetailed("Git identity", func() (string, error) {
+			var name, email string
+			if out, err := exec.Command("git", "config", "user.name").Output(); err == nil {
+				name = strings.TrimSpace(string(out))
+			}
+			if out, err := exec.Command("git", "config", "user.email").Output(); err == nil {
+				email = strings.TrimSpace(string(out))
+			}
+			if name == "" && email == "" {
+				return "not configured", nil
+			}
+			if extraEnv == nil {
+				extraEnv = make(map[string]string)
+			}
+			if name != "" {
 				extraEnv["GIT_AUTHOR_NAME"] = name
 				extraEnv["GIT_COMMITTER_NAME"] = name
 			}
-		}
-		if out, err := exec.Command("git", "config", "user.email").Output(); err == nil {
-			if email := strings.TrimSpace(string(out)); email != "" {
+			if email != "" {
 				extraEnv["GIT_AUTHOR_EMAIL"] = email
 				extraEnv["GIT_COMMITTER_EMAIL"] = email
 			}
-		}
+			switch {
+			case name != "" && email != "":
+				return name + " <" + email + ">", nil
+			case name != "":
+				return name, nil
+			default:
+				return email, nil
+			}
+		})
 	}
 
-	// Resolve 1Password items → set in process env so docker inherits via -e KEY
+	// Loading secrets — CELL-261 phase, now expressed through PhaseRunner.
+	// Suppressed entirely when no [op].documents are configured, or when the
+	// user opted out via --no-1password / DEVCELL_NO_1PASSWORD.
 	var inheritEnv []string
 	opDocs := cellCfg.Op.ResolvedDocuments()
-	if len(opDocs) > 0 {
-		if openSp != nil {
-			openSp.UpdateText(fmt.Sprintf("Opening Cell %s (resolving secrets)", c.AppName))
-		}
+	skipOp := scanFlag("--no-1password")
+	noOpEnv := os.Getenv("DEVCELL_NO_1PASSWORD")
+	switch {
+	case op.ShouldResolve(skipOp, noOpEnv, opDocs):
 		ux.Debugf("1Password: resolving %d document(s): %v", len(opDocs), opDocs)
-		if _, err := exec.LookPath("op"); err == nil {
+		_ = pr.PhaseDetailedRunning("Loading secrets (please authorize 1Password)", "Loaded secrets", func() (string, error) {
+			if _, err := exec.LookPath("op"); err != nil {
+				return "", fmt.Errorf("1Password CLI not installed")
+			}
 			resolved, errs := op.ResolveItems(opDocs)
 			for _, e := range errs {
-				fmt.Fprintf(os.Stderr, "warning: 1Password: %v\n", e)
+				ux.Debugf("1Password: %v", e)
 			}
 			keys := make([]string, 0, len(resolved))
 			for k, v := range resolved {
