@@ -167,9 +167,10 @@ func TestScaffold_FlakeNixVersionSubstituted(t *testing.T) {
 	if strings.Contains(s, "{{VERSION}}") {
 		t.Errorf("unreplaced {{VERSION}} placeholder in flake.nix:\n%s", s)
 	}
-	// Default version.Version is v0.0.0 in tests
-	if !strings.Contains(s, "DimmKirr/devcell/v0.0.0?dir=nixhome") {
-		t.Errorf("flake.nix should contain versioned URL with v0.0.0, got:\n%s", s)
+	// v0.0.0 (dev build) coerces to DefaultNixhomeGitRef via runner.UpstreamFlakeRef
+	// — literal v0.0.0 would 404 against github (no such tag).
+	if !strings.Contains(s, "DimmKirr/devcell/"+runner.DefaultNixhomeGitRef+"?dir=nixhome") {
+		t.Errorf("flake.nix should contain coerced upstream URL, got:\n%s", s)
 	}
 }
 
@@ -528,6 +529,29 @@ func TestGenerateFlakeNix_MultipleModules(t *testing.T) {
 		if !strings.Contains(content, "devcell.modules."+mod) {
 			t.Errorf("expected devcell.modules.%s:\n%s", mod, content)
 		}
+	}
+}
+
+// TestGenerateFlakeNix_ModulesAreEnabled — Modules 2.0 (CELL-65): every name
+// in `modules` must end up with `devcell.modules.<name>.enable = true` in the
+// generated flake. Importing the file alone is insufficient under the new
+// mkEnableOption pattern — without the enable line, modules sit inert.
+func TestGenerateFlakeNix_ModulesAreEnabled(t *testing.T) {
+	content := scaffold.GenerateFlakeNix("dev", []string{"electronics", "plex"}, "v1.0.0", false)
+	for _, mod := range []string{"electronics", "plex"} {
+		want := `devcell.modules.` + mod + `.enable = true`
+		if !strings.Contains(content, want) {
+			t.Errorf("missing enable line for %q (expected %q):\n%s", mod, want, content)
+		}
+	}
+}
+
+// TestGenerateFlakeNix_NoModulesNoEnableBlock — when modules list is empty,
+// the generated flake should NOT contain an enable block (avoid empty no-op).
+func TestGenerateFlakeNix_NoModulesNoEnableBlock(t *testing.T) {
+	content := scaffold.GenerateFlakeNix("dev", nil, "v1.0.0", false)
+	if strings.Contains(content, ".enable = true") {
+		t.Errorf("empty modules list should not emit any .enable=true lines:\n%s", content)
 	}
 }
 
