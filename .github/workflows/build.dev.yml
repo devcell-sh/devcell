@@ -162,9 +162,18 @@ jobs:
         run: docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}
 
       - name: Run container tests
+        # DEVCELL_TEST_BASE_IMAGE points test/helpers_test.go:baseImage() at the
+        # pre-built thin image (nix2container, no Debian base) so tests that
+        # call baseImage() skip the legacy `docker buildx bake` of
+        # images/Dockerfile. Without it, `baseImage()` falls through to
+        # `buildLocalImage("local-core")` which builds the legacy Debian
+        # Dockerfile and currently fails because Debian's go-alpine mirror
+        # ships a Go version below what go.mod requires. Full removal of the
+        # legacy bake path lives in CELL-286 (taxonomy collapse).
         env:
           DEVCELL_TEST_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}
           DEVCELL_USER_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}
+          DEVCELL_TEST_BASE_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}
           DEVCELL_TEST_PROJECT_DIR: ${{ runner.temp }}/devcell-test
           MCP_SECRET_TEST_PASSWORD: fake-secret-ci-value
           MCP_SECRET_GITHUB_TOKEN: fake-token-ci-value
