@@ -202,25 +202,65 @@ jobs:
       # crane (no intermediate tar file, no `docker buildx`). Peak transient
       # disk: ~64 MB pipe buffer instead of ~64 GB.
       - name: Inspect + stream-publish /nix volume to GHCR cache image
+        # Hard upper bound: arm64 publishes in ~51 min, amd64 hung 76 min on
+        # the prior attempt before some implicit kill. Cap at 80 min so we
+        # fail fast (with debug context above) instead of spinning forever.
+        timeout-minutes: 80
         run: |
           set -eo pipefail
+
+          # pv = pipe-viewer for byte-throughput monitoring on the runner
+          # side. Apt-fetch is ~1 sec, negligible vs the publish runtime.
+          sudo apt-get update -qq && sudo apt-get install -y -qq pv
+
+          echo "==== Runner snapshot ===="
+          uname -a
+          echo "cpus: $(nproc)  arch: $(uname -m)"
+          free -h
+          df -h /var/lib/docker /
+          echo
+
           docker volume ls --filter name=devcell-nix-store
-          # Container-side view of what's actually on the volume.
+          # Container-side view: byte-exact size + entry counts so we can
+          # compare "what we tried to push" vs "what arrived on GHCR".
           docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix alpine sh -c '
-            echo "--- /nix size ---"
+            echo "--- /nix size (human) ---"
             du -sh /nix
+            echo "--- /nix size (bytes) ---"
+            du -sb /nix
             echo "--- top-level ---"
             ls /nix | head -20
+            echo "--- /nix/store entry count ---"
+            find /nix/store -mindepth 1 -maxdepth 1 2>/dev/null | wc -l
             echo "--- /nix/store sample ---"
             ls /nix/store 2>/dev/null | head -5 || echo "(no /nix/store)"
           '
+          echo
+
           HASH=${{ hashFiles('nixhome/**') }}
           EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}"
           LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest"
-          # Stream tar (UNCOMPRESSED) from the volume → crane → registry as
-          # a single OCI layer atop a busybox base. crane uploads the layer
-          # blob in chunks while tar is still emitting bytes, so peak
-          # disk use stays near-zero.
+
+          # Background heartbeat: every 30s print disk free + load avg so
+          # we can correlate stalls with disk fill, OOM, or network
+          # backpressure. Killed via EXIT trap so it never outlives the
+          # foreground pipeline.
+          (
+            while true; do
+              sleep 30
+              printf "[heartbeat %s] disk-free=%s loadavg=%s\n" \
+                "$(date -u +%H:%M:%SZ)" \
+                "$(df -h /var/lib/docker | awk 'NR==2 {print $4}')" \
+                "$(awk '{print $1}' /proc/loadavg)"
+            done
+          ) &
+          HB_PID=$!
+          trap "kill $HB_PID 2>/dev/null || true" EXIT
+
+          # Stream tar (UNCOMPRESSED) from the volume → pv (throughput
+          # monitor) → crane → registry as a single OCI layer atop a
+          # busybox base. crane uploads the layer blob in chunks while tar
+          # is still emitting bytes, so peak disk use stays near-zero.
           # CRITICAL: emit raw tar (`-cf`, not `-czf`). crane's `--new_layer`
           # treats stdin as an uncompressed tarball and gzips it itself when
           # storing as an OCI `tar+gzip` layer. Pre-gzipping here would
@@ -236,15 +276,30 @@ jobs:
           # --exclude: Unix sockets can't be archived — pre-exclude the
           # nix-daemon socket so tar doesn't emit a "socket ignored"
           # warning that could trip stricter tar implementations.
+          # `pv -tabri 30 -f`: every 30s emit elapsed/avg-rate/cur-rate/
+          # bytes-transferred to stderr (-f forces output to a non-TTY).
+          # `crane --v=4`: maximum verbosity — logs HTTP request/response
+          # cycles, chunk uploads, retries, and any transient 5xx. This is
+          # the data we need to know whether the publish is CPU-bound (slow
+          # gzip), I/O-bound (slow tar walk), or network-bound (GHCR
+          # backpressure / retry loop).
+          echo "==== Publish start ($(date -u +%H:%M:%SZ)) ===="
+          SECONDS=0
+
           docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix:ro alpine \
             tar -cf - \
               --exclude='nix/var/nix/daemon-socket' \
               -C / nix \
-            | crane append \
+            | pv -tabri 30 -f -N tar-bytes \
+            | crane --v=4 append \
                 --base public.ecr.aws/docker/library/busybox:latest \
                 --new_layer - \
                 --new_tag "$EXACT" \
                 --new_tag "$LATEST"
+
+          echo
+          echo "==== Publish end ($(date -u +%H:%M:%SZ)) — elapsed ${SECONDS}s ===="
+
           # Sanity: confirm the layer we pushed is non-trivial. The earlier
           # broken push (tar errored out, crane still published the busybox
           # base + tiny manifest, exit code 1 but tag was set) poisoned the
@@ -260,6 +315,7 @@ jobs:
           echo "pushed nix-cache images:"
           echo "  $EXACT"
           echo "  $LATEST"
+          df -h /var/lib/docker /
 
   docker-test:
     name: Docker Test (${{ matrix.arch }})
