@@ -31,7 +31,7 @@ archives:
 
 release:
   github:
-    owner: DimmKirr
+    owner: devcell-sh
     name: devcell
   draft: true
   replace_existing_draft: true
