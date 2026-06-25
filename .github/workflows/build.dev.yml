@@ -103,49 +103,57 @@ jobs:
       - name: Build cell binary
         run: task cell:build
 
-      # Cache the nix-store as a GHCR image instead of GH Actions cache.
-      # Why GHCR over actions/cache@v4:
-      #  - GH Actions cache caps a repo at 10 GB total. Two 8.8 GB per-arch
-      #    nix volumes (amd64 + arm64) overflow → LRU eviction → only one
-      #    arch's cache survives per run, the other gets MISS at docker-test.
-      #  - GHCR has effectively unlimited package storage and parallelizes
-      #    layer pull, so two-arch cache restore is faster than a single tar
-      #    unpack (~2-3 min vs ~12 min).
-      #  - We already authenticate to GHCR for the main image push; same
-      #    GITHUB_TOKEN grants `packages: write`.
-      # Cache image lives in the SAME `devcell-sh/devcell` GHCR package as
-      # the runtime images, with tag prefix `nix-cache-` so it doesn't
-      # collide with stack tags.
-      - name: Pull prior nix-cache image from GHCR
+      # crane = google/go-containerregistry CLI. We use it to stream the
+      # nix-store volume directly to/from a GHCR layer blob without going
+      # through `docker buildx` or `docker pull`'s overlay2 extract.
+      # Push: tar -czf - | crane append → registry (no 32 GB tar on disk).
+      # Pull: crane blob | gunzip | tar -x → volume (no overlay2 extract).
+      # Net: ~32 GB less peak transient disk per job vs the Docker-native
+      # round-trip.
+      - name: Install crane
+        run: |
+          set -eo pipefail
+          VER=v0.20.6
+          case "${{ matrix.arch }}" in
+            amd64) ASSET=x86_64 ;;
+            arm64) ASSET=arm64 ;;
+            *) echo "unsupported arch ${{ matrix.arch }}"; exit 1 ;;
+          esac
+          curl -fsSL "https://github.com/google/go-containerregistry/releases/download/${VER}/go-containerregistry_Linux_${ASSET}.tar.gz" \
+            | sudo tar -xzC /usr/local/bin crane
+          crane version
+
+      # Cache the nix-store as a GHCR image. Lives in the SAME
+      # `devcell-sh/devcell` GHCR package as the runtime images, with tag
+      # prefix `nix-cache-` so it doesn't collide with stack tags.
+      # Hydrate via crane streaming (skip docker pull's overlay2 round-trip).
+      - name: Stream-hydrate /nix volume from prior GHCR cache (if available)
         if: inputs.skip_nix_cache != true
         run: |
-          set +e
+          set -eo pipefail
           HASH=${{ hashFiles('nixhome/**') }}
           EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}"
           LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest"
-          if docker pull "$EXACT" 2>/dev/null; then
-            echo "NIX_CACHE_IMG=$EXACT" >> "$GITHUB_ENV"
-            echo "hit exact-hash cache: $EXACT"
-          elif docker pull "$LATEST" 2>/dev/null; then
-            echo "NIX_CACHE_IMG=$LATEST" >> "$GITHUB_ENV"
-            echo "hit latest cache (stale nixhome hash): $LATEST"
-          else
-            echo "no cache image available — starting from empty volume"
+          IMG=""
+          for c in "$EXACT" "$LATEST"; do
+            if crane manifest "$c" >/dev/null 2>&1; then IMG="$c"; break; fi
+          done
+          if [ -z "$IMG" ]; then
+            echo "cache MISS — starting from empty volume"
+            exit 0
           fi
-
-      # If the cache pull succeeded, hydrate the named volume from the
-      # image's /nix layer BEFORE `cell build --thin` runs. Fresh volume +
-      # named-volume-seeded-from-image is Docker's native mechanism — no
-      # explicit copy/tar needed, layers extract in parallel.
-      - name: Hydrate /nix volume from cache image
-        if: env.NIX_CACHE_IMG != ''
-        run: |
-          set -e
+          echo "cache HIT: $IMG"
+          # The appended nix-store layer is the LAST one (atop the busybox
+          # base). Stream just that blob → gunzip → tar -x into the volume.
+          LAYER_DIGEST=$(crane manifest "$IMG" | jq -r '.layers[-1].digest')
           docker volume rm devcell-nix-store-${{ matrix.arch }} 2>/dev/null || true
           docker volume create devcell-nix-store-${{ matrix.arch }} >/dev/null
-          docker run --rm \
-            -v devcell-nix-store-${{ matrix.arch }}:/nix \
-            "$NIX_CACHE_IMG" \
+          crane blob "$IMG@$LAYER_DIGEST" \
+            | gunzip \
+            | docker run --rm -i \
+                -v devcell-nix-store-${{ matrix.arch }}:/dest \
+                alpine sh -c 'cd /dest && tar -x --strip-components=1'
+          docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix:ro alpine \
             sh -c 'echo "hydrated $(du -sh /nix | cut -f1)"'
 
       # Build both stacks sequentially in the same job so the nix-store
@@ -176,13 +184,13 @@ jobs:
           docker push "$BASE_TAG"
           docker push "$ULT_TAG"
 
-      # Inspect-and-publish: print volume metadata to logs and push the
-      # populated /nix volume to GHCR as a single-tag cache image. Used by
-      # the next CI run's `Pull prior nix-cache image from GHCR` step and
-      # by docker-test's `Hydrate /nix volume from cache image` step.
-      - name: Inspect + publish /nix volume as GHCR cache image
+      # Inspect-and-publish: print volume metadata to logs and stream the
+      # populated /nix volume to GHCR as a single-layer cache image via
+      # crane (no intermediate tar file, no `docker buildx`). Peak transient
+      # disk: ~64 MB pipe buffer instead of ~64 GB.
+      - name: Inspect + stream-publish /nix volume to GHCR cache image
         run: |
-          set -ex
+          set -eo pipefail
           docker volume ls --filter name=devcell-nix-store
           # Container-side view of what's actually on the volume.
           docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix alpine sh -c '
@@ -193,33 +201,28 @@ jobs:
             echo "--- /nix/store sample ---"
             ls /nix/store 2>/dev/null | head -5 || echo "(no /nix/store)"
           '
-          # Tar the volume into the build context. -ro mount so we never
-          # accidentally write back to the volume during the dump.
-          mkdir -p /tmp/devcell-cache
-          docker run --rm \
-            -v devcell-nix-store-${{ matrix.arch }}:/nix:ro \
-            -v /tmp/devcell-cache:/out \
-            alpine tar -cf /out/nix-store.tar -C /nix .
-          ls -lh /tmp/devcell-cache/nix-store.tar
-          # Build a minimal cache image: busybox base (so `docker run img cmd`
-          # works) + the nix store tar auto-extracted into /nix via Dockerfile
-          # ADD. When docker-test mounts a fresh named volume at /nix in this
-          # image, Docker auto-seeds the volume from the image's /nix content
-          # at mount time — no explicit copy required.
-          cat > /tmp/devcell-cache/Dockerfile <<'EOF'
-          # syntax=docker/dockerfile:1
-          FROM busybox:latest
-          ADD nix-store.tar /nix/
-          CMD ["true"]
-          EOF
           HASH=${{ hashFiles('nixhome/**') }}
           EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}"
           LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest"
-          docker buildx build \
-            -t "$EXACT" \
-            -t "$LATEST" \
-            --push \
-            /tmp/devcell-cache
+          # Stream tar (gzipped) from the volume → crane → registry as a
+          # single OCI layer atop a busybox base. crane uploads the layer
+          # blob in chunks while tar is still emitting bytes, so peak
+          # disk use stays near-zero.
+          # --exclude daemon-socket: Unix sockets can't be archived (tar
+          #   prints a warning + skips). Pre-excluding silences the noise.
+          # --transform: re-roots archive paths under `nix/` so they land
+          #   at /nix/* inside the cache image (matched by --strip-components=1
+          #   on the pull side).
+          docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix:ro alpine \
+            tar -czf - \
+              --exclude='./var/nix/daemon-socket' \
+              --transform 's,^\./,nix/,' \
+              -C /nix . \
+            | crane append \
+                --base public.ecr.aws/docker/library/busybox:latest \
+                --new_layer - \
+                --new_tag "$EXACT" \
+                --new_tag "$LATEST"
           echo "pushed nix-cache images:"
           echo "  $EXACT"
           echo "  $LATEST"
@@ -255,46 +258,57 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      # Pull the nix-store cache image that docker-build pushed and hydrate
-      # the named volumes from it. Tests that invoke `cell shell` /
-      # `cell claude` mount the volume at `/nix` in their containers, so the
-      # home-manager activation tree is already resolved — no lazy
-      # `cell build --thin` triggered at test time, no minute-long timeouts.
-      - name: Pull + hydrate /nix volumes from GHCR cache image
+      - name: Install crane
         run: |
-          set -e
+          set -eo pipefail
+          VER=v0.20.6
+          case "${{ matrix.arch }}" in
+            amd64) ASSET=x86_64 ;;
+            arm64) ASSET=arm64 ;;
+            *) echo "unsupported arch ${{ matrix.arch }}"; exit 1 ;;
+          esac
+          curl -fsSL "https://github.com/google/go-containerregistry/releases/download/${VER}/go-containerregistry_Linux_${ASSET}.tar.gz" \
+            | sudo tar -xzC /usr/local/bin crane
+          crane version
+
+      # Stream-pull the nix-store cache image's layer blob directly into the
+      # per-arch volume via crane, bypassing Docker's overlay2 extract +
+      # auto-seed copy (~32 GB less peak transient disk vs `docker pull`).
+      # Single seed: we set DEVCELL_NIX_VOLUME on the test step below so
+      # `cell shell` / `cell claude` use this per-arch volume directly
+      # instead of the default-named one — no need to seed two volumes.
+      - name: Stream-pull /nix cache from GHCR into volume
+        run: |
+          set -eo pipefail
           HASH=${{ hashFiles('nixhome/**') }}
           EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}"
           LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest"
           IMG=""
-          if docker pull "$EXACT" 2>/dev/null; then
-            IMG="$EXACT"
-            echo "cache HIT (exact hash): $IMG"
-          elif docker pull "$LATEST" 2>/dev/null; then
-            IMG="$LATEST"
-            echo "cache HIT (latest, stale hash): $IMG"
-          else
-            echo "cache MISS — tests will run on empty /nix volume and lazy-build"
+          for c in "$EXACT" "$LATEST"; do
+            if crane manifest "$c" >/dev/null 2>&1; then IMG="$c"; break; fi
+          done
+          if [ -z "$IMG" ]; then
+            echo "cache MISS — tests will run on empty /nix volume (lazy build during cell shell)"
             exit 0
           fi
-          # Per-arch volume — fresh, Docker auto-seeds it from the image's
-          # /nix content at first mount.
+          echo "cache HIT: $IMG"
+          # The appended nix-store layer is the LAST one in the manifest
+          # (atop busybox). Pull just that blob → gunzip → tar -x into the
+          # volume via a helper container.
+          LAYER_DIGEST=$(crane manifest "$IMG" | jq -r '.layers[-1].digest')
           docker volume rm devcell-nix-store-${{ matrix.arch }} 2>/dev/null || true
           docker volume create devcell-nix-store-${{ matrix.arch }} >/dev/null
-          docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix "$IMG" \
-            sh -c 'echo "arch volume hydrated: $(du -sh /nix | cut -f1)"'
-          # Default-named volume — what `cell shell` / `cell claude` actually
-          # use at runtime when DEVCELL_NIX_VOLUME isn't set. Hydrate it the
-          # same way (fresh + auto-seed).
-          docker volume rm devcell-nix-store 2>/dev/null || true
-          docker volume create devcell-nix-store >/dev/null
-          docker run --rm -v devcell-nix-store:/nix "$IMG" \
-            sh -c 'echo "default volume hydrated: $(du -sh /nix | cut -f1)"'
+          crane blob "$IMG@$LAYER_DIGEST" \
+            | gunzip \
+            | docker run --rm -i \
+                -v devcell-nix-store-${{ matrix.arch }}:/dest \
+                alpine sh -c 'cd /dest && tar -x --strip-components=1'
 
       - name: Show volume status (debug)
         run: |
           docker volume ls --filter name=devcell-nix-store || true
-          docker run --rm -v devcell-nix-store:/nix alpine sh -c 'du -sh /nix; ls /nix/store 2>/dev/null | head -3 || echo "(no /nix/store)"'
+          docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix:ro alpine \
+            sh -c 'du -sh /nix; ls /nix/store 2>/dev/null | head -3 || echo "(no /nix/store)"'
 
       - name: Pull test images (base + ultimate)
         run: |
@@ -310,7 +324,12 @@ jobs:
         # without `DEVCELL_USER_IMAGE_THIN` works because UserImageTagThin()
         # falls back to DEVCELL_USER_IMAGE as-is (no `-thin` suffix appended)
         # per CELL-286 prep.
+        # `DEVCELL_NIX_VOLUME` points cell at the per-arch volume we just
+        # hydrated from the GHCR cache, so `cell shell` / `cell claude` skip
+        # the lazy-build path entirely instead of falling back to the
+        # default-named volume (which would be empty).
         env:
+          DEVCELL_NIX_VOLUME: devcell-nix-store-${{ matrix.arch }}
           DEVCELL_TEST_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-ultimate
           DEVCELL_USER_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-ultimate
           DEVCELL_TEST_BASE_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-base
