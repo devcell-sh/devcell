@@ -122,6 +122,23 @@ func TestUserImageTagThin_EnvOverride(t *testing.T) {
 	}
 }
 
+// TestUserImageTagThin_UnifiedEnvOverride locks in CELL-286 prep: when
+// DEVCELL_USER_IMAGE alone is set (no DEVCELL_USER_IMAGE_THIN), the thin tag
+// equals the env value verbatim — no "-thin" suffix appended. CI relies on
+// this so it can publish + consume one canonical tag without juggling
+// variant-specific env vars.
+func TestUserImageTagThin_UnifiedEnvOverride(t *testing.T) {
+	defer setEnv("DEVCELL_USER_IMAGE_THIN", "")()
+	defer setEnv("DEVCELL_USER_IMAGE", "ghcr.io/devcell-sh/devcell:v0.0.0-amd64")()
+	defer setStack("ultimate")()
+
+	got := runner.UserImageTagThin()
+	if got != "ghcr.io/devcell-sh/devcell:v0.0.0-amd64" {
+		t.Errorf("UserImageTagThin = %q, want %q (no -thin suffix when DEVCELL_USER_IMAGE is the only override)",
+			got, "ghcr.io/devcell-sh/devcell:v0.0.0-amd64")
+	}
+}
+
 // ── Custom build tag override (--image flag) ─────────────────────────────────
 
 func TestResolveBuildTag_EmptyCustomReturnsDerived(t *testing.T) {

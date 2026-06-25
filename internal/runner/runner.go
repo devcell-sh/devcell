@@ -129,9 +129,24 @@ func ResolveBuildTag(custom, derived string) string {
 
 // UserImageTagThin returns the local tag for thin images — nix store lives
 // on a Docker named volume, not baked into the image.
-// Example: UserImageTag()="devcell-user:ultimate" → UserImageTagThin()="devcell-user:ultimate-thin".
+//
+// Resolution order:
+//  1. DEVCELL_USER_IMAGE_THIN — legacy explicit override
+//  2. DEVCELL_USER_IMAGE — modern unified override; used as-is (no suffix).
+//     CELL-286 prep: every devcell image we publish is thin, so the
+//     `-thin` suffix on the env-driven path is redundant. CI sets
+//     `DEVCELL_USER_IMAGE=ghcr.io/devcell-sh/devcell:v<ver>-<arch>` and
+//     expects this exact tag at runtime (no suffix appended).
+//  3. UserImageTag() + "-thin" — local-dev fallback, preserves the suffix
+//     convention so `devcell-user:<stack>-thin` doesn't collide with
+//     `-pure`/`-impure` legacy local tags.
+//
+// Example (no env): UserImageTag()="devcell-user:ultimate" → "devcell-user:ultimate-thin".
 func UserImageTagThin() string {
 	if tag := os.Getenv("DEVCELL_USER_IMAGE_THIN"); tag != "" {
+		return tag
+	}
+	if tag := os.Getenv("DEVCELL_USER_IMAGE"); tag != "" {
 		return tag
 	}
 	return UserImageTag() + "-thin"

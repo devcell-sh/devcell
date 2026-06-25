@@ -114,18 +114,33 @@ jobs:
           restore-keys: |
             devcell-nix-store-${{ matrix.arch }}-
 
-      - name: Build thin image
-        id: build
+      # Build both stacks sequentially in the same job so the nix-store
+      # volume accumulates derivations from both — single cache save at job
+      # end carries everything needed by docker-test. `cell build --thin`
+      # reuses store paths across the two invocations (nix is
+      # content-addressed), so ultimate after base is incremental.
+      - name: Build thin image (base stack)
         env:
           DEVCELL_NIX_VOLUME: devcell-nix-store-${{ matrix.arch }}
           DEVCELL_NIXHOME_PATH: ${{ github.workspace }}/nixhome
         run: |
-          TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}"
-          ./bin/cell build --thin --image "$TAG" --debug
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          BASE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-base"
+          ./bin/cell build --thin --stack base --image "$BASE_TAG" --debug
+          echo "BASE_TAG=$BASE_TAG" >> "$GITHUB_ENV"
 
-      - name: Push to GHCR
-        run: docker push ${{ steps.build.outputs.tag }}
+      - name: Build thin image (ultimate stack)
+        env:
+          DEVCELL_NIX_VOLUME: devcell-nix-store-${{ matrix.arch }}
+          DEVCELL_NIXHOME_PATH: ${{ github.workspace }}/nixhome
+        run: |
+          ULT_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-ultimate"
+          ./bin/cell build --thin --stack ultimate --image "$ULT_TAG" --debug
+          echo "ULT_TAG=$ULT_TAG" >> "$GITHUB_ENV"
+
+      - name: Push to GHCR (both stacks)
+        run: |
+          docker push "$BASE_TAG"
+          docker push "$ULT_TAG"
 
   docker-test:
     name: Docker Test (${{ matrix.arch }})
@@ -158,22 +173,37 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      - name: Pull test image
-        run: docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}
+      # Restore the nix-store volume that docker-build populated. Tests that
+      # invoke `cell shell` / `cell claude` will mount this volume into the
+      # container (`devcell-nix-store:/nix`), so the home-manager activation
+      # tree is already resolved — no lazy `cell build --thin` triggered at
+      # test time, no minute-long timeouts.
+      - name: Restore /nix volume cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /var/lib/docker/volumes/devcell-nix-store-${{ matrix.arch }}/_data
+          key: devcell-nix-store-${{ matrix.arch }}-${{ hashFiles('nixhome/**') }}
+          restore-keys: |
+            devcell-nix-store-${{ matrix.arch }}-
+
+      - name: Pull test images (base + ultimate)
+        run: |
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-base
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-ultimate
 
       - name: Run container tests
-        # DEVCELL_TEST_BASE_IMAGE points test/helpers_test.go:baseImage() at the
-        # pre-built thin image (nix2container, no Debian base) so tests that
-        # call baseImage() skip the legacy `docker buildx bake` of
-        # images/Dockerfile. Without it, `baseImage()` falls through to
-        # `buildLocalImage("local-core")` which builds the legacy Debian
-        # Dockerfile and currently fails because Debian's go-alpine mirror
-        # ships a Go version below what go.mod requires. Full removal of the
-        # legacy bake path lives in CELL-286 (taxonomy collapse).
+        # Both `DEVCELL_USER_IMAGE` and `DEVCELL_TEST_IMAGE` point at the
+        # ultimate image (every module + tool baked in) so module-aware tests
+        # (kicad, plex, gui) find what they need. `DEVCELL_TEST_BASE_IMAGE`
+        # points at the smaller base image for entrypoint-only tests
+        # (TestEntrypoint_DebugTimestamps etc.). Setting `DEVCELL_USER_IMAGE`
+        # without `DEVCELL_USER_IMAGE_THIN` works because UserImageTagThin()
+        # falls back to DEVCELL_USER_IMAGE as-is (no `-thin` suffix appended)
+        # per CELL-286 prep.
         env:
-          DEVCELL_TEST_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}
-          DEVCELL_USER_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}
-          DEVCELL_TEST_BASE_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}
+          DEVCELL_TEST_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-ultimate
+          DEVCELL_USER_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-ultimate
+          DEVCELL_TEST_BASE_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-base
           DEVCELL_TEST_PROJECT_DIR: ${{ runner.temp }}/devcell-test
           MCP_SECRET_TEST_PASSWORD: fake-secret-ci-value
           MCP_SECRET_GITHUB_TOKEN: fake-token-ci-value
@@ -197,15 +227,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create GHCR manifests
+      - name: Create GHCR manifests (per stack + ultimate as canonical)
         run: |
           R=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}
+          # Per-stack multi-arch manifests
           docker buildx imagetools create \
-            -t "${R}:dev" \
-            -t "${R}:latest" \
+            -t "${R}:v0.0.0-base" \
+            "${R}:v0.0.0-amd64-base" \
+            "${R}:v0.0.0-arm64-base"
+          docker buildx imagetools create \
+            -t "${R}:v0.0.0-ultimate" \
             -t "${R}:v0.0.0" \
-            "${R}:v0.0.0-amd64" \
-            "${R}:v0.0.0-arm64"
+            -t "${R}:latest" \
+            -t "${R}:dev" \
+            "${R}:v0.0.0-amd64-ultimate" \
+            "${R}:v0.0.0-arm64-ultimate"
 
   cell-build:
     name: Cell CLI Dev Build
