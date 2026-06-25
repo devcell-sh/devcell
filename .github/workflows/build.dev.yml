@@ -217,10 +217,16 @@ jobs:
           HASH=${{ hashFiles('nixhome/**') }}
           EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}"
           LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest"
-          # Stream tar (gzipped) from the volume → crane → registry as a
-          # single OCI layer atop a busybox base. crane uploads the layer
+          # Stream tar (UNCOMPRESSED) from the volume → crane → registry as
+          # a single OCI layer atop a busybox base. crane uploads the layer
           # blob in chunks while tar is still emitting bytes, so peak
           # disk use stays near-zero.
+          # CRITICAL: emit raw tar (`-cf`, not `-czf`). crane's `--new_layer`
+          # treats stdin as an uncompressed tarball and gzips it itself when
+          # storing as an OCI `tar+gzip` layer. Pre-gzipping here would
+          # double-compress: stored blob = gzip(gzip(tar)), so the pull
+          # side's `crane blob | gunzip | tar -x` would still have a
+          # gzipped stream feeding into tar → "invalid tar magic".
           # `-C / nix` (instead of `-C /nix .` + --transform) produces
           # archive paths with the `nix/` prefix natively, so the layer's
           # files land at /nix/* inside the cache image (matched by
@@ -231,7 +237,7 @@ jobs:
           # nix-daemon socket so tar doesn't emit a "socket ignored"
           # warning that could trip stricter tar implementations.
           docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix:ro alpine \
-            tar -czf - \
+            tar -cf - \
               --exclude='nix/var/nix/daemon-socket' \
               -C / nix \
             | crane append \
