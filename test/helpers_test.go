@@ -268,10 +268,10 @@ var (
 )
 
 // Local tag conventions (CELL-108):
-//   - `task image:impure:build:ultimate` → ghcr.io/dimmkirr/devcell:ultimate-local
+//   - `task image:impure:build:ultimate` → ghcr.io/devcell-sh/devcell:ultimate-local
 //   - `task image:pure:build:ultimate`   → devcell-user:ultimate-pure
 const (
-	localImpureUltimateTag = "ghcr.io/dimmkirr/devcell:ultimate-local"
+	localImpureUltimateTag = "ghcr.io/devcell-sh/devcell:ultimate-local"
 	localPureUltimateTag   = "devcell-user:ultimate-pure"
 	localThinUltimateTag   = "devcell-user:ultimate-thin"
 	defaultThinVolumeName  = "devcell-nix-store"

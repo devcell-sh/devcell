@@ -30,7 +30,7 @@ On first run, `cell` creates `.devcell.toml` and `.devcell/` in your project dir
 
 ## Stacks
 
-Published to `public.ecr.aws/w1l3v2k8/devcell`. Multi-arch: linux/amd64, linux/arm64. Modules 2.0 introduces a `dev` seed stack and reshapes `ultimate` to enable every catalog module (see [MIGRATION.md](./MIGRATION.md)). Legacy stacks (go, node, python, fullstack, electronics) still build.
+Published to `ghcr.io/devcell-sh/devcell`. Multi-arch: linux/amd64, linux/arm64. Modules 2.0 introduces a `dev` seed stack and reshapes `ultimate` to enable every catalog module (see [MIGRATION.md](./MIGRATION.md)). Legacy stacks (go, node, python, fullstack, electronics) still build.
 
 | Stack | What's inside |
 |---|---|

@@ -25,7 +25,7 @@ import (
 
 const (
 	// DefaultRegistry is the fallback registry prefix for devcell images.
-	DefaultRegistry = "public.ecr.aws/w1l3v2k8/devcell"
+	DefaultRegistry = "ghcr.io/devcell-sh/devcell"
 )
 
 // Registry is the active container registry. Set via cfg.ResolvedRegistry()

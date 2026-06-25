@@ -61,8 +61,8 @@ func TestVariant_ImageTagForVariant(t *testing.T) {
 		{
 			name: "impure: local ultimate-local tag present",
 			variant:    "impure",
-			existsTags: []string{"ghcr.io/dimmkirr/devcell:ultimate-local"},
-			wantTag:    "ghcr.io/dimmkirr/devcell:ultimate-local",
+			existsTags: []string{"ghcr.io/devcell-sh/devcell:ultimate-local"},
+			wantTag:    "ghcr.io/devcell-sh/devcell:ultimate-local",
 		},
 		{
 			name:    "impure: no env, no local — empty tag (caller falls back to scratch bake)",

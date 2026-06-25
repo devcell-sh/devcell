@@ -309,7 +309,7 @@ func TestContainerName_NoSpacesOrSlashes(t *testing.T) {
 
 func TestImage_Default(t *testing.T) {
 	c := config.Load("/cwd", env())
-	if c.Image != "ghcr.io/dimmkirr/devcell:v0.0.0-ultimate" {
+	if c.Image != "ghcr.io/devcell-sh/devcell:v0.0.0-ultimate" {
 		t.Errorf("unexpected default image: %q", c.Image)
 	}
 }

@@ -54,7 +54,7 @@ func Load(cwd string, getenv func(string) string) Config {
 		ConfigDir:     configDir,
 		BuildDir:      configDir,
 		ImageTag:      imageTag,
-		Image:         "ghcr.io/dimmkirr/devcell:" + imageTag,
+		Image:         "ghcr.io/devcell-sh/devcell:" + imageTag,
 		ContainerName: "cell-" + appName + "-run",
 		Hostname:      "cell-" + appName,
 		PortPrefix:    portPrefix,

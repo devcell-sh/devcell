@@ -26,8 +26,6 @@ permissions:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  NIX_CACHE_IMAGE: ${{ inputs.skip_nix_cache == true && 'public.ecr.aws/docker/library/debian:trixie-slim' || 'ghcr.io/dimmkirr/devcell:v0.0.0-ultimate' }}
-  ECR_REGISTRY: public.ecr.aws/w1l3v2k8/devcell
 
 jobs:
   secrets:
@@ -87,17 +85,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ECR_ROLE_ARN }}
-          aws-region: us-east-1
-
-      - name: Log in to ECR Public
-        uses: aws-actions/amazon-ecr-login@v2
-        with:
-          registry-type: public
-
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
@@ -139,12 +126,6 @@ jobs:
 
       - name: Push to GHCR
         run: docker push ${{ steps.build.outputs.tag }}
-
-      - name: Mirror to ECR Public
-        run: |
-          GHCR="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}"
-          ECR="${{ env.ECR_REGISTRY }}:v0.0.0-${{ matrix.arch }}"
-          docker buildx imagetools create -t "${ECR}" "${GHCR}"
 
   docker-test:
     name: Docker Test (${{ matrix.arch }})
@@ -207,17 +188,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ECR_ROLE_ARN }}
-          aws-region: us-east-1
-
-      - name: Log in to ECR Public
-        uses: aws-actions/amazon-ecr-login@v2
-        with:
-          registry-type: public
-
       - name: Create GHCR manifests
         run: |
           R=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}
@@ -227,16 +197,6 @@ jobs:
             -t "${R}:v0.0.0" \
             "${R}:v0.0.0-amd64" \
             "${R}:v0.0.0-arm64"
-
-      - name: Create ECR Public manifests
-        run: |
-          ECR=${{ env.ECR_REGISTRY }}
-          docker buildx imagetools create \
-            -t "${ECR}:dev" \
-            -t "${ECR}:latest" \
-            -t "${ECR}:v0.0.0" \
-            "${ECR}:v0.0.0-amd64" \
-            "${ECR}:v0.0.0-arm64"
 
   cell-build:
     name: Cell CLI Dev Build
@@ -388,4 +348,3 @@ jobs:
             echo "--- FAIL: unexpected version output ---"
             exit 1
           fi
-

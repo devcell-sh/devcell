@@ -12,7 +12,7 @@ import (
 
 // DefaultRegistry is the default container registry for devcell images.
 // Must match runner.DefaultRegistry.
-const DefaultRegistry = "public.ecr.aws/w1l3v2k8/devcell"
+const DefaultRegistry = "ghcr.io/devcell-sh/devcell"
 
 // CellSection holds [cell] config.
 type CellSection struct {

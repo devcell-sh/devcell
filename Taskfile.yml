@@ -263,7 +263,7 @@ tasks:
     silent: true
     vars:
       STACK:    '{{.STACK    | default "ultimate"}}'
-      REGISTRY: '{{.REGISTRY | default "ghcr.io/dimmkirr/devcell"}}'
+      REGISTRY: '{{.REGISTRY | default "ghcr.io/devcell-sh/devcell"}}'
       TAG:      '{{.TAG      | default (printf "v0.0.0-%s-pure" .STACK)}}'
       SUDO:     '{{.SUDO     | default ""}}'      # see image:pure:build:stack notes
       NIX:      '{{.NIX      | default "nix"}}'

@@ -624,7 +624,7 @@ func doScaffold(dir string, modelsSnippet string, nixhomePath string, force bool
 // cell init.
 //
 // Cache optimization: when the user picks a known stack, we try to use the
-// pre-built stack image (ghcr.io/dimmkirr/devcell:latest-<stack>) as the FROM
+// pre-built stack image (ghcr.io/devcell-sh/devcell:latest-<stack>) as the FROM
 // line. This lets Docker/nix reuse the existing /nix/store paths from that
 // image — only the delta is downloaded. If the pre-built image isn't available
 // (not yet pushed, network error), we fall back to the core image.

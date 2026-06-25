@@ -17,7 +17,7 @@
 #   REGISTRY=myregistry.io docker buildx bake
 
 variable "REGISTRY" {
-  default = "ghcr.io/dimmkirr/devcell"
+  default = "ghcr.io/devcell-sh/devcell"
 }
 
 variable "VERSION" {
@@ -225,10 +225,10 @@ group "release" {
   targets = ["core", "dev", "ultimate"]
 }
 
-# local-core: core image tagged for local scaffold Dockerfile use (FROM ghcr.io/dimmkirr/devcell:core-local)
+# local-core: core image tagged for local scaffold Dockerfile use (FROM ghcr.io/devcell-sh/devcell:core-local)
 target "local-core" {
   inherits   = ["core"]
-  tags       = ["ghcr.io/dimmkirr/devcell:core-local"]
+  tags       = ["ghcr.io/devcell-sh/devcell:core-local"]
   platforms  = []
   pull       = false
   cache-from = []
@@ -240,7 +240,7 @@ target "local-core" {
 # with NIX_CACHE_IMAGE=public.ecr.aws/docker/library/debian:trixie-slim for no-cache local builds).
 target "local-ultimate" {
   inherits   = ["ultimate"]
-  tags       = ["ghcr.io/dimmkirr/devcell:ultimate-local"]
+  tags       = ["ghcr.io/devcell-sh/devcell:ultimate-local"]
   platforms  = []
   pull       = false
   cache-from = []

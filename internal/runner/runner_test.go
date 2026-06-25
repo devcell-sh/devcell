@@ -769,9 +769,9 @@ func TestUserImageTag_PerSession_ExplicitBeatssTmux(t *testing.T) {
 // --- ParseImageMetadata ---
 
 func TestParseImageMetadata_ValidJSON(t *testing.T) {
-	input := `{"base_image":"ghcr.io/dimmkirr/devcell:v1.2.3-go","stack":"go","modules":["desktop"],"git_commit":"a3f2e1","build_date":"2026-03-26T10:15:30Z","packages":142}`
+	input := `{"base_image":"ghcr.io/devcell-sh/devcell:v1.2.3-go","stack":"go","modules":["desktop"],"git_commit":"a3f2e1","build_date":"2026-03-26T10:15:30Z","packages":142}`
 	m := runner.ParseImageMetadata([]byte(input))
-	if m.BaseImage != "ghcr.io/dimmkirr/devcell:v1.2.3-go" {
+	if m.BaseImage != "ghcr.io/devcell-sh/devcell:v1.2.3-go" {
 		t.Errorf("base_image: want v1.2.3-go, got %q", m.BaseImage)
 	}
 	if m.Stack != "go" {
@@ -908,15 +908,15 @@ func TestImageVersions_Format(t *testing.T) {
 func TestStackImageTagImpure_GoStack(t *testing.T) {
 	got := runner.StackImageTagImpure("go")
 	// version.Version is v0.0.0 in tests → v0.0.0-go-impure
-	if got != "public.ecr.aws/w1l3v2k8/devcell:v0.0.0-go-impure" {
-		t.Errorf("want public.ecr.aws/w1l3v2k8/devcell:v0.0.0-go-impure, got %q", got)
+	if got != "ghcr.io/devcell-sh/devcell:v0.0.0-go-impure" {
+		t.Errorf("want ghcr.io/devcell-sh/devcell:v0.0.0-go-impure, got %q", got)
 	}
 }
 
 func TestStackImageTagImpure_UltimateStack(t *testing.T) {
 	got := runner.StackImageTagImpure("ultimate")
-	if got != "public.ecr.aws/w1l3v2k8/devcell:v0.0.0-ultimate-impure" {
-		t.Errorf("want public.ecr.aws/w1l3v2k8/devcell:v0.0.0-ultimate-impure, got %q", got)
+	if got != "ghcr.io/devcell-sh/devcell:v0.0.0-ultimate-impure" {
+		t.Errorf("want ghcr.io/devcell-sh/devcell:v0.0.0-ultimate-impure, got %q", got)
 	}
 }
 
@@ -968,8 +968,8 @@ func TestArgv_AwsReadOnlyFalse(t *testing.T) {
 func TestBaseImageTag_DefaultIsVersioned(t *testing.T) {
 	t.Setenv("DEVCELL_BASE_IMAGE", "")
 	got := runner.BaseImageTag()
-	if got != "public.ecr.aws/w1l3v2k8/devcell:v0.0.0-core" {
-		t.Errorf("want public.ecr.aws/w1l3v2k8/devcell:v0.0.0-core, got %q", got)
+	if got != "ghcr.io/devcell-sh/devcell:v0.0.0-core" {
+		t.Errorf("want ghcr.io/devcell-sh/devcell:v0.0.0-core, got %q", got)
 	}
 }
 

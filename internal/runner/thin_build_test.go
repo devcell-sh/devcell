@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	testCoreImage  = "public.ecr.aws/test/devcell:v0.0.0-core"
+	testCoreImage  = "ghcr.io/test/devcell:v0.0.0-core"
 	testContainer  = "devcell-thin-builder"
 	testVolume     = "devcell-nix-store"
 	testNixhome    = "/home/bob/nixhome"

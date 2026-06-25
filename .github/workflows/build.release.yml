@@ -18,7 +18,6 @@ permissions:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  ECR_REGISTRY: public.ecr.aws/w1l3v2k8/devcell
 
 jobs:
   docker-build:
@@ -64,17 +63,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ECR_ROLE_ARN }}
-          aws-region: us-east-1
-
-      - name: Log in to ECR Public
-        uses: aws-actions/amazon-ecr-login@v2
-        with:
-          registry-type: public
-
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
@@ -114,13 +102,6 @@ jobs:
       - name: Push to GHCR
         run: docker push ${{ steps.build.outputs.tag }}
 
-      - name: Push to ECR Public
-        run: |
-          GHCR=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}
-          ECR=${{ env.ECR_REGISTRY }}
-          V=${{ env.VERSION }}-${{ matrix.arch }}
-          docker buildx imagetools create -t "${ECR}:${V}" "${GHCR}:${V}"
-
   docker-manifest:
     name: Docker Manifests
     needs: docker-build
@@ -141,17 +122,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ECR_ROLE_ARN }}
-          aws-region: us-east-1
-
-      - name: Log in to ECR Public
-        uses: aws-actions/amazon-ecr-login@v2
-        with:
-          registry-type: public
-
       - name: Create and push GHCR multi-arch manifests
         run: |
           R=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}
@@ -161,16 +131,6 @@ jobs:
             -t "${R}:latest" \
             "${R}:${V}-amd64" \
             "${R}:${V}-arm64"
-
-      - name: Create and push ECR Public multi-arch manifests
-        run: |
-          ECR=${{ env.ECR_REGISTRY }}
-          V=${{ env.VERSION }}
-          docker buildx imagetools create \
-            -t "${ECR}:${V}" \
-            -t "${ECR}:latest" \
-            "${ECR}:${V}-amd64" \
-            "${ECR}:${V}-arm64"
 
       - name: Inspect manifests
         run: |

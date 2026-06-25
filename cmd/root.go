@@ -88,7 +88,7 @@ func init() {
 	rootCmd.PersistentFlags().Bool("macos", false, "use macOS VM via Vagrant (alias for --engine=vagrant)")
 	rootCmd.PersistentFlags().String("vagrant-provider", "utm", "Vagrant provider (e.g. utm)")
 	rootCmd.PersistentFlags().String("vagrant-box", "", "Vagrant box name override")
-	rootCmd.PersistentFlags().String("base-image", "", "core image for scaffold Dockerfile (default: ghcr.io/dimmkirr/devcell:core-local)")
+	rootCmd.PersistentFlags().String("base-image", "", "core image for scaffold Dockerfile (default: ghcr.io/devcell-sh/devcell:core-local)")
 	rootCmd.PersistentFlags().String("cell-name", "", "cell name for persistent home (~/.devcell/<name>)")
 	rootCmd.AddCommand(
 		claudeCmd,
