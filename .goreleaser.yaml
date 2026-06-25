@@ -66,7 +66,7 @@ checksum:
 homebrew_casks:
   - name: devcell
     repository:
-      owner: DimmKirr
+      owner: devcell-sh
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     directory: Casks
@@ -83,7 +83,7 @@ homebrew_casks:
 
   - name: "devcell@{{ .Version }}"
     repository:
-      owner: DimmKirr
+      owner: devcell-sh
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     directory: Casks

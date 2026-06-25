@@ -330,12 +330,16 @@ jobs:
 
       - name: Brew install devcell-dev
         run: |
-          brew tap DimmKirr/tap
-          brew install devcell-dev || true
+          brew tap devcell-sh/tap
+          # Homebrew 4.5+ refuses to load casks from third-party taps without
+          # explicit trust. `brew trust devcell-sh/tap` trusts every cask in
+          # the tap so non-interactive installs succeed.
+          brew trust devcell-sh/tap
+          brew install --cask devcell-dev || true
           # Verify binary was actually linked despite potential broken pipe
           if ! command -v cell &>/dev/null; then
             echo "Binary not found, retrying..."
-            brew install devcell-dev
+            brew install --cask devcell-dev
           fi
 
       - name: Verify version

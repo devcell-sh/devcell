@@ -9,7 +9,7 @@ DevCell is a containerized sandbox for AI coding agents. Run Claude Code, Codex,
 **Prerequisites:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) or Docker Engine.
 
 ```bash
-brew install DimmKirr/tap/devcell
+brew install devcell-sh/tap/devcell
 cd your-project
 cell claude
 ```
