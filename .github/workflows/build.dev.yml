@@ -278,24 +278,32 @@ jobs:
           # warning that could trip stricter tar implementations.
           # `pv -tabri 30 -f`: every 30s emit elapsed/avg-rate/cur-rate/
           # bytes-transferred to stderr (-f forces output to a non-TTY).
-          # `crane --v=4`: maximum verbosity — logs HTTP request/response
-          # cycles, chunk uploads, retries, and any transient 5xx. This is
-          # the data we need to know whether the publish is CPU-bound (slow
-          # gzip), I/O-bound (slow tar walk), or network-bound (GHCR
-          # backpressure / retry loop).
+          # `crane -v`: enable debug logs (boolean — crane uses cobra, not
+          # klog, so `--v=N` is not valid). Surfaces HTTP request/response
+          # cycles, chunk uploads, and retries — the data needed to tell
+          # CPU-bound (slow gzip) from I/O-bound (slow tar walk) from
+          # network-bound (GHCR backpressure / retry loop).
           echo "==== Publish start ($(date -u +%H:%M:%SZ)) ===="
           SECONDS=0
 
+          # crane append's `--new_tag` is `string` (singular), not `strings`
+          # — passing it twice silently overwrites, so only the LAST tag
+          # ever materialized. Push with $LATEST only, then alias $EXACT
+          # via `crane tag` (operates on the manifest already in the
+          # registry, no re-upload).
           docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix:ro alpine \
             tar -cf - \
               --exclude='nix/var/nix/daemon-socket' \
               -C / nix \
             | pv -tabri 30 -f -N tar-bytes \
-            | crane --v=4 append \
+            | crane -v append \
                 --base public.ecr.aws/docker/library/busybox:latest \
                 --new_layer - \
-                --new_tag "$EXACT" \
                 --new_tag "$LATEST"
+          # Add the hash-pinned tag pointing at the same manifest (cheap —
+          # no layer re-upload, just a manifest copy). Second arg is the
+          # tag suffix only per `crane tag` semantics.
+          crane tag "$LATEST" "nix-cache-${{ matrix.arch }}-${HASH}"
 
           echo
           echo "==== Publish end ($(date -u +%H:%M:%SZ)) — elapsed ${SECONDS}s ===="
