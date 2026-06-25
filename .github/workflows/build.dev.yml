@@ -103,19 +103,38 @@ jobs:
       - name: Build cell binary
         run: task cell:build
 
-      # Cache /nix volume across runs. Key includes nixhome hash so flake
-      # changes invalidate. Saves ~5-10 min cold-build time.
-      - name: Restore /nix volume cache
+      # Cache the nix-store as a tar dump (not the raw Docker volume directory).
+      # The volume directory under `/var/lib/docker/volumes/<name>/_data` is
+      # root-owned by the docker daemon — actions/cache runs as the `runner`
+      # user and silently produces an empty archive when it hits permission
+      # errors, so the old path-based cache step never actually saved
+      # anything (verified via the `actions/caches` API). Caching a tar file
+      # at a runner-owned path sidesteps the whole permission issue.
+      - name: Restore /nix volume tar (cache)
         if: inputs.skip_nix_cache != true
+        id: nix-cache
         uses: actions/cache@v4
         with:
-          path: /var/lib/docker/volumes/devcell-nix-store-${{ matrix.arch }}/_data
-          key: devcell-nix-store-${{ matrix.arch }}-${{ hashFiles('nixhome/**') }}
+          path: /tmp/devcell-cache/nix-store.tar
+          key: devcell-nix-store-tar-${{ matrix.arch }}-${{ hashFiles('nixhome/**') }}
           restore-keys: |
-            devcell-nix-store-${{ matrix.arch }}-
+            devcell-nix-store-tar-${{ matrix.arch }}-
+
+      # If the cache produced a tar, hydrate the named volume from it BEFORE
+      # `cell build --thin` runs — so the build is incremental against
+      # previously-realized nix derivations.
+      - name: Hydrate /nix volume from tar (if cache hit)
+        if: steps.nix-cache.outputs.cache-hit == 'true' || hashFiles('/tmp/devcell-cache/nix-store.tar') != ''
+        run: |
+          set -e
+          docker volume create devcell-nix-store-${{ matrix.arch }} >/dev/null
+          docker run --rm \
+            -v devcell-nix-store-${{ matrix.arch }}:/nix \
+            -v /tmp/devcell-cache:/cache:ro \
+            alpine sh -c 'cd /nix && tar -xf /cache/nix-store.tar && echo "hydrated $(du -sh /nix | cut -f1)"'
 
       # Build both stacks sequentially in the same job so the nix-store
-      # volume accumulates derivations from both — single cache save at job
+      # volume accumulates derivations from both — single tar dump at job
       # end carries everything needed by docker-test. `cell build --thin`
       # reuses store paths across the two invocations (nix is
       # content-addressed), so ultimate after base is incremental.
@@ -141,6 +160,43 @@ jobs:
         run: |
           docker push "$BASE_TAG"
           docker push "$ULT_TAG"
+
+      # Investigate-and-dump: print volume metadata to logs (host-side and
+      # container-side) and tar the volume's contents to a runner-owned
+      # path. The post-hook of `Restore /nix volume tar (cache)` above will
+      # archive this tar file at job end.
+      - name: Inspect + dump /nix volume to tar
+        run: |
+          set -x
+          docker volume ls --filter name=devcell-nix-store
+          docker volume inspect devcell-nix-store-${{ matrix.arch }} || true
+          # Host-side view of where Docker puts the volume (often
+          # /var/lib/docker/volumes/...; may differ on rootless or alt drivers).
+          # `sudo` because volume mountpoints are root-owned.
+          MP=$(docker volume inspect -f '{{ .Mountpoint }}' devcell-nix-store-${{ matrix.arch }})
+          echo "Mountpoint: $MP"
+          sudo du -sh "$MP" 2>&1 | head -5 || true
+          sudo ls -la "$MP" 2>&1 | head -10 || true
+          # Container-side: definitive view of what's actually on the volume,
+          # without sudo on the host.
+          docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix alpine sh -c '
+            echo "--- container-side /nix ---"
+            du -sh /nix
+            echo "--- top-level entries ---"
+            ls /nix | head -20
+            echo "--- /nix/store sample ---"
+            ls /nix/store 2>/dev/null | head -5 || echo "(no /nix/store)"
+          '
+          # Tar dump for caching. -ro mount so we never accidentally write
+          # back to the volume. Plain tar (no gzip) — actions/cache zstd
+          # compresses on its side and nix store has lots of incompressible
+          # content already.
+          mkdir -p /tmp/devcell-cache
+          docker run --rm \
+            -v devcell-nix-store-${{ matrix.arch }}:/nix:ro \
+            -v /tmp/devcell-cache:/out \
+            alpine tar -cf /out/nix-store.tar -C /nix .
+          ls -lh /tmp/devcell-cache/nix-store.tar
 
   docker-test:
     name: Docker Test (${{ matrix.arch }})
@@ -173,18 +229,43 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      # Restore the nix-store volume that docker-build populated. Tests that
+      # Restore the nix-store volume tar that docker-build saved. Tests that
       # invoke `cell shell` / `cell claude` will mount this volume into the
       # container (`devcell-nix-store:/nix`), so the home-manager activation
       # tree is already resolved — no lazy `cell build --thin` triggered at
       # test time, no minute-long timeouts.
-      - name: Restore /nix volume cache
+      - name: Restore /nix volume tar from cache
+        id: nix-cache
         uses: actions/cache/restore@v4
         with:
-          path: /var/lib/docker/volumes/devcell-nix-store-${{ matrix.arch }}/_data
-          key: devcell-nix-store-${{ matrix.arch }}-${{ hashFiles('nixhome/**') }}
+          path: /tmp/devcell-cache/nix-store.tar
+          key: devcell-nix-store-tar-${{ matrix.arch }}-${{ hashFiles('nixhome/**') }}
           restore-keys: |
-            devcell-nix-store-${{ matrix.arch }}-
+            devcell-nix-store-tar-${{ matrix.arch }}-
+
+      - name: Hydrate /nix volume from tar
+        if: steps.nix-cache.outputs.cache-hit == 'true' || hashFiles('/tmp/devcell-cache/nix-store.tar') != ''
+        run: |
+          set -e
+          ls -lh /tmp/devcell-cache/nix-store.tar
+          docker volume create devcell-nix-store-${{ matrix.arch }} >/dev/null
+          docker run --rm \
+            -v devcell-nix-store-${{ matrix.arch }}:/nix \
+            -v /tmp/devcell-cache:/cache:ro \
+            alpine sh -c 'cd /nix && tar -xf /cache/nix-store.tar && echo "hydrated $(du -sh /nix | cut -f1)"'
+          # Default volume name expected by `cell build --thin` and runtime
+          # callers when DEVCELL_NIX_VOLUME is not set. Tests don't set it,
+          # so alias the per-arch volume to the default name.
+          docker volume create devcell-nix-store >/dev/null
+          docker run --rm \
+            -v devcell-nix-store-${{ matrix.arch }}:/from:ro \
+            -v devcell-nix-store:/to \
+            alpine sh -c 'cd /from && tar -cf - . | (cd /to && tar -xf -) && echo "mirrored to devcell-nix-store: $(du -sh /to | cut -f1)"'
+
+      - name: Show volume status (debug)
+        run: |
+          docker volume ls --filter name=devcell-nix-store || true
+          docker run --rm -v devcell-nix-store:/nix alpine sh -c 'du -sh /nix; ls /nix/store 2>/dev/null | head -3 || echo "(no /nix/store)"'
 
       - name: Pull test images (base + ultimate)
         run: |
