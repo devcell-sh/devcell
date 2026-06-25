@@ -9,7 +9,7 @@ ARG NIX_CACHE_IMAGE=public.ecr.aws/docker/library/debian:trixie-slim
 # Stage: builder
 # Compile the cell CLI binary from repo source (CI context = repo root).
 ###############################################################################
-FROM public.ecr.aws/docker/library/golang:1.25-alpine AS builder
+FROM public.ecr.aws/docker/library/golang:1.26-alpine AS builder
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
