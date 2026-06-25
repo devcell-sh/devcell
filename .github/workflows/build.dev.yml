@@ -134,9 +134,22 @@ jobs:
           HASH=${{ hashFiles('nixhome/**') }}
           EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}"
           LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest"
+          # Pick a candidate, then verify its layer is non-trivial (>1 GB)
+          # to skip past poisoned caches from prior broken push attempts
+          # (a partial push can produce a valid-looking tag with an empty
+          # nix-store layer; without this guard, hydrate "succeeds" with
+          # zero bytes and the build silently starts from scratch + the
+          # poisoned cache propagates forever).
           IMG=""
           for c in "$EXACT" "$LATEST"; do
-            if crane manifest "$c" >/dev/null 2>&1; then IMG="$c"; break; fi
+            if ! crane manifest "$c" >/dev/null 2>&1; then continue; fi
+            SIZE=$(crane manifest "$c" | jq -r '.layers[-1].size // 0')
+            if [ "${SIZE:-0}" -lt 1000000000 ]; then
+              echo "$c exists but layer is only ${SIZE} bytes — ignoring (poisoned cache)"
+              continue
+            fi
+            IMG="$c"
+            break
           done
           if [ -z "$IMG" ]; then
             echo "cache MISS — starting from empty volume"
@@ -208,21 +221,36 @@ jobs:
           # single OCI layer atop a busybox base. crane uploads the layer
           # blob in chunks while tar is still emitting bytes, so peak
           # disk use stays near-zero.
-          # --exclude daemon-socket: Unix sockets can't be archived (tar
-          #   prints a warning + skips). Pre-excluding silences the noise.
-          # --transform: re-roots archive paths under `nix/` so they land
-          #   at /nix/* inside the cache image (matched by --strip-components=1
-          #   on the pull side).
+          # `-C / nix` (instead of `-C /nix .` + --transform) produces
+          # archive paths with the `nix/` prefix natively, so the layer's
+          # files land at /nix/* inside the cache image (matched by
+          # `--strip-components=1` on the pull side). We use this form
+          # because BusyBox tar (the default in alpine) doesn't implement
+          # GNU tar's --transform option.
+          # --exclude: Unix sockets can't be archived — pre-exclude the
+          # nix-daemon socket so tar doesn't emit a "socket ignored"
+          # warning that could trip stricter tar implementations.
           docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix:ro alpine \
             tar -czf - \
-              --exclude='./var/nix/daemon-socket' \
-              --transform 's,^\./,nix/,' \
-              -C /nix . \
+              --exclude='nix/var/nix/daemon-socket' \
+              -C / nix \
             | crane append \
                 --base public.ecr.aws/docker/library/busybox:latest \
                 --new_layer - \
                 --new_tag "$EXACT" \
                 --new_tag "$LATEST"
+          # Sanity: confirm the layer we pushed is non-trivial. The earlier
+          # broken push (tar errored out, crane still published the busybox
+          # base + tiny manifest, exit code 1 but tag was set) poisoned the
+          # latest tag. Failing the step early on a too-small layer prevents
+          # a similar regression.
+          MANIFEST=$(crane manifest "$LATEST" 2>/dev/null || echo '{}')
+          LAYER_SIZE=$(echo "$MANIFEST" | jq -r '.layers[-1].size // 0')
+          echo "published layer size: ${LAYER_SIZE} bytes"
+          if [ "${LAYER_SIZE:-0}" -lt 1000000000 ]; then
+            echo "FAIL: cache layer is <1 GB — push produced a corrupt/empty manifest"
+            exit 1
+          fi
           echo "pushed nix-cache images:"
           echo "  $EXACT"
           echo "  $LATEST"
@@ -283,18 +311,27 @@ jobs:
           HASH=${{ hashFiles('nixhome/**') }}
           EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}"
           LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest"
+          # Pick first candidate whose nix-store layer is non-trivial (>1 GB).
+          # Filters out poisoned caches from partial pushes (a partial push
+          # can leave a valid-looking tag pointing at an empty layer; without
+          # this guard, hydrate "succeeds" with zero bytes and tests fall
+          # through to lazy-build at 2-minute timeout).
           IMG=""
           for c in "$EXACT" "$LATEST"; do
-            if crane manifest "$c" >/dev/null 2>&1; then IMG="$c"; break; fi
+            if ! crane manifest "$c" >/dev/null 2>&1; then continue; fi
+            SIZE=$(crane manifest "$c" | jq -r '.layers[-1].size // 0')
+            if [ "${SIZE:-0}" -lt 1000000000 ]; then
+              echo "$c exists but layer is only ${SIZE} bytes — ignoring (poisoned cache)"
+              continue
+            fi
+            IMG="$c"
+            break
           done
           if [ -z "$IMG" ]; then
             echo "cache MISS — tests will run on empty /nix volume (lazy build during cell shell)"
             exit 0
           fi
           echo "cache HIT: $IMG"
-          # The appended nix-store layer is the LAST one in the manifest
-          # (atop busybox). Pull just that blob → gunzip → tar -x into the
-          # volume via a helper container.
           LAYER_DIGEST=$(crane manifest "$IMG" | jq -r '.layers[-1].digest')
           docker volume rm devcell-nix-store-${{ matrix.arch }} 2>/dev/null || true
           docker volume create devcell-nix-store-${{ matrix.arch }} >/dev/null
