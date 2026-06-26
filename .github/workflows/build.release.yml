@@ -80,14 +80,64 @@ jobs:
       - name: Build cell binary
         run: task cell:build
 
-      # Cache /nix volume across runs (release builds also benefit).
-      - name: Restore /nix volume cache
-        uses: actions/cache@v4
-        with:
-          path: /var/lib/docker/volumes/devcell-nix-store-${{ matrix.arch }}/_data
-          key: devcell-nix-store-${{ matrix.arch }}-${{ hashFiles('nixhome/**') }}
-          restore-keys: |
-            devcell-nix-store-${{ matrix.arch }}-
+      # crane is used here only for the manifest size-probe guard below
+      # — `cell nix-store pull` does the actual streaming hydrate. Can
+      # be dropped once `cell nix-store inspect` lands.
+      - name: Install crane
+        run: |
+          set -eo pipefail
+          VER=v0.20.6
+          case "${{ matrix.arch }}" in
+            amd64) ASSET=x86_64 ;;
+            arm64) ASSET=arm64 ;;
+            *) echo "unsupported arch ${{ matrix.arch }}"; exit 1 ;;
+          esac
+          curl -fsSL "https://github.com/google/go-containerregistry/releases/download/${VER}/go-containerregistry_Linux_${ASSET}.tar.gz" \
+            | sudo tar -xzC /usr/local/bin crane
+          crane version
+
+      # Hydrate /nix volume from the GHCR cache image populated by
+      # build.dev.yml (same `nix-cache-${arch}-*` tag scheme). Release
+      # builds reuse the same nixhome closure as dev builds for any
+      # given `hashFiles('nixhome/**')`, so the cache is interchangeable.
+      # Replaces the broken `actions/cache@v4` on the volume `_data`
+      # path — the dir is root-owned, runner is unprivileged, the cache
+      # action silently saved an empty archive (CELL-292 v1 failure).
+      - name: Stream-hydrate /nix volume from prior GHCR cache (if available)
+        run: |
+          set -eo pipefail
+          HASH=${{ hashFiles('nixhome/**') }}
+          EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}"
+          LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest"
+          IMG=""
+          for c in "$EXACT" "$LATEST"; do
+            if ! crane manifest "$c" >/dev/null 2>&1; then continue; fi
+            SIZE=$(crane manifest "$c" | jq -r '.layers[-1].size // 0')
+            if [ "${SIZE:-0}" -lt 1000000000 ]; then
+              echo "$c exists but layer is only ${SIZE} bytes — ignoring (poisoned cache)"
+              continue
+            fi
+            IMG="$c"
+            break
+          done
+          if [ -z "$IMG" ]; then
+            echo "cache MISS — starting from empty volume"
+            exit 0
+          fi
+          echo "cache HIT: $IMG"
+          # Graceful fallback for legacy cache encoding (see dev workflow).
+          docker volume rm devcell-nix-store-${{ matrix.arch }} 2>/dev/null || true
+          docker volume create devcell-nix-store-${{ matrix.arch }} >/dev/null
+          if ./bin/cell nix-store pull \
+               --image "$IMG" \
+               --volume "devcell-nix-store-${{ matrix.arch }}"; then
+            docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix:ro alpine \
+              sh -c 'echo "hydrated $(du -sh /nix | cut -f1)"'
+          else
+            echo "WARN: cache pull failed — falling back to MISS, rebuilding fresh"
+            docker volume rm devcell-nix-store-${{ matrix.arch }} 2>/dev/null || true
+            docker volume create devcell-nix-store-${{ matrix.arch }} >/dev/null
+          fi
 
       - name: Build thin image
         id: build
@@ -101,6 +151,23 @@ jobs:
 
       - name: Push to GHCR
         run: docker push ${{ steps.build.outputs.tag }}
+
+      # Publish the populated /nix volume back to the GHCR cache so
+      # subsequent dev + release builds can reuse it.
+      - name: Stream-publish /nix volume to GHCR cache image
+        timeout-minutes: 80
+        run: |
+          set -eo pipefail
+          HASH=${{ hashFiles('nixhome/**') }}
+          LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest"
+          docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix:ro alpine \
+            tar -cf - \
+              --exclude='nix/var/nix/daemon-socket' \
+              -C / nix \
+            | ./bin/cell nix-store push \
+                --base public.ecr.aws/docker/library/busybox:latest \
+                --image "$LATEST"
+          crane tag "$LATEST" "nix-cache-${{ matrix.arch }}-${HASH}"
 
   docker-manifest:
     name: Docker Manifests

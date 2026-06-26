@@ -135,8 +135,8 @@ jobs:
         run: |
           set -eo pipefail
           HASH=${{ hashFiles('nixhome/**') }}
-          EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache2-${{ matrix.arch }}-${HASH}"
-          LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache2-${{ matrix.arch }}-latest"
+          EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}"
+          LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest"
           # Pick a candidate, then verify its layer is non-trivial (>1 GB)
           # to skip past poisoned caches from prior broken push attempts
           # (a partial push can produce a valid-looking tag with an empty
@@ -164,13 +164,25 @@ jobs:
           # Docker volume — internal gunzip + tar -x, no separate
           # shell pipe. Replaces the prior
           # `crane blob | gunzip | docker run alpine tar -x` chain.
+          # Graceful fallback: an existing cache image may have been
+          # pushed by an older workflow with different encoding (e.g.
+          # double-gzipped from the `-czf | crane append --new_layer -`
+          # era). If pull fails, treat as MISS — build will rebuild
+          # from scratch and the next publish overwrites with the new
+          # single-gzipped format.
           docker volume rm devcell-nix-store-${{ matrix.arch }} 2>/dev/null || true
           docker volume create devcell-nix-store-${{ matrix.arch }} >/dev/null
-          ./bin/cell nix-store pull \
-            --image "$IMG" \
-            --volume "devcell-nix-store-${{ matrix.arch }}"
-          docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix:ro alpine \
-            sh -c 'echo "hydrated $(du -sh /nix | cut -f1)"'
+          if ./bin/cell nix-store pull \
+               --image "$IMG" \
+               --volume "devcell-nix-store-${{ matrix.arch }}"; then
+            docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix:ro alpine \
+              sh -c 'echo "hydrated $(du -sh /nix | cut -f1)"'
+          else
+            echo "WARN: cache pull failed (likely encoding mismatch with legacy cache image)"
+            echo "      falling back to MISS — will rebuild and publish a fresh cache"
+            docker volume rm devcell-nix-store-${{ matrix.arch }} 2>/dev/null || true
+            docker volume create devcell-nix-store-${{ matrix.arch }} >/dev/null
+          fi
 
       # Build both stacks sequentially in the same job so the nix-store
       # volume accumulates derivations from both — single tar dump at job
@@ -241,8 +253,8 @@ jobs:
           echo
 
           HASH=${{ hashFiles('nixhome/**') }}
-          EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache2-${{ matrix.arch }}-${HASH}"
-          LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache2-${{ matrix.arch }}-latest"
+          EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}"
+          LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest"
 
           # Background heartbeat: every 30s print disk free + load avg so
           # we can correlate stalls with disk fill, OOM, or network
@@ -291,7 +303,7 @@ jobs:
           # Alias to the hash-pinned tag via crane (manifest-only,
           # no re-upload). Could be replaced with a `cell nix-store
           # tag` subcommand in a follow-up.
-          crane tag "$LATEST" "nix-cache2-${{ matrix.arch }}-${HASH}"
+          crane tag "$LATEST" "nix-cache-${{ matrix.arch }}-${HASH}"
 
           echo
           echo "==== Publish end ($(date -u +%H:%M:%SZ)) — elapsed ${SECONDS}s ===="
@@ -377,8 +389,8 @@ jobs:
         run: |
           set -eo pipefail
           HASH=${{ hashFiles('nixhome/**') }}
-          EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache2-${{ matrix.arch }}-${HASH}"
-          LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache2-${{ matrix.arch }}-latest"
+          EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}"
+          LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest"
           # Pick first candidate whose nix-store layer is non-trivial (>1 GB).
           # Filters out poisoned caches from partial pushes (a partial push
           # can leave a valid-looking tag pointing at an empty layer; without
@@ -400,11 +412,19 @@ jobs:
             exit 0
           fi
           echo "cache HIT: $IMG"
+          # Graceful fallback: legacy cache images may have different
+          # encoding (see warm-start step in docker-build job for
+          # details). If pull fails, tests run on an empty volume
+          # (lazy-build during cell shell) instead of failing the step.
           docker volume rm devcell-nix-store-${{ matrix.arch }} 2>/dev/null || true
           docker volume create devcell-nix-store-${{ matrix.arch }} >/dev/null
-          ./bin/cell nix-store pull \
-            --image "$IMG" \
-            --volume "devcell-nix-store-${{ matrix.arch }}"
+          if ! ./bin/cell nix-store pull \
+                 --image "$IMG" \
+                 --volume "devcell-nix-store-${{ matrix.arch }}"; then
+            echo "WARN: cache pull failed (encoding mismatch?) — tests will run on empty /nix"
+            docker volume rm devcell-nix-store-${{ matrix.arch }} 2>/dev/null || true
+            docker volume create devcell-nix-store-${{ matrix.arch }} >/dev/null
+          fi
 
       - name: Show volume status (debug)
         run: |
