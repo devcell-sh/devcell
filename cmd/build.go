@@ -423,7 +423,12 @@ func runBuildThin(c config.Config, stackOverride, imageOverride string, forceRec
 	// container's metadata.json reports them truthfully. The HM target stays
 	// "local" — that's a flake-output naming detail, not user content.
 	modulesCSV := strings.Join(cellCfg.Cell.Modules, ",")
-	argv := runner.ThinBuildArgvFull(coreImage, containerName, volumeName, nixhomeRef, tag, homeManagerTarget, runner.DetectArch(), stack, modulesCSV)
+	// CELL-293: bake the host's already-built `cell` binary into every
+	// produced devcell image. Resolved to an absolute path so the runner's
+	// docker bind mount succeeds. Empty (skip COPY) when the binary can't
+	// be located — local dev `go run` flow without a built binary.
+	cellBinaryPath := resolveCellBinaryPath()
+	argv := runner.ThinBuildArgvFull(coreImage, containerName, volumeName, nixhomeRef, tag, homeManagerTarget, runner.DetectArch(), stack, modulesCSV, cellBinaryPath)
 
 	var buf bytes.Buffer
 	var out io.Writer = &buf
@@ -448,6 +453,28 @@ func runBuildThin(c config.Config, stackOverride, imageOverride string, forceRec
 	}
 	sp.Success(successLabel)
 	return nil
+}
+
+// resolveCellBinaryPath returns the absolute filesystem path of the running
+// cell binary so the thin builder can bake it into every produced image.
+// Tries os.Executable() first (works for installed binaries); falls back to
+// `bin/cell` in cwd (CI's `task cell:build` output). Returns "" when no
+// binary can be located — runner skips the COPY in that case.
+func resolveCellBinaryPath() string {
+	if exe, err := os.Executable(); err == nil {
+		if abs, err := filepath.Abs(exe); err == nil {
+			if _, err := os.Stat(abs); err == nil {
+				return abs
+			}
+		}
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		candidate := filepath.Join(cwd, "bin", "cell")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return ""
 }
 
 // printBuildDebugSummary prints the post-build debug block: image ID +

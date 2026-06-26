@@ -57,33 +57,17 @@ func TestThinBuildArgv_MountsDockerSocket(t *testing.T) {
 	}
 }
 
-func TestThinBuildArgv_MountsRepoRootForFlakeResolution(t *testing.T) {
-	// CELL-293: nixhome's flake declares `devcell.url = "path:.."` to pull
-	// the cell package from the repo-root flake. Mounting only nixhome at
-	// /opt/nixhome breaks `path:..` resolution (parent has no flake.nix).
-	// Fix: mount the parent of nixhomeRef at /opt/devcell-root, so nixhome
-	// lives at /opt/devcell-root/nixhome and `..` lands on the repo root.
+func TestThinBuildArgv_MountsNixhome(t *testing.T) {
 	argv := ThinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
 	found := false
 	for i, a := range argv {
-		if a == "-v" && i+1 < len(argv) && argv[i+1] == "/home/bob:/opt/devcell-root" {
+		if a == "-v" && i+1 < len(argv) && argv[i+1] == "/home/bob/nixhome:/opt/nixhome" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("expected repo-root mount '/home/bob:/opt/devcell-root' in argv: %v", argv)
-	}
-}
-
-func TestThinBuildArgv_FlakeTargetUsesRepoRoot(t *testing.T) {
-	// Companion to MountsRepoRootForFlakeResolution: home-manager must
-	// switch against /opt/devcell-root/nixhome (not /opt/nixhome) so the
-	// flake input `path:..` resolves to the repo root inside the container.
-	argv := ThinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
-	script := argv[len(argv)-1]
-	if !strings.Contains(script, "home-manager switch --flake /opt/devcell-root?dir=nixhome#") {
-		t.Errorf("expected home-manager switch against /opt/devcell-root?dir=nixhome; got script:\n%s", script)
+		t.Errorf("expected nixhome mount in argv: %v", argv)
 	}
 }
 
@@ -111,6 +95,52 @@ func TestThinBuildArgv_InnerDockerfileFromNixCore(t *testing.T) {
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "FROM nixos/nix:latest") {
 		t.Errorf("inner Dockerfile should FROM nixos/nix:latest, got script")
+	}
+}
+
+// CELL-293: cell binary baked into every image via Dockerfile COPY
+// of the goreleaser-built host binary. Replaces the failed nix-derivation
+// approach (`devcell.url = "path:.."` in nixhome/flake.nix) which created
+// an unrecoverable circular flake import in the overlay-based thin build.
+// When cellBinaryPath is set, the runner:
+//   - bind-mounts the host binary into the builder
+//   - script copies it into the inner docker build context
+//   - generated Dockerfile COPYs it into /opt/devcell/.local/bin/cell
+
+func TestThinBuildArgvFull_MountsCellBinaryWhenProvided(t *testing.T) {
+	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", "base", "", "/home/bob/bin/cell")
+	want := "/home/bob/bin/cell:/opt/cell-host-bin:ro"
+	for i, a := range argv {
+		if a == "-v" && i+1 < len(argv) && argv[i+1] == want {
+			return
+		}
+	}
+	t.Errorf("expected host-cell mount '-v %s' in argv: %v", want, argv)
+}
+
+func TestThinBuildArgvFull_GeneratedDockerfileCopiesCell(t *testing.T) {
+	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", "base", "", "/home/bob/bin/cell")
+	script := argv[len(argv)-1]
+	if !strings.Contains(script, "cp /opt/cell-host-bin \"$CTX/cell\"") {
+		t.Errorf("script must stage cell binary into $CTX/cell, got script without that cp")
+	}
+	if !strings.Contains(script, "COPY cell /opt/devcell/.local/bin/cell") {
+		t.Errorf("generated Dockerfile must COPY cell into /opt/devcell/.local/bin/cell")
+	}
+}
+
+func TestThinBuildArgvFull_NoCellBinaryWhenEmpty(t *testing.T) {
+	// Back-compat: when no cell binary path is supplied, runner must NOT
+	// add the mount or the COPY (older callers / ThinBuildArgv shim).
+	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", "base", "", "")
+	for i, a := range argv {
+		if a == "-v" && i+1 < len(argv) && strings.Contains(argv[i+1], "cell-host-bin") {
+			t.Errorf("must NOT mount cell binary when path is empty: %v", argv)
+		}
+	}
+	script := argv[len(argv)-1]
+	if strings.Contains(script, "COPY cell") {
+		t.Errorf("must NOT include COPY cell in Dockerfile when path is empty")
 	}
 }
 
@@ -451,18 +481,16 @@ func TestThinBuildArgv_RemoteRefUsedInHomeManagerSwitch(t *testing.T) {
 }
 
 func TestThinBuildArgv_LocalPathStillMounts(t *testing.T) {
-	// CELL-293: mount is now the parent of nixhomeRef so that nixhome's
-	// flake input `devcell = path:..` resolves to the sibling flake.nix.
 	argv := ThinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
 	found := false
 	for i, a := range argv {
-		if a == "-v" && i+1 < len(argv) && argv[i+1] == "/home/bob:/opt/devcell-root" {
+		if a == "-v" && i+1 < len(argv) && argv[i+1] == testNixhome+":/opt/nixhome" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("local path must mount repo root -v /home/bob:/opt/devcell-root, got: %v", argv)
+		t.Errorf("local path must still mount -v %s:/opt/nixhome", testNixhome)
 	}
 }
 
@@ -472,18 +500,18 @@ func TestThinBuildArgv_LocalPathStillMounts(t *testing.T) {
 // target name ("local"), which is an implementation detail.
 
 func TestThinBuildArgv_SetsDevcellStackFromCaller(t *testing.T) {
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", "ultimate", "")
+	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", "ultimate", "", "")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "export DEVCELL_STACK=ultimate") {
 		t.Errorf("script must set DEVCELL_STACK to the user-facing stack name (not the HM target), got script without that export")
 	}
-	if !strings.Contains(script, "home-manager switch --flake /opt/devcell-root?dir=nixhome#devcell-local") {
+	if !strings.Contains(script, "home-manager switch --flake /opt/nixhome#devcell-local") {
 		t.Errorf("HM target must stay separate from DEVCELL_STACK — flake URL should reference devcell-local")
 	}
 }
 
 func TestThinBuildArgv_SetsDevcellModulesFromCaller(t *testing.T) {
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", "", "foo,bar")
+	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", "", "foo,bar", "")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "export DEVCELL_MODULES=foo,bar") {
 		t.Error("script must set DEVCELL_MODULES to the user-facing module CSV")
@@ -491,7 +519,7 @@ func TestThinBuildArgv_SetsDevcellModulesFromCaller(t *testing.T) {
 }
 
 func TestThinBuildArgv_BakesStackAndModulesEnvIntoImage(t *testing.T) {
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", "ultimate", "foo,bar")
+	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", "ultimate", "foo,bar", "")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "ENV DEVCELL_STACK=ultimate") {
 		t.Error("inner Dockerfile must bake ENV DEVCELL_STACK so the running container's writeMetadata sees it")
@@ -504,7 +532,7 @@ func TestThinBuildArgv_BakesStackAndModulesEnvIntoImage(t *testing.T) {
 func TestThinBuildArgv_EmptyStackAndModulesIsExplicit(t *testing.T) {
 	// Empty values still get exported — the entrypoint's writeMetadata
 	// distinguishes empty (modules: []) from missing (skip metadata write).
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", "", "")
+	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", "", "", "")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "export DEVCELL_STACK=") {
 		t.Error("empty stack must still appear as `export DEVCELL_STACK=` so writeMetadata fires")

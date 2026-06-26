@@ -3,7 +3,6 @@ package runner
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -48,29 +47,39 @@ func ThinBuildArgv(coreImage, containerName, volumeName, nixhomeRef, thinTag, st
 	// target as `stackName`, which conflated it with the user-facing stack
 	// name. New callers should use ThinBuildArgvFull and thread `stack` +
 	// `modules` separately.
-	return ThinBuildArgvFull(coreImage, containerName, volumeName, nixhomeRef, thinTag, stackName, arch, "", "")
+	return ThinBuildArgvFull(coreImage, containerName, volumeName, nixhomeRef, thinTag, stackName, arch, "", "", "")
 }
 
 // ThinBuildArgvFull is the canonical builder argv. hmTarget is the
 // home-manager flake target name (typically "local" for thin); stack is the
 // user-facing stack name written to DEVCELL_STACK/metadata.json; modules is a
 // CSV of module names written to DEVCELL_MODULES (CELL-41).
-func ThinBuildArgvFull(coreImage, containerName, volumeName, nixhomeRef, thinTag, hmTarget, arch, stack, modules string) []string {
+//
+// cellBinaryPath (CELL-293): when non-empty, the host filesystem path of the
+// goreleaser-built `cell` binary. The runner bind-mounts it read-only into
+// the thin-builder, stages it into the inner docker build context, and the
+// generated Dockerfile COPYs it into /opt/devcell/.local/bin/cell so every
+// produced devcell image ships the CLI without a separate distribution step.
+func ThinBuildArgvFull(coreImage, containerName, volumeName, nixhomeRef, thinTag, hmTarget, arch, stack, modules, cellBinaryPath string) []string {
 	archSuffix := ""
 	if arch == "aarch64" {
 		archSuffix = "-aarch64"
 	}
 	remote := isFlakeRef(nixhomeRef)
-	// CELL-293: nixhome's flake declares `devcell.url = "path:.."` to pull
-	// the cell package from the repo-root flake. nix copies the flake
-	// source into the store, so `path:..` resolves to the store path's
-	// parent — NOT the original disk location. The fix is to target the
-	// PARENT directory as the flake (so the parent's flake.nix becomes the
-	// store root) and select the nixhome subdir via `?dir=nixhome`. That
-	// way `path:..` lands inside the same store source, on the parent.
-	flakeArg := "/opt/devcell-root?dir=nixhome"
+	flakeArg := "/opt/nixhome"
 	if remote {
 		flakeArg = nixhomeRef
+	}
+
+	// CELL-293: optional cell-binary plumbing. When cellBinaryPath is set,
+	// the runner mounts the host's prebuilt `cell` into the thin-builder,
+	// the script stages it into the inner docker build context, and the
+	// generated Dockerfile COPYs it into /opt/devcell/.local/bin/cell.
+	cellStageCmd := ""
+	cellCopyLine := ""
+	if cellBinaryPath != "" {
+		cellStageCmd = `cp /opt/cell-host-bin "$CTX/cell" && chmod +x "$CTX/cell"`
+		cellCopyLine = "COPY cell /opt/devcell/.local/bin/cell\nRUN chmod +x /opt/devcell/.local/bin/cell\n"
 	}
 
 	script := fmt.Sprintf(`set -e
@@ -245,7 +254,7 @@ cp -a /etc/codex/ "$CTX/etc_codex/" 2>/dev/null || mkdir -p "$CTX/etc_codex/"
 cp -a /etc/opencode/ "$CTX/etc_opencode/" 2>/dev/null || mkdir -p "$CTX/etc_opencode/"
 cp -a /etc/gemini/ "$CTX/etc_gemini/" 2>/dev/null || mkdir -p "$CTX/etc_gemini/"
 cp /opt/nixhome/entrypoint.sh "$CTX/entrypoint.sh" 2>/dev/null || true
-
+%s
 # Inner Dockerfile: minimal config image. All tools live on the /nix volume.
 cat > "$CTX/Dockerfile" <<'DKEOF'
 FROM nixos/nix:latest
@@ -277,7 +286,7 @@ COPY etc_codex/ /etc/codex/
 COPY etc_opencode/ /etc/opencode/
 COPY etc_gemini/ /etc/gemini/
 COPY entrypoint.sh /opt/devcell/.local/bin/entrypoint.sh
-ENV HOME=/opt/devcell
+%sENV HOME=/opt/devcell
 ENV USER=devcell
 ENV DEVCELL_PROFILE=devcell-%s
 ENV PATH="/nix/var/nix/profiles/devcell-tools/bin:/nix/var/nix/profiles/per-user/root/profile/bin:/opt/devcell/.local/state/nix/profiles/profile/bin:/opt/devcell/.local/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin"
@@ -307,6 +316,8 @@ echo "Done — thin image: %s"`,
 		stack,           // export DEVCELL_STACK
 		modules,         // export DEVCELL_MODULES
 		flakeArg, hmTarget, archSuffix, // home-manager switch
+		cellStageCmd,    // stage cell binary into $CTX (or empty)
+		cellCopyLine,    // COPY cell ... into Dockerfile (or empty)
 		hmTarget,        // ENV DEVCELL_PROFILE=devcell-<hmTarget>
 		stack,           // ENV DEVCELL_STACK
 		modules,         // ENV DEVCELL_MODULES
@@ -319,10 +330,10 @@ echo "Done — thin image: %s"`,
 		"-v", volumeName + ":/nix",
 	}
 	if !remote {
-		// Mount the repo root (parent of nixhomeRef) so nixhome's
-		// `devcell = path:..` input resolves to the sibling flake.nix.
-		repoRoot := filepath.Dir(nixhomeRef)
-		args = append(args, "-v", repoRoot+":/opt/devcell-root")
+		args = append(args, "-v", nixhomeRef+":/opt/nixhome")
+	}
+	if cellBinaryPath != "" {
+		args = append(args, "-v", cellBinaryPath+":/opt/cell-host-bin:ro")
 	}
 	args = append(args,
 		"-v", "/var/run/docker.sock:/var/run/docker.sock",
