@@ -132,8 +132,8 @@ jobs:
         run: |
           set -eo pipefail
           HASH=${{ hashFiles('nixhome/**') }}
-          EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}"
-          LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest"
+          EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache2-${{ matrix.arch }}-${HASH}"
+          LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache2-${{ matrix.arch }}-latest"
           # Pick a candidate, then verify its layer is non-trivial (>1 GB)
           # to skip past poisoned caches from prior broken push attempts
           # (a partial push can produce a valid-looking tag with an empty
@@ -158,11 +158,13 @@ jobs:
           echo "cache HIT: $IMG"
           # The appended nix-store layer is the LAST one (atop the busybox
           # base). Stream the blob → ONE gunzip → tar -x into the volume.
-          # Empirically verified: `crane append --new_layer -` accepts our
-          # already-gzipped stdin (`tar -czf -`) without re-compressing.
-          # The on-registry blob is a single `gzip(tar)`, so one gunzip is
-          # correct — `crane blob ... | gunzip | head -c 4` yields the
-          # bytes `nix/` (tar header), not gzip magic.
+          # Single-gunzip is correct because the push step writes the
+          # gzipped tar to a FILE first and passes the file to
+          # `crane append --new_layer FILE` (crane detects gzip magic in
+          # the file content and stores it as-is, single-gzipped on the
+          # registry). Earlier `tar -czf | crane append --new_layer -`
+          # stdin pipeline produced a double-gzipped layer on amd64
+          # (CI #217 failure mode); file-based push is deterministic.
           LAYER_DIGEST=$(crane manifest "$IMG" | jq -r '.layers[-1].digest')
           docker volume rm devcell-nix-store-${{ matrix.arch }} 2>/dev/null || true
           docker volume create devcell-nix-store-${{ matrix.arch }} >/dev/null
@@ -243,8 +245,8 @@ jobs:
           echo
 
           HASH=${{ hashFiles('nixhome/**') }}
-          EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}"
-          LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest"
+          EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache2-${{ matrix.arch }}-${HASH}"
+          LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache2-${{ matrix.arch }}-latest"
 
           # Background heartbeat: every 30s print disk free + load avg so
           # we can correlate stalls with disk fill, OOM, or network
@@ -297,24 +299,38 @@ jobs:
           echo "==== Publish start ($(date -u +%H:%M:%SZ)) ===="
           SECONDS=0
 
-          # crane append's `--new_tag` is `string` (singular), not `strings`
-          # — passing it twice silently overwrites, so only the LAST tag
-          # ever materialized. Push with $LATEST only, then alias $EXACT
-          # via `crane tag` (operates on the manifest already in the
-          # registry, no re-upload).
+          # Stage tar.gz to a temp file FIRST, then pass the file to
+          # `crane append --new_layer FILE`. Why file instead of stdin:
+          # `crane append --new_layer -` treats stdin as an uncompressed
+          # tarball and gzip-wraps it on upload, even if it's already
+          # gzipped — so `tar -czf | crane append --new_layer -` lands
+          # a double-gzipped layer on the registry. The file-based path
+          # detects gzip magic in the file content and stores it as-is.
+          # This makes the on-wire encoding deterministic (single-gzip)
+          # so the pull side's `crane blob | gunzip | tar -x` works
+          # without guessing how many gunzip passes to apply. Mirrors
+          # `test/cache_roundtrip_test.go`'s push exactly so the local
+          # test is a faithful regression net for this step.
+          # Disk cost: one ~11 GB temp file on the runner; runner has
+          # ~60 GB free after the Free-disk-space step, comfortable.
+          # crane append's `--new_tag` is `string` (singular), not
+          # `strings` — passing it twice silently overwrites, so push
+          # $LATEST then alias $EXACT via `crane tag` (manifest-only,
+          # no re-upload).
+          CACHE_TAR="${RUNNER_TEMP:-/tmp}/nix-cache-${{ matrix.arch }}.tar.gz"
           docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix:ro alpine \
             tar -czf - \
               --exclude='nix/var/nix/daemon-socket' \
               -C / nix \
             | pv -tabri 30 -f -N tar-bytes \
-            | crane append \
-                --base public.ecr.aws/docker/library/busybox:latest \
-                --new_layer - \
-                --new_tag "$LATEST"
-          # Add the hash-pinned tag pointing at the same manifest (cheap —
-          # no layer re-upload, just a manifest copy). Second arg is the
-          # tag suffix only per `crane tag` semantics.
-          crane tag "$LATEST" "nix-cache-${{ matrix.arch }}-${HASH}"
+            > "$CACHE_TAR"
+          echo "staged tarball: $(stat -c%s "$CACHE_TAR") bytes at $CACHE_TAR"
+          crane append \
+              --base public.ecr.aws/docker/library/busybox:latest \
+              --new_layer "$CACHE_TAR" \
+              --new_tag "$LATEST"
+          rm -f "$CACHE_TAR"
+          crane tag "$LATEST" "nix-cache2-${{ matrix.arch }}-${HASH}"
 
           echo
           echo "==== Publish end ($(date -u +%H:%M:%SZ)) — elapsed ${SECONDS}s ===="
@@ -390,8 +406,8 @@ jobs:
         run: |
           set -eo pipefail
           HASH=${{ hashFiles('nixhome/**') }}
-          EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}"
-          LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest"
+          EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache2-${{ matrix.arch }}-${HASH}"
+          LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache2-${{ matrix.arch }}-latest"
           # Pick first candidate whose nix-store layer is non-trivial (>1 GB).
           # Filters out poisoned caches from partial pushes (a partial push
           # can leave a valid-looking tag pointing at an empty layer; without
@@ -413,10 +429,10 @@ jobs:
             exit 0
           fi
           echo "cache HIT: $IMG"
-          # ONE gunzip: `crane append --new_layer -` accepts pre-gzipped
-          # stdin (`tar -czf -`) without re-compressing, so the
-          # on-registry blob is `gzip(tar)`. Mirrors the warm-start step
-          # in docker-build.
+          # ONE gunzip: the publish step writes gzipped tar to a FILE
+          # and uses `crane append --new_layer FILE`, which stores the
+          # file content as-is (single-gzipped on the registry).
+          # Mirrors the warm-start step in docker-build.
           LAYER_DIGEST=$(crane manifest "$IMG" | jq -r '.layers[-1].digest')
           docker volume rm devcell-nix-store-${{ matrix.arch }} 2>/dev/null || true
           docker volume create devcell-nix-store-${{ matrix.arch }} >/dev/null

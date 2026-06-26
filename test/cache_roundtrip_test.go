@@ -290,13 +290,26 @@ func craneBlobToTarExtract(t *testing.T, srcTag, hostAddr string, port int, dstV
 	t.Logf("pulling layer digest: %s", digest)
 	blobRef := fmt.Sprintf("%s:%d/cache-test@%s", hostAddr, port, digest)
 
-	// Diagnostic peek: first 4 bytes raw (expect 1f 8b 08 - gzip magic),
-	// first 16 bytes after one gunzip (expect tar magic "nix/" if our
-	// `tar -czf` push is being treated as gzipped input correctly).
-	rawPeek := osShellOutput(t, fmt.Sprintf("crane blob %q | head -c 4 | xxd", blobRef))
-	gunzipPeek := osShellOutput(t, fmt.Sprintf("crane blob %q | gunzip 2>&1 | head -c 32 | xxd | head -2", blobRef))
-	t.Logf("raw blob first 4 bytes:\n%s", rawPeek)
-	t.Logf("after gunzip, first 32 bytes:\n%s", gunzipPeek)
+	// Encoding assertions — guard against the regression that broke
+	// CI #217: the workflow was using `tar -czf | crane append
+	// --new_layer -` (stdin), which crane double-gzips, producing a
+	// layer that a single `gunzip | tar -x` pull can't decode.
+	// Correct: file-based `--new_layer FILE` (or equivalent) → crane
+	// detects gzip magic in the file → stores as-is → single-gzipped.
+	// Pull side does ONE gunzip. We assert this directly.
+	rawPeek := osShellOutput(t, fmt.Sprintf("crane blob %q | head -c 4 | xxd -p | head -1", blobRef))
+	gunzipPeek := osShellOutput(t, fmt.Sprintf("crane blob %q | gunzip 2>/dev/null | head -c 4 | xxd -p | head -1", blobRef))
+	t.Logf("raw blob first 4 bytes (hex): %s", strings.TrimSpace(rawPeek))
+	t.Logf("after 1 gunzip, first 4 bytes (hex): %s", strings.TrimSpace(gunzipPeek))
+
+	if !strings.HasPrefix(strings.TrimSpace(rawPeek), "1f8b") {
+		t.Fatalf("layer blob does not start with gzip magic (got %q) — expected an OCI tar+gzip layer", strings.TrimSpace(rawPeek))
+	}
+	if strings.HasPrefix(strings.TrimSpace(gunzipPeek), "1f8b") {
+		t.Fatalf("after one gunzip the bytes are STILL gzip magic (got %q) — layer is double-gzipped. "+
+			"Push side must use file-based `crane append --new_layer FILE`, not stdin (`--new_layer -`) with pre-gzipped input. "+
+			"See workflow comments for context.", strings.TrimSpace(gunzipPeek))
+	}
 
 	script := fmt.Sprintf(
 		`crane blob %q `+
