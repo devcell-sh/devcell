@@ -57,17 +57,33 @@ func TestThinBuildArgv_MountsDockerSocket(t *testing.T) {
 	}
 }
 
-func TestThinBuildArgv_MountsNixhome(t *testing.T) {
+func TestThinBuildArgv_MountsRepoRootForFlakeResolution(t *testing.T) {
+	// CELL-293: nixhome's flake declares `devcell.url = "path:.."` to pull
+	// the cell package from the repo-root flake. Mounting only nixhome at
+	// /opt/nixhome breaks `path:..` resolution (parent has no flake.nix).
+	// Fix: mount the parent of nixhomeRef at /opt/devcell-root, so nixhome
+	// lives at /opt/devcell-root/nixhome and `..` lands on the repo root.
 	argv := ThinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
 	found := false
 	for i, a := range argv {
-		if a == "-v" && i+1 < len(argv) && argv[i+1] == "/home/bob/nixhome:/opt/nixhome" {
+		if a == "-v" && i+1 < len(argv) && argv[i+1] == "/home/bob:/opt/devcell-root" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("expected nixhome mount in argv: %v", argv)
+		t.Errorf("expected repo-root mount '/home/bob:/opt/devcell-root' in argv: %v", argv)
+	}
+}
+
+func TestThinBuildArgv_FlakeTargetUsesRepoRoot(t *testing.T) {
+	// Companion to MountsRepoRootForFlakeResolution: home-manager must
+	// switch against /opt/devcell-root/nixhome (not /opt/nixhome) so the
+	// flake input `path:..` resolves to the repo root inside the container.
+	argv := ThinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+	script := argv[len(argv)-1]
+	if !strings.Contains(script, "home-manager switch --flake /opt/devcell-root?dir=nixhome#") {
+		t.Errorf("expected home-manager switch against /opt/devcell-root?dir=nixhome; got script:\n%s", script)
 	}
 }
 
@@ -435,16 +451,18 @@ func TestThinBuildArgv_RemoteRefUsedInHomeManagerSwitch(t *testing.T) {
 }
 
 func TestThinBuildArgv_LocalPathStillMounts(t *testing.T) {
+	// CELL-293: mount is now the parent of nixhomeRef so that nixhome's
+	// flake input `devcell = path:..` resolves to the sibling flake.nix.
 	argv := ThinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
 	found := false
 	for i, a := range argv {
-		if a == "-v" && i+1 < len(argv) && argv[i+1] == testNixhome+":/opt/nixhome" {
+		if a == "-v" && i+1 < len(argv) && argv[i+1] == "/home/bob:/opt/devcell-root" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("local path must still mount -v %s:/opt/nixhome", testNixhome)
+		t.Errorf("local path must mount repo root -v /home/bob:/opt/devcell-root, got: %v", argv)
 	}
 }
 
@@ -459,7 +477,7 @@ func TestThinBuildArgv_SetsDevcellStackFromCaller(t *testing.T) {
 	if !strings.Contains(script, "export DEVCELL_STACK=ultimate") {
 		t.Errorf("script must set DEVCELL_STACK to the user-facing stack name (not the HM target), got script without that export")
 	}
-	if !strings.Contains(script, "home-manager switch --flake /opt/nixhome#devcell-local") {
+	if !strings.Contains(script, "home-manager switch --flake /opt/devcell-root?dir=nixhome#devcell-local") {
 		t.Errorf("HM target must stay separate from DEVCELL_STACK — flake URL should reference devcell-local")
 	}
 }

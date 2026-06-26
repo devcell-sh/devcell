@@ -3,6 +3,7 @@ package runner
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -60,7 +61,14 @@ func ThinBuildArgvFull(coreImage, containerName, volumeName, nixhomeRef, thinTag
 		archSuffix = "-aarch64"
 	}
 	remote := isFlakeRef(nixhomeRef)
-	flakeArg := "/opt/nixhome"
+	// CELL-293: nixhome's flake declares `devcell.url = "path:.."` to pull
+	// the cell package from the repo-root flake. nix copies the flake
+	// source into the store, so `path:..` resolves to the store path's
+	// parent — NOT the original disk location. The fix is to target the
+	// PARENT directory as the flake (so the parent's flake.nix becomes the
+	// store root) and select the nixhome subdir via `?dir=nixhome`. That
+	// way `path:..` lands inside the same store source, on the parent.
+	flakeArg := "/opt/devcell-root?dir=nixhome"
 	if remote {
 		flakeArg = nixhomeRef
 	}
@@ -311,7 +319,10 @@ echo "Done — thin image: %s"`,
 		"-v", volumeName + ":/nix",
 	}
 	if !remote {
-		args = append(args, "-v", nixhomeRef+":/opt/nixhome")
+		// Mount the repo root (parent of nixhomeRef) so nixhome's
+		// `devcell = path:..` input resolves to the sibling flake.nix.
+		repoRoot := filepath.Dir(nixhomeRef)
+		args = append(args, "-v", repoRoot+":/opt/devcell-root")
 	}
 	args = append(args,
 		"-v", "/var/run/docker.sock:/var/run/docker.sock",
