@@ -157,23 +157,16 @@ jobs:
           fi
           echo "cache HIT: $IMG"
           # The appended nix-store layer is the LAST one (atop the busybox
-          # base). Stream the blob → gunzip TWICE → tar -x into the volume.
-          # Why two gunzips: the publish step feeds `tar -czf` (already
-          # gzipped) into `crane append --new_layer -`, which then
-          # gzip-wraps its input again because that's how crane builds
-          # tar+gzip layers regardless of the input's existing encoding.
-          # We deliberately accept this double-encoding on push because
-          # uncompressed tar (~32 GB through the pipe) fills the runner
-          # disk during crane's stdin staging and crashes the runner —
-          # see the System.IO.IOException: No space left on device
-          # trace in the run page DOM on commit 5a930e3. With double-gzip
-          # in flight the layer stored on GHCR is 10–11 GB, fits, and one
-          # extra `gunzip` on the pull side is cheap (~3-5 sec).
+          # base). Stream the blob → ONE gunzip → tar -x into the volume.
+          # Empirically verified: `crane append --new_layer -` accepts our
+          # already-gzipped stdin (`tar -czf -`) without re-compressing.
+          # The on-registry blob is a single `gzip(tar)`, so one gunzip is
+          # correct — `crane blob ... | gunzip | head -c 4` yields the
+          # bytes `nix/` (tar header), not gzip magic.
           LAYER_DIGEST=$(crane manifest "$IMG" | jq -r '.layers[-1].digest')
           docker volume rm devcell-nix-store-${{ matrix.arch }} 2>/dev/null || true
           docker volume create devcell-nix-store-${{ matrix.arch }} >/dev/null
           crane blob "$IMG@$LAYER_DIGEST" \
-            | gunzip \
             | gunzip \
             | docker run --rm -i \
                 -v devcell-nix-store-${{ matrix.arch }}:/dest \
@@ -273,8 +266,7 @@ jobs:
           # crane → registry as a single OCI layer atop a busybox base.
           # crane uploads the layer blob in chunks while tar is still
           # emitting bytes, so the network side is streamed.
-          # CRITICAL: emit gzipped tar (`-czf`, not `-cf`). The intuition
-          # to send uncompressed and let crane gzip once is wrong here:
+          # CRITICAL: emit gzipped tar (`-czf`, not `-cf`).
           # `crane append --new_layer -` buffers stdin to a temp file in
           # the runner's disk to compute the layer digest before it can
           # start the registry upload. Uncompressed `/nix` is ~32 GB —
@@ -282,10 +274,11 @@ jobs:
           # runner worker itself (System.IO.IOException: No space left
           # on device on `/home/runner/extracted/_diag/Worker_*.log`,
           # observed on commit 5a930e3, both arches). With `-czf` the
-          # pipe carries ~10 GB which fits the runner's free disk. crane
-          # ALSO gzip-wraps its input again on the way out (cannot be
-          # disabled via the CLI), so the on-registry layer is
-          # double-encoded; the pull side compensates with two gunzips.
+          # pipe carries ~10 GB which fits the runner's free disk.
+          # crane does NOT re-compress already-gzipped input — empirical
+          # check: `crane blob ... | gunzip | head -c 4` on the resulting
+          # layer yields tar magic (`nix/`), not a second gzip wrapper.
+          # So pull side uses a single `gunzip | tar -x`.
           # `-C / nix` (instead of `-C /nix .` + --transform) produces
           # archive paths with the `nix/` prefix natively, so the layer's
           # files land at /nix/* inside the cache image (matched by
@@ -420,18 +413,14 @@ jobs:
             exit 0
           fi
           echo "cache HIT: $IMG"
-          # Two gunzips because the publish step (`tar -czf` → crane append)
-          # produces a double-gzipped layer on the registry: tar gzipped it
-          # once, crane gzip-wraps its --new_layer input again on the way
-          # to OCI tar+gzip storage. The double-encoding on push is
-          # intentional — uncompressed tar through crane (~32 GB) crashes
-          # the runner from disk exhaustion (see build.dev.yml publish
-          # step comments). Pull cost: one extra gunzip, ~3–5 sec.
+          # ONE gunzip: `crane append --new_layer -` accepts pre-gzipped
+          # stdin (`tar -czf -`) without re-compressing, so the
+          # on-registry blob is `gzip(tar)`. Mirrors the warm-start step
+          # in docker-build.
           LAYER_DIGEST=$(crane manifest "$IMG" | jq -r '.layers[-1].digest')
           docker volume rm devcell-nix-store-${{ matrix.arch }} 2>/dev/null || true
           docker volume create devcell-nix-store-${{ matrix.arch }} >/dev/null
           crane blob "$IMG@$LAYER_DIGEST" \
-            | gunzip \
             | gunzip \
             | docker run --rm -i \
                 -v devcell-nix-store-${{ matrix.arch }}:/dest \

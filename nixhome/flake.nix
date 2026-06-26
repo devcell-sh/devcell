@@ -66,6 +66,7 @@
 
     # Map of stack name → module list
     stacks = {
+      "devcell-core" = [./stacks/core.nix];          # CELL-292: smallest viable (home-manager + 1 pkg)
       "devcell-base" = [./stacks/base.nix];
       "devcell-dev" = [./stacks/dev.nix];           # Modules 2.0 default seed
       "devcell-go" = [./stacks/go.nix];

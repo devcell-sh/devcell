@@ -983,8 +983,10 @@ func TestValidateStack_EmptyIsValid(t *testing.T) {
 
 func TestKnownStacks_ReturnsExpectedList(t *testing.T) {
 	stacks := cfg.KnownStacks()
-	// Modules 2.0 (CELL-63): added `dev` (between base and the legacy stacks).
-	want := []string{"base", "dev", "go", "node", "python", "fullstack", "electronics", "ultimate"}
+	// CELL-292: `core` prepended as the smallest first-class stack (just
+	// home-manager + one tiny package). Modules 2.0 (CELL-63): `dev`
+	// between base and the legacy stacks.
+	want := []string{"core", "base", "dev", "go", "node", "python", "fullstack", "electronics", "ultimate"}
 	if len(stacks) != len(want) {
 		t.Fatalf("want %d stacks, got %d: %v", len(want), len(stacks), stacks)
 	}

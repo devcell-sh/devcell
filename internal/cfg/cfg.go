@@ -547,13 +547,17 @@ func LoadFromOS(configDir, cwd string) CellConfig {
 }
 
 // Known stack names (must match nixhome/stacks/*.nix without devcell- prefix).
+// `core` is the smallest stack — just home-manager + one tiny package — and
+// is what the cache-roundtrip test fixture builds against to validate the
+// nix-store cache pipeline without the runtime cost of `base`.
 // `dev` is the Modules 2.0 seed (CELL-63): base + scraping + infra (~3 GB).
-var knownStacks = []string{"base", "dev", "go", "node", "python", "fullstack", "electronics", "ultimate"}
+var knownStacks = []string{"core", "base", "dev", "go", "node", "python", "fullstack", "electronics", "ultimate"}
 
 // stackSizes maps stack names to approximate compressed download sizes.
 // Measured from GHCR manifests (base, ultimate) and estimated for others
 // using nix download × 2.6 ratio. Updated 2026-06-18.
 var stackSizes = map[string]string{
+	"core":        "~0.1 GB",
 	"base":        "~0.5 GB",
 	"dev":         "~3 GB",
 	"go":          "~3.6 GB",

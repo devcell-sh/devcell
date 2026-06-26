@@ -25,12 +25,16 @@
       ] ++ modules;
     };
 
-    # One config per arch, matching the naming ThinBuildArgv expects:
-    #   devcell-test         (x86_64)
-    #   devcell-test-aarch64 (arm64)
+    # One config per arch, matching the naming ThinBuildArgv expects.
+    # Stack name is `core` — the smallest first-class stack (just
+    # home-manager + one package). Used by the cache-roundtrip test to
+    # populate a realistic /nix volume in seconds, and by anyone who
+    # wants the absolute minimum cell.
+    #   devcell-core         (x86_64)
+    #   devcell-core-aarch64 (arm64)
     configs = {
-      "devcell-test"          = mkConfig "x86_64-linux"  [ ./minimal.nix ];
-      "devcell-test-aarch64"  = mkConfig "aarch64-linux" [ ./minimal.nix ];
+      "devcell-core"          = mkConfig "x86_64-linux"  [ ./minimal.nix ];
+      "devcell-core-aarch64"  = mkConfig "aarch64-linux" [ ./minimal.nix ];
     };
   in {
     homeConfigurations = configs;

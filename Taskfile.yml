@@ -352,3 +352,16 @@ tasks:
     cmds:
       - npm install
       - npm run dev
+
+
+  # ── Cache round-trip test (top-level user control) ─────────────────────
+  # Runs the local proxy for the GHCR nix-cache pipeline in
+  # build.dev.yml. All orchestration — registry lifecycle, fixture
+  # build, push, pull, verify, teardown — lives in
+  # test/cache_roundtrip_test.go (Go test idiom). This Taskfile entry
+  # is just the ergonomic top-level wrapper, matching test:unit /
+  # test:integration / test:vagrant.
+  test:cache:
+    desc: Round-trip nix-cache pipeline locally (~1 min, requires docker + crane)
+    cmds:
+      - go test -v -count=1 -run TestCacheRoundtrip ./test/...
