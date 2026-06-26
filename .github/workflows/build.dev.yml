@@ -278,11 +278,16 @@ jobs:
           # warning that could trip stricter tar implementations.
           # `pv -tabri 30 -f`: every 30s emit elapsed/avg-rate/cur-rate/
           # bytes-transferred to stderr (-f forces output to a non-TTY).
-          # `crane -v`: enable debug logs (boolean — crane uses cobra, not
-          # klog, so `--v=N` is not valid). Surfaces HTTP request/response
-          # cycles, chunk uploads, and retries — the data needed to tell
-          # CPU-bound (slow gzip) from I/O-bound (slow tar walk) from
-          # network-bound (GHCR backpressure / retry loop).
+          # crane verbosity (`-v`) is DELIBERATELY OFF — when enabled it
+          # logs one stderr line per HTTP chunk upload. With an 11 GB
+          # layer that's thousands of lines/sec, exceeding GitHub Actions'
+          # per-step log cap / output-rate limit; the previous attempt on
+          # commit f592686 was killed at T+12m for log flooding (step
+          # never finalized, `data-completed-at` empty in the UI). pv
+          # alone gives us the throughput signal: if its rate stays steady
+          # we're CPU/network-bound and just need to wait; if it drops to
+          # 0 mid-stream crane is hung. Either is diagnosable without
+          # full HTTP verbosity.
           echo "==== Publish start ($(date -u +%H:%M:%SZ)) ===="
           SECONDS=0
 
@@ -296,7 +301,7 @@ jobs:
               --exclude='nix/var/nix/daemon-socket' \
               -C / nix \
             | pv -tabri 30 -f -N tar-bytes \
-            | crane -v append \
+            | crane append \
                 --base public.ecr.aws/docker/library/busybox:latest \
                 --new_layer - \
                 --new_tag "$LATEST"
