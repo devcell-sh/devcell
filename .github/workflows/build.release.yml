@@ -9,6 +9,11 @@ on:
     types:
       - created
   workflow_dispatch:
+    inputs:
+      skip_nix_cache:
+        description: 'Skip nix cache (genesis mode — full rebuild, no pre-seeding, no post-build publish)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -85,6 +90,7 @@ jobs:
       # builds reuse the same nixhome closure as dev builds for any
       # given `hashFiles('nixhome/**')`, so the cache is interchangeable.
       - name: Stream-hydrate /nix volume from prior GHCR cache (if available)
+        if: inputs.skip_nix_cache != true
         run: |
           set -eo pipefail
           HASH=${{ hashFiles('nixhome/**') }}
@@ -126,14 +132,25 @@ jobs:
         run: docker push ${{ steps.build.outputs.tag }}
 
       # Publish the populated /nix volume back to the GHCR cache so
-      # subsequent dev + release builds can reuse it.
+      # subsequent dev + release builds can reuse it. Runs even on
+      # prior-step failure (partial volume is still useful), but skips
+      # under cancellation, cache-bust mode, or near-empty volume.
       - name: Stream-publish /nix volume to GHCR cache image
+        if: ${{ !cancelled() && inputs.skip_nix_cache != true }}
         timeout-minutes: 80
         run: |
           set -eo pipefail
           HASH=${{ hashFiles('nixhome/**') }}
           LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest"
           EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}"
+
+          SIZE_KB=$(docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix:ro alpine du -s /nix 2>/dev/null | awk '{print $1}')
+          if [ "${SIZE_KB:-0}" -lt 1000000 ]; then
+            echo "skipping publish: /nix is only ${SIZE_KB}KB — won't overwrite cache with empty volume"
+            exit 0
+          fi
+          echo "publishing /nix (${SIZE_KB}KB) — job status: ${{ job.status }}"
+
           docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix:ro alpine \
             tar -cf - \
               --exclude='nix/var/nix/daemon-socket' \
