@@ -105,31 +105,12 @@ jobs:
 
       # Cache push/pull goes through `cell nix-store {push,pull}` — a
       # cell subcommand using `pkg/v1/stream.NewLayer` from
-      # go-containerregistry. Replaces the `crane` CLI usage that
-      # required either file staging (~11 GB temp file) or accepted
-      # double-gzipped layers (CELL-292 iteration history). With the
-      # cell subcommand, the layer is streamed (no temp file) and
+      # go-containerregistry. Layer is streamed (no temp file) and
       # always single-gzipped on the wire — see CELL-293.
-      # crane is still installed for the manifest size-probe in the
-      # warm-start guard; can be removed once `cell nix-store inspect`
-      # lands.
-      - name: Install crane
-        run: |
-          set -eo pipefail
-          VER=v0.20.6
-          case "${{ matrix.arch }}" in
-            amd64) ASSET=x86_64 ;;
-            arm64) ASSET=arm64 ;;
-            *) echo "unsupported arch ${{ matrix.arch }}"; exit 1 ;;
-          esac
-          curl -fsSL "https://github.com/google/go-containerregistry/releases/download/${VER}/go-containerregistry_Linux_${ASSET}.tar.gz" \
-            | sudo tar -xzC /usr/local/bin crane
-          crane version
 
       # Cache the nix-store as a GHCR image. Lives in the SAME
       # `devcell-sh/devcell` GHCR package as the runtime images, with tag
       # prefix `nix-cache-` so it doesn't collide with stack tags.
-      # Hydrate via crane streaming (skip docker pull's overlay2 round-trip).
       - name: Stream-hydrate /nix volume from prior GHCR cache (if available)
         if: inputs.skip_nix_cache != true
         run: |
@@ -137,39 +118,26 @@ jobs:
           HASH=${{ hashFiles('nixhome/**') }}
           EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}"
           LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest"
-          # Pick a candidate, then verify its layer is non-trivial (>1 GB)
-          # to skip past poisoned caches from prior broken push attempts
-          # (a partial push can produce a valid-looking tag with an empty
-          # nix-store layer; without this guard, hydrate "succeeds" with
-          # zero bytes and the build silently starts from scratch + the
-          # poisoned cache propagates forever).
+          # Pick the first candidate that resolves a manifest. `cell
+          # nix-store pull` itself fails cleanly on a missing/poisoned
+          # cache, and the workflow falls back to MISS — no upfront
+          # size probe needed.
           IMG=""
           for c in "$EXACT" "$LATEST"; do
-            if ! crane manifest "$c" >/dev/null 2>&1; then continue; fi
-            SIZE=$(crane manifest "$c" | jq -r '.layers[-1].size // 0')
-            if [ "${SIZE:-0}" -lt 1000000000 ]; then
-              echo "$c exists but layer is only ${SIZE} bytes — ignoring (poisoned cache)"
-              continue
+            if docker manifest inspect "$c" >/dev/null 2>&1; then
+              IMG="$c"
+              break
             fi
-            IMG="$c"
-            break
           done
           if [ -z "$IMG" ]; then
             echo "cache MISS — starting from empty volume"
             exit 0
           fi
           echo "cache HIT: $IMG"
-          # `cell nix-store pull` fetches the LAST layer of $IMG (atop
-          # the busybox base) and streams it directly into the named
-          # Docker volume — internal gunzip + tar -x, no separate
-          # shell pipe. Replaces the prior
-          # `crane blob | gunzip | docker run alpine tar -x` chain.
-          # Graceful fallback: an existing cache image may have been
-          # pushed by an older workflow with different encoding (e.g.
-          # double-gzipped from the `-czf | crane append --new_layer -`
-          # era). If pull fails, treat as MISS — build will rebuild
-          # from scratch and the next publish overwrites with the new
-          # single-gzipped format.
+          # `cell nix-store pull` streams $IMG's last layer directly
+          # into the named docker volume (internal gunzip + tar -x).
+          # On failure, fall back to MISS — the next publish overwrites
+          # the cache with the current encoding.
           docker volume rm devcell-nix-store-${{ matrix.arch }} 2>/dev/null || true
           docker volume create devcell-nix-store-${{ matrix.arch }} >/dev/null
           if ./bin/cell nix-store pull \
@@ -212,118 +180,39 @@ jobs:
           docker push "$BASE_TAG"
           docker push "$ULT_TAG"
 
-      # Inspect-and-publish: print volume metadata to logs and stream the
-      # populated /nix volume to GHCR as a single-layer cache image via
-      # crane (no intermediate tar file, no `docker buildx`). Peak transient
-      # disk: ~64 MB pipe buffer instead of ~64 GB.
-      - name: Inspect + stream-publish /nix volume to GHCR cache image
-        # Hard upper bound: arm64 publishes in ~51 min, amd64 hung 76 min on
-        # the prior attempt before some implicit kill. Cap at 80 min so we
-        # fail fast (with debug context above) instead of spinning forever.
+      # Stream-publish the populated /nix volume to GHCR as a single-
+      # layer cache image. `cell nix-store push` uses
+      # `pkg/v1/stream.NewLayer` from go-containerregistry: stdin is
+      # gzipped lazily, the digest is computed incrementally, and the
+      # blob is uploaded via the OCI chunked-upload protocol — peak
+      # runner disk is the pipe buffer, not the volume size.
+      # `tar -cf` (not `-czf`): cell nix-store push gzips for us.
+      # `-C / nix`: archive entries land under `nix/...` natively
+      # (BusyBox tar doesn't implement --transform).
+      # `--exclude=nix/var/nix/daemon-socket`: Unix sockets can't tar.
+      - name: Stream-publish /nix volume to GHCR cache image
         timeout-minutes: 80
         run: |
           set -eo pipefail
-
-          # pv = pipe-viewer for byte-throughput monitoring on the runner
-          # side. Apt-fetch is ~1 sec, negligible vs the publish runtime.
-          sudo apt-get update -qq && sudo apt-get install -y -qq pv
-
-          echo "==== Runner snapshot ===="
-          uname -a
-          echo "cpus: $(nproc)  arch: $(uname -m)"
-          free -h
-          df -h /var/lib/docker /
-          echo
-
-          docker volume ls --filter name=devcell-nix-store
-          # Container-side view: byte-exact size + entry counts so we can
-          # compare "what we tried to push" vs "what arrived on GHCR".
-          docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix alpine sh -c '
-            echo "--- /nix size (human) ---"
-            du -sh /nix
-            echo "--- /nix size (bytes) ---"
-            du -sb /nix
-            echo "--- top-level ---"
-            ls /nix | head -20
-            echo "--- /nix/store entry count ---"
-            find /nix/store -mindepth 1 -maxdepth 1 2>/dev/null | wc -l
-            echo "--- /nix/store sample ---"
-            ls /nix/store 2>/dev/null | head -5 || echo "(no /nix/store)"
-          '
-          echo
-
           HASH=${{ hashFiles('nixhome/**') }}
           EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}"
           LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest"
-
-          # Background heartbeat: every 30s print disk free + load avg so
-          # we can correlate stalls with disk fill, OOM, or network
-          # backpressure. Killed via EXIT trap so it never outlives the
-          # foreground pipeline.
-          (
-            while true; do
-              sleep 30
-              printf "[heartbeat %s] disk-free=%s loadavg=%s\n" \
-                "$(date -u +%H:%M:%SZ)" \
-                "$(df -h /var/lib/docker | awk 'NR==2 {print $4}')" \
-                "$(awk '{print $1}' /proc/loadavg)"
-            done
-          ) &
-          HB_PID=$!
-          trap "kill $HB_PID 2>/dev/null || true" EXIT
-
-          # Stream UNCOMPRESSED tar from the volume → `cell nix-store
-          # push` → registry. The cell subcommand uses
-          # `pkg/v1/stream.NewLayer` from go-containerregistry: it
-          # reads stdin lazily, gzips on the fly, and uploads via the
-          # OCI chunked-upload protocol with the digest computed
-          # incrementally. Peak runner disk for this step: ~64 KB
-          # (gzip window buffer + HTTP chunk buffer). The on-wire
-          # layer is SINGLE-gzipped — the test/cache_roundtrip_test
-          # asserts this exactly, so any regression here surfaces in
-          # ~5 min locally instead of ~30 min of CI.
-          # `tar -cf` not `-czf`: cell nix-store push gzips for us.
-          # `-C / nix` (instead of `-C /nix .` + --transform) lands
-          # archive entries under `nix/...` natively (BusyBox tar
-          # doesn't implement --transform).
-          # `--exclude=nix/var/nix/daemon-socket`: Unix sockets can't
-          # be archived.
-          # `pv -tabri 30 -f`: every 30s emit throughput line.
-          echo "==== Publish start ($(date -u +%H:%M:%SZ)) ===="
-          SECONDS=0
 
           docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix:ro alpine \
             tar -cf - \
               --exclude='nix/var/nix/daemon-socket' \
               -C / nix \
-            | pv -tabri 30 -f -N tar-bytes \
             | ./bin/cell nix-store push \
                 --base public.ecr.aws/docker/library/busybox:latest \
                 --image "$LATEST"
-          # Alias to the hash-pinned tag via crane (manifest-only,
-          # no re-upload). Could be replaced with a `cell nix-store
-          # tag` subcommand in a follow-up.
-          crane tag "$LATEST" "nix-cache-${{ matrix.arch }}-${HASH}"
 
-          echo
-          echo "==== Publish end ($(date -u +%H:%M:%SZ)) — elapsed ${SECONDS}s ===="
+          # Alias the *-latest tag to the content-hashed tag without
+          # re-uploading blobs.
+          docker buildx imagetools create --tag "$EXACT" "$LATEST"
 
-          # Sanity: confirm the layer we pushed is non-trivial. The earlier
-          # broken push (tar errored out, crane still published the busybox
-          # base + tiny manifest, exit code 1 but tag was set) poisoned the
-          # latest tag. Failing the step early on a too-small layer prevents
-          # a similar regression.
-          MANIFEST=$(crane manifest "$LATEST" 2>/dev/null || echo '{}')
-          LAYER_SIZE=$(echo "$MANIFEST" | jq -r '.layers[-1].size // 0')
-          echo "published layer size: ${LAYER_SIZE} bytes"
-          if [ "${LAYER_SIZE:-0}" -lt 1000000000 ]; then
-            echo "FAIL: cache layer is <1 GB — push produced a corrupt/empty manifest"
-            exit 1
-          fi
           echo "pushed nix-cache images:"
           echo "  $EXACT"
           echo "  $LATEST"
-          df -h /var/lib/docker /
 
   docker-test:
     name: Docker Test (${{ matrix.arch }})
@@ -368,19 +257,6 @@ jobs:
       - name: Build cell binary
         run: task cell:build
 
-      - name: Install crane
-        run: |
-          set -eo pipefail
-          VER=v0.20.6
-          case "${{ matrix.arch }}" in
-            amd64) ASSET=x86_64 ;;
-            arm64) ASSET=arm64 ;;
-            *) echo "unsupported arch ${{ matrix.arch }}"; exit 1 ;;
-          esac
-          curl -fsSL "https://github.com/google/go-containerregistry/releases/download/${VER}/go-containerregistry_Linux_${ASSET}.tar.gz" \
-            | sudo tar -xzC /usr/local/bin crane
-          crane version
-
       # Stream-pull the nix-store cache image's last layer into the
       # per-arch volume via `cell nix-store pull` — same binary the
       # publish step in docker-build uses, so push/pull encoding
@@ -391,46 +267,32 @@ jobs:
           HASH=${{ hashFiles('nixhome/**') }}
           EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}"
           LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest"
-          # Pick first candidate whose nix-store layer is non-trivial (>1 GB).
-          # Filters out poisoned caches from partial pushes (a partial push
-          # can leave a valid-looking tag pointing at an empty layer; without
-          # this guard, hydrate "succeeds" with zero bytes and tests fall
-          # through to lazy-build at 2-minute timeout).
+          # Pick the first candidate that resolves a manifest. cell
+          # nix-store pull fails cleanly on a missing cache, and the
+          # workflow falls back to MISS — no upfront probe needed.
           IMG=""
           for c in "$EXACT" "$LATEST"; do
-            if ! crane manifest "$c" >/dev/null 2>&1; then continue; fi
-            SIZE=$(crane manifest "$c" | jq -r '.layers[-1].size // 0')
-            if [ "${SIZE:-0}" -lt 1000000000 ]; then
-              echo "$c exists but layer is only ${SIZE} bytes — ignoring (poisoned cache)"
-              continue
+            if docker manifest inspect "$c" >/dev/null 2>&1; then
+              IMG="$c"
+              break
             fi
-            IMG="$c"
-            break
           done
           if [ -z "$IMG" ]; then
             echo "cache MISS — tests will run on empty /nix volume (lazy build during cell shell)"
             exit 0
           fi
           echo "cache HIT: $IMG"
-          # Graceful fallback: legacy cache images may have different
-          # encoding (see warm-start step in docker-build job for
-          # details). If pull fails, tests run on an empty volume
-          # (lazy-build during cell shell) instead of failing the step.
+          # If pull fails, tests fall back to an empty volume (lazy
+          # build during cell shell).
           docker volume rm devcell-nix-store-${{ matrix.arch }} 2>/dev/null || true
           docker volume create devcell-nix-store-${{ matrix.arch }} >/dev/null
           if ! ./bin/cell nix-store pull \
                  --image "$IMG" \
                  --volume "devcell-nix-store-${{ matrix.arch }}"; then
-            echo "WARN: cache pull failed (encoding mismatch?) — tests will run on empty /nix"
+            echo "WARN: cache pull failed — tests will run on empty /nix"
             docker volume rm devcell-nix-store-${{ matrix.arch }} 2>/dev/null || true
             docker volume create devcell-nix-store-${{ matrix.arch }} >/dev/null
           fi
-
-      - name: Show volume status (debug)
-        run: |
-          docker volume ls --filter name=devcell-nix-store || true
-          docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix:ro alpine \
-            sh -c 'du -sh /nix; ls /nix/store 2>/dev/null | head -3 || echo "(no /nix/store)"'
 
       - name: Pull test images (base + ultimate)
         run: |
