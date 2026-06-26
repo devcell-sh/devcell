@@ -103,13 +103,16 @@ jobs:
       - name: Build cell binary
         run: task cell:build
 
-      # crane = google/go-containerregistry CLI. We use it to stream the
-      # nix-store volume directly to/from a GHCR layer blob without going
-      # through `docker buildx` or `docker pull`'s overlay2 extract.
-      # Push: tar -czf - | crane append → registry (no 32 GB tar on disk).
-      # Pull: crane blob | gunzip | tar -x → volume (no overlay2 extract).
-      # Net: ~32 GB less peak transient disk per job vs the Docker-native
-      # round-trip.
+      # Cache push/pull goes through `cell nix-store {push,pull}` — a
+      # cell subcommand using `pkg/v1/stream.NewLayer` from
+      # go-containerregistry. Replaces the `crane` CLI usage that
+      # required either file staging (~11 GB temp file) or accepted
+      # double-gzipped layers (CELL-292 iteration history). With the
+      # cell subcommand, the layer is streamed (no temp file) and
+      # always single-gzipped on the wire — see CELL-293.
+      # crane is still installed for the manifest size-probe in the
+      # warm-start guard; can be removed once `cell nix-store inspect`
+      # lands.
       - name: Install crane
         run: |
           set -eo pipefail
@@ -156,23 +159,16 @@ jobs:
             exit 0
           fi
           echo "cache HIT: $IMG"
-          # The appended nix-store layer is the LAST one (atop the busybox
-          # base). Stream the blob → ONE gunzip → tar -x into the volume.
-          # Single-gunzip is correct because the push step writes the
-          # gzipped tar to a FILE first and passes the file to
-          # `crane append --new_layer FILE` (crane detects gzip magic in
-          # the file content and stores it as-is, single-gzipped on the
-          # registry). Earlier `tar -czf | crane append --new_layer -`
-          # stdin pipeline produced a double-gzipped layer on amd64
-          # (CI #217 failure mode); file-based push is deterministic.
-          LAYER_DIGEST=$(crane manifest "$IMG" | jq -r '.layers[-1].digest')
+          # `cell nix-store pull` fetches the LAST layer of $IMG (atop
+          # the busybox base) and streams it directly into the named
+          # Docker volume — internal gunzip + tar -x, no separate
+          # shell pipe. Replaces the prior
+          # `crane blob | gunzip | docker run alpine tar -x` chain.
           docker volume rm devcell-nix-store-${{ matrix.arch }} 2>/dev/null || true
           docker volume create devcell-nix-store-${{ matrix.arch }} >/dev/null
-          crane blob "$IMG@$LAYER_DIGEST" \
-            | gunzip \
-            | docker run --rm -i \
-                -v devcell-nix-store-${{ matrix.arch }}:/dest \
-                alpine sh -c 'cd /dest && tar -x --strip-components=1'
+          ./bin/cell nix-store pull \
+            --image "$IMG" \
+            --volume "devcell-nix-store-${{ matrix.arch }}"
           docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix:ro alpine \
             sh -c 'echo "hydrated $(du -sh /nix | cut -f1)"'
 
@@ -264,72 +260,37 @@ jobs:
           HB_PID=$!
           trap "kill $HB_PID 2>/dev/null || true" EXIT
 
-          # Stream gzipped tar from the volume → pv (throughput monitor) →
-          # crane → registry as a single OCI layer atop a busybox base.
-          # crane uploads the layer blob in chunks while tar is still
-          # emitting bytes, so the network side is streamed.
-          # CRITICAL: emit gzipped tar (`-czf`, not `-cf`).
-          # `crane append --new_layer -` buffers stdin to a temp file in
-          # the runner's disk to compute the layer digest before it can
-          # start the registry upload. Uncompressed `/nix` is ~32 GB —
-          # that temp file exhausts the runner's disk and crashes the
-          # runner worker itself (System.IO.IOException: No space left
-          # on device on `/home/runner/extracted/_diag/Worker_*.log`,
-          # observed on commit 5a930e3, both arches). With `-czf` the
-          # pipe carries ~10 GB which fits the runner's free disk.
-          # crane does NOT re-compress already-gzipped input — empirical
-          # check: `crane blob ... | gunzip | head -c 4` on the resulting
-          # layer yields tar magic (`nix/`), not a second gzip wrapper.
-          # So pull side uses a single `gunzip | tar -x`.
-          # `-C / nix` (instead of `-C /nix .` + --transform) produces
-          # archive paths with the `nix/` prefix natively, so the layer's
-          # files land at /nix/* inside the cache image (matched by
-          # `--strip-components=1` on the pull side). We use this form
-          # because BusyBox tar (the default in alpine) doesn't implement
-          # GNU tar's --transform option.
-          # --exclude: Unix sockets can't be archived — pre-exclude the
-          # nix-daemon socket so tar doesn't emit a "socket ignored"
-          # warning that could trip stricter tar implementations.
-          # `pv -tabri 30 -f`: every 30s emit elapsed/avg-rate/cur-rate/
-          # bytes-transferred to stderr (-f forces output to a non-TTY).
-          # crane verbosity (`-v`) is DELIBERATELY OFF — when enabled it
-          # logs one stderr line per HTTP chunk upload, which at full
-          # upload speed flooded GitHub Actions' per-step log cap on
-          # commit f592686.
+          # Stream UNCOMPRESSED tar from the volume → `cell nix-store
+          # push` → registry. The cell subcommand uses
+          # `pkg/v1/stream.NewLayer` from go-containerregistry: it
+          # reads stdin lazily, gzips on the fly, and uploads via the
+          # OCI chunked-upload protocol with the digest computed
+          # incrementally. Peak runner disk for this step: ~64 KB
+          # (gzip window buffer + HTTP chunk buffer). The on-wire
+          # layer is SINGLE-gzipped — the test/cache_roundtrip_test
+          # asserts this exactly, so any regression here surfaces in
+          # ~5 min locally instead of ~30 min of CI.
+          # `tar -cf` not `-czf`: cell nix-store push gzips for us.
+          # `-C / nix` (instead of `-C /nix .` + --transform) lands
+          # archive entries under `nix/...` natively (BusyBox tar
+          # doesn't implement --transform).
+          # `--exclude=nix/var/nix/daemon-socket`: Unix sockets can't
+          # be archived.
+          # `pv -tabri 30 -f`: every 30s emit throughput line.
           echo "==== Publish start ($(date -u +%H:%M:%SZ)) ===="
           SECONDS=0
 
-          # Stage tar.gz to a temp file FIRST, then pass the file to
-          # `crane append --new_layer FILE`. Why file instead of stdin:
-          # `crane append --new_layer -` treats stdin as an uncompressed
-          # tarball and gzip-wraps it on upload, even if it's already
-          # gzipped — so `tar -czf | crane append --new_layer -` lands
-          # a double-gzipped layer on the registry. The file-based path
-          # detects gzip magic in the file content and stores it as-is.
-          # This makes the on-wire encoding deterministic (single-gzip)
-          # so the pull side's `crane blob | gunzip | tar -x` works
-          # without guessing how many gunzip passes to apply. Mirrors
-          # `test/cache_roundtrip_test.go`'s push exactly so the local
-          # test is a faithful regression net for this step.
-          # Disk cost: one ~11 GB temp file on the runner; runner has
-          # ~60 GB free after the Free-disk-space step, comfortable.
-          # crane append's `--new_tag` is `string` (singular), not
-          # `strings` — passing it twice silently overwrites, so push
-          # $LATEST then alias $EXACT via `crane tag` (manifest-only,
-          # no re-upload).
-          CACHE_TAR="${RUNNER_TEMP:-/tmp}/nix-cache-${{ matrix.arch }}.tar.gz"
           docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix:ro alpine \
-            tar -czf - \
+            tar -cf - \
               --exclude='nix/var/nix/daemon-socket' \
               -C / nix \
             | pv -tabri 30 -f -N tar-bytes \
-            > "$CACHE_TAR"
-          echo "staged tarball: $(stat -c%s "$CACHE_TAR") bytes at $CACHE_TAR"
-          crane append \
-              --base public.ecr.aws/docker/library/busybox:latest \
-              --new_layer "$CACHE_TAR" \
-              --new_tag "$LATEST"
-          rm -f "$CACHE_TAR"
+            | ./bin/cell nix-store push \
+                --base public.ecr.aws/docker/library/busybox:latest \
+                --image "$LATEST"
+          # Alias to the hash-pinned tag via crane (manifest-only,
+          # no re-upload). Could be replaced with a `cell nix-store
+          # tag` subcommand in a follow-up.
           crane tag "$LATEST" "nix-cache2-${{ matrix.arch }}-${HASH}"
 
           echo
@@ -383,6 +344,18 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
+      - name: Install go-task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Build cell so we can use `cell nix-store pull` below — same
+      # binary docker-build's publish step uses, so any encoding
+      # divergence between push and pull is structurally impossible.
+      - name: Build cell binary
+        run: task cell:build
+
       - name: Install crane
         run: |
           set -eo pipefail
@@ -396,12 +369,10 @@ jobs:
             | sudo tar -xzC /usr/local/bin crane
           crane version
 
-      # Stream-pull the nix-store cache image's layer blob directly into the
-      # per-arch volume via crane, bypassing Docker's overlay2 extract +
-      # auto-seed copy (~32 GB less peak transient disk vs `docker pull`).
-      # Single seed: we set DEVCELL_NIX_VOLUME on the test step below so
-      # `cell shell` / `cell claude` use this per-arch volume directly
-      # instead of the default-named one — no need to seed two volumes.
+      # Stream-pull the nix-store cache image's last layer into the
+      # per-arch volume via `cell nix-store pull` — same binary the
+      # publish step in docker-build uses, so push/pull encoding
+      # divergence is impossible by construction.
       - name: Stream-pull /nix cache from GHCR into volume
         run: |
           set -eo pipefail
@@ -429,18 +400,11 @@ jobs:
             exit 0
           fi
           echo "cache HIT: $IMG"
-          # ONE gunzip: the publish step writes gzipped tar to a FILE
-          # and uses `crane append --new_layer FILE`, which stores the
-          # file content as-is (single-gzipped on the registry).
-          # Mirrors the warm-start step in docker-build.
-          LAYER_DIGEST=$(crane manifest "$IMG" | jq -r '.layers[-1].digest')
           docker volume rm devcell-nix-store-${{ matrix.arch }} 2>/dev/null || true
           docker volume create devcell-nix-store-${{ matrix.arch }} >/dev/null
-          crane blob "$IMG@$LAYER_DIGEST" \
-            | gunzip \
-            | docker run --rm -i \
-                -v devcell-nix-store-${{ matrix.arch }}:/dest \
-                alpine sh -c 'cd /dest && tar -x --strip-components=1'
+          ./bin/cell nix-store pull \
+            --image "$IMG" \
+            --volume "devcell-nix-store-${{ matrix.arch }}"
 
       - name: Show volume status (debug)
         run: |

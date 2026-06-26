@@ -81,14 +81,16 @@ func TestCacheRoundtrip(t *testing.T) {
 	// ── Push: tar -czf - | crane append --new_layer - ────────────────
 	// Mirrors `.github/workflows/build.dev.yml` `Inspect + stream-publish`
 	// step exactly, just against localhost.
-	tarToCraneAppend(t, srcVol, baseTag, srcTag)
+	cellNixStorePush(t, repoRoot, srcVol, baseTag, srcTag)
 
 	// ── Pull: crane blob | gunzip | tar -x ───────────────────────────
 	// Mirrors the workflow's `Stream-hydrate /nix volume` step.
 	dockerRun(t, "volume", "rm", dstVol)
 	dockerRun(t, "volume", "create", dstVol)
 	t.Cleanup(func() { dockerRun(t, "volume", "rm", dstVol) })
-	craneBlobToTarExtract(t, srcTag, hostAddr, port, dstVol)
+	cellNixStorePull(t, repoRoot, srcTag, dstVol)
+	_ = hostAddr // diagnostic-only now (still used in pull's encoding probe via crane)
+	_ = port
 	logVolumeStats(t, dstVol, "dst")
 
 	// ── Verify: byte-for-byte volume content match ───────────────────
@@ -242,83 +244,114 @@ func cellBuildCore(t *testing.T, repoRoot, srcVol string) {
 	}
 }
 
-// tarToCraneAppend mirrors workflow publish but via a staged tar file
-// instead of stdin. The workflow uses stdin (`--new_layer -`) against
-// an OCI base image (public ECR busybox) where crane's stdin handler
-// correctly passes through pre-gzipped input. Our local test mirrors
-// busybox via `docker save | crane push`, which yields a Docker v2
-// base image — and crane's stdin handler re-gzips pre-gzipped input
-// when the base is Docker v2, producing a double-gzipped layer that
-// the pull side can't decompress in one step.
-//
-// File-based input (`--new_layer /path`) detects gzip magic in the
-// file content and stores it as-is regardless of base schema, so the
-// test produces the same on-wire encoding as production CI does.
-// Disk cost: one 11 GB temp file (or smaller for the `core` fixture,
-// ~800 MB), which fits comfortably on the runner.
-func tarToCraneAppend(t *testing.T, srcVol, baseTag, srcTag string) {
+// cellNixStorePush invokes the SAME `cell nix-store push` binary the
+// CI workflow uses to publish the cache layer. By going through the
+// cell subcommand (which uses `pkg/v1/stream.NewLayer` internally),
+// the test exercises the identical code path as production — no
+// file-vs-stdin or library-vs-CLI divergence is possible.
+func cellNixStorePush(t *testing.T, repoRoot, srcVol, baseTag, srcTag string) {
 	t.Helper()
-	tmp, err := os.CreateTemp("", "nix-cache-*.tar.gz")
-	if err != nil {
-		t.Fatalf("create temp tarball: %v", err)
+	// Build the tar stream inside alpine (matches the workflow), then
+	// pipe stdin → `./bin/cell nix-store push --base BASE --image DST`.
+	tarCmd := osexec.Command("docker", "run", "--rm",
+		"-v", srcVol+":/nix:ro",
+		"public.ecr.aws/docker/library/alpine:latest",
+		"tar", "-cf", "-",
+		"--exclude=nix/var/nix/daemon-socket",
+		"-C", "/", "nix")
+	pushCmd := osexec.Command(filepath.Join(repoRoot, "bin/cell"),
+		"nix-store", "push",
+		"--base", baseTag,
+		"--image", srcTag)
+	pushCmd.Dir = repoRoot
+	pipeR, pipeW := pipePair(t)
+	tarCmd.Stdout = pipeW
+	pushCmd.Stdin = pipeR
+	var tarErr, pushOut, pushErr bytesBuffer
+	tarCmd.Stderr = &tarErr
+	pushCmd.Stdout = &pushOut
+	pushCmd.Stderr = &pushErr
+
+	if err := pushCmd.Start(); err != nil {
+		t.Fatalf("start cell nix-store push: %v", err)
 	}
-	tmpPath := tmp.Name()
-	tmp.Close()
-	t.Cleanup(func() { os.Remove(tmpPath) })
-	tarScript := fmt.Sprintf(
-		`docker run --rm -v %q:/nix:ro public.ecr.aws/docker/library/alpine:latest `+
-			`tar -czf - --exclude='nix/var/nix/daemon-socket' -C / nix > %q`,
-		srcVol, tmpPath)
-	runShellPipe(t, "tar → tmp file", tarScript)
-	if st, err := os.Stat(tmpPath); err == nil {
-		t.Logf("staged tarball: %d bytes (%s)", st.Size(), tmpPath)
+	if err := tarCmd.Run(); err != nil {
+		pipeW.Close()
+		_ = pushCmd.Wait()
+		t.Fatalf("tar -cf failed: %v\nstderr: %s", err, tarErr.String())
 	}
-	out := craneRun(t, "append", "--base", baseTag, "--new_layer", tmpPath, "--new_tag", srcTag)
-	t.Logf("crane append output:\n%s", out)
+	pipeW.Close()
+	if err := pushCmd.Wait(); err != nil {
+		t.Fatalf("cell nix-store push failed: %v\nstderr: %s\nstdout: %s", err, pushErr.String(), pushOut.String())
+	}
+	if pushOut.Len() > 0 {
+		t.Logf("cell nix-store push stdout: %s", pushOut.String())
+	}
 }
 
-// craneBlobToTarExtract mirrors workflow hydrate:
-//
-//	crane blob <repo>@<digest>
-//	  | gunzip
-//	  | docker run -i -v <vol>:/dest alpine sh -c 'cd /dest && tar -x --strip-components=1'
-func craneBlobToTarExtract(t *testing.T, srcTag, hostAddr string, port int, dstVol string) {
+// cellNixStorePull invokes `cell nix-store pull` to extract the cache
+// image's last layer into a named Docker volume. Verifies the layer's
+// byte-magic (single-gzipped on the wire) before the pull as a guard
+// against any future regression in the push path.
+func cellNixStorePull(t *testing.T, repoRoot, srcTag string, dstVol string) {
 	t.Helper()
+
+	// Encoding sanity check — verify the layer is single-gzipped, not
+	// double. If `cell nix-store push` ever regresses to producing
+	// double-gzipped layers, this surfaces immediately with a clear
+	// diagnostic instead of cascading into "tar: invalid tar magic"
+	// failures deeper down.
 	manifest := craneRun(t, "manifest", srcTag)
 	t.Logf("cache image manifest:\n%s", manifest)
 	digest := lastLayerDigest(t, manifest)
-	t.Logf("pulling layer digest: %s", digest)
-	blobRef := fmt.Sprintf("%s:%d/cache-test@%s", hostAddr, port, digest)
-
-	// Encoding assertions — guard against the regression that broke
-	// CI #217: the workflow was using `tar -czf | crane append
-	// --new_layer -` (stdin), which crane double-gzips, producing a
-	// layer that a single `gunzip | tar -x` pull can't decode.
-	// Correct: file-based `--new_layer FILE` (or equivalent) → crane
-	// detects gzip magic in the file → stores as-is → single-gzipped.
-	// Pull side does ONE gunzip. We assert this directly.
+	// srcTag is `host:port/repo:tag` — strip the trailing ":tag" to
+	// build a blob ref. Use LastIndex, not IndexByte (which would cut
+	// at the port colon).
+	repo := srcTag
+	if i := strings.LastIndex(repo, ":"); i >= 0 {
+		repo = repo[:i]
+	}
+	blobRef := fmt.Sprintf("%s@%s", repo, digest)
 	rawPeek := osShellOutput(t, fmt.Sprintf("crane blob %q | head -c 4 | xxd -p | head -1", blobRef))
 	gunzipPeek := osShellOutput(t, fmt.Sprintf("crane blob %q | gunzip 2>/dev/null | head -c 4 | xxd -p | head -1", blobRef))
 	t.Logf("raw blob first 4 bytes (hex): %s", strings.TrimSpace(rawPeek))
 	t.Logf("after 1 gunzip, first 4 bytes (hex): %s", strings.TrimSpace(gunzipPeek))
-
 	if !strings.HasPrefix(strings.TrimSpace(rawPeek), "1f8b") {
-		t.Fatalf("layer blob does not start with gzip magic (got %q) — expected an OCI tar+gzip layer", strings.TrimSpace(rawPeek))
+		t.Fatalf("layer blob does not start with gzip magic (got %q) — expected OCI tar+gzip", strings.TrimSpace(rawPeek))
 	}
 	if strings.HasPrefix(strings.TrimSpace(gunzipPeek), "1f8b") {
 		t.Fatalf("after one gunzip the bytes are STILL gzip magic (got %q) — layer is double-gzipped. "+
-			"Push side must use file-based `crane append --new_layer FILE`, not stdin (`--new_layer -`) with pre-gzipped input. "+
-			"See workflow comments for context.", strings.TrimSpace(gunzipPeek))
+			"`cell nix-store push` should produce a single-gzipped layer via stream.NewLayer.", strings.TrimSpace(gunzipPeek))
 	}
 
-	script := fmt.Sprintf(
-		`crane blob %q `+
-			`| gunzip `+
-			`| docker run --rm -i -v %q:/dest public.ecr.aws/docker/library/alpine:latest `+
-			`sh -c 'cd /dest && tar -x --strip-components=1'`,
-		blobRef, dstVol)
-	runShellPipe(t, "crane blob→gunzip→tar -x", script)
+	// Pull via the same binary the workflow uses.
+	cmd := osexec.Command(filepath.Join(repoRoot, "bin/cell"),
+		"nix-store", "pull",
+		"--image", srcTag,
+		"--volume", dstVol)
+	cmd.Dir = repoRoot
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("cell nix-store pull failed: %v\noutput:\n%s", err, out)
+	}
+	if len(out) > 0 {
+		t.Logf("cell nix-store pull output:\n%s", out)
+	}
 }
+
+// pipePair returns an os.Pipe with a t.Cleanup ensuring it's closed.
+func pipePair(t *testing.T) (*os.File, *os.File) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	t.Cleanup(func() { r.Close(); w.Close() })
+	return r, w
+}
+
+// bytesBuffer is a tiny alias to avoid importing bytes everywhere.
+type bytesBuffer = strings.Builder
 
 // osShellOutput runs a shell command and returns its captured output.
 // Diagnostic-only — does not fail the test on non-zero exit (the
