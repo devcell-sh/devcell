@@ -1,5 +1,21 @@
 {
   "nodes": {
+    "devcell": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "path": "..",
+        "type": "path"
+      },
+      "original": {
+        "path": "..",
+        "type": "path"
+      },
+      "parent": []
+    },
     "devshell": {
       "inputs": {
         "nixpkgs": [
@@ -202,6 +218,7 @@
     },
     "root": {
       "inputs": {
+        "devcell": "devcell",
         "home-manager": "home-manager",
         "mcp-nixos": "mcp-nixos",
         "nix-darwin": "nix-darwin",

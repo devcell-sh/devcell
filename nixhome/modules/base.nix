@@ -1,5 +1,5 @@
 # base.nix — utilities present in every stack
-{pkgs, lib, pkgsUnstable, self, ...}: {
+{pkgs, lib, pkgsUnstable, self, devcell, ...}: {
   imports = [
     ./shell.nix
     ./llm
@@ -197,6 +197,16 @@
     wget # HTTP downloader
     rsync # fast file sync (used by entrypoint fragment staging)
     yq-go # TOML/YAML/JSON processor
+
+    # cell — the devcell CLI itself, baked into every image so it can
+    # run from inside the container (e.g. CI's publish step doing
+    # `cell nix-store push` against the populated /nix volume without
+    # the host's runner needing the binary). Source is pulled from
+    # the repo-root flake `devcell.packages.${system}.cell`, declared
+    # as an input of nixhome's flake. Bumping the repo root's
+    # vendorHash / source is a flake-lock concern, not a manual edit
+    # in this module.
+    devcell.packages.${pkgs.system}.cell
   ] ++ lib.optionals pkgs.stdenv.isLinux [
     glibcLocales # en_US.UTF-8 locale for browser fingerprinting + text handling
     bubblewrap   # unprivileged sandboxing tool used by Linux-only tooling

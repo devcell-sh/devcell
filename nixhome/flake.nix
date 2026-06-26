@@ -19,6 +19,17 @@
     # OCI images alongside images/Dockerfile. See ./packages/image.nix.
     nix2container.url = "github:nlewo/nix2container";
     nix2container.inputs.nixpkgs.follows = "nixpkgs";
+
+    # devcell — the repo root flake, which exposes the `cell` binary as
+    # `devcell.packages.${system}.cell`. Baked into every stack via
+    # base.nix so the binary lives inside every built devcell image
+    # (used by CI's `cell nix-store push` and any in-container CLI use).
+    # `path:..` resolves to the parent directory of nixhome/, i.e. the
+    # devcell repo root.
+    devcell = {
+      url = "path:..";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = {
@@ -30,6 +41,7 @@
     nix-darwin,
     mcp-nixos,
     nix2container,
+    devcell,
   }: let
     lib = nixpkgs.lib;
 
@@ -52,7 +64,7 @@
     in
       home-manager.lib.homeManagerConfiguration {
         pkgs = import nixpkgs nixCfg;
-        extraSpecialArgs = {inherit self mcp-nixos pkgsUnstable pkgsEdge;};
+        extraSpecialArgs = {inherit self mcp-nixos pkgsUnstable pkgsEdge devcell;};
         modules =
           [
             {
@@ -151,7 +163,7 @@
     in
       home-manager.lib.homeManagerConfiguration {
         pkgs = import nixpkgs nixCfg;
-        extraSpecialArgs = {inherit self mcp-nixos pkgsUnstable pkgsEdge;};
+        extraSpecialArgs = {inherit self mcp-nixos pkgsUnstable pkgsEdge devcell;};
         modules =
           [
             {
@@ -370,7 +382,7 @@
         {
           # Pass flake inputs into home-manager modules (needed by base.nix → managed-*.nix)
           home-manager.extraSpecialArgs = {
-            inherit self mcp-nixos;
+            inherit self mcp-nixos devcell;
             pkgsUnstable = import nixpkgs-unstable {
               system = "aarch64-darwin";
               config.allowUnfree = true;
