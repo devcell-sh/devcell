@@ -32,7 +32,7 @@ env:
 jobs:
   secrets:
     name: Detect Secrets
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,7 +51,7 @@ jobs:
           - runner: ubuntu-latest
             arch: amd64
             platform: linux/amd64
-          - runner: ubuntu-24.04-arm
+          - runner: blacksmith-4vcpu-ubuntu-2404-arm
             arch: arm64
             platform: linux/arm64
     runs-on: ${{ matrix.runner }}
@@ -68,12 +68,8 @@ jobs:
           df -h
 
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          buildkitd-config-inline: |
-            [worker.oci]
-              max-parallelism = 4
+      - name: Setup Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@v1
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -136,7 +132,7 @@ jobs:
             variant: base
             test_run: "TestBaseImage|TestDotenv"
             timeout: 600s
-          - runner: ubuntu-24.04-arm
+          - runner: blacksmith-4vcpu-ubuntu-2404-arm
             arch: arm64
             variant: base
             test_run: "TestBaseImage|TestDotenv"
@@ -146,7 +142,7 @@ jobs:
             variant: ultimate
             test_run: ""
             timeout: 1200s
-          - runner: ubuntu-24.04-arm
+          - runner: blacksmith-4vcpu-ubuntu-2404-arm
             arch: arm64
             variant: ultimate
             test_run: ""
@@ -196,7 +192,7 @@ jobs:
     name: Docker Manifests
     needs: [docker-build]
     if: always() && needs.docker-build.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Set lowercase image name
         run: echo "IMAGE_NAME_LC=${IMAGE_NAME,,}" >> $GITHUB_ENV
@@ -342,7 +338,7 @@ jobs:
     name: Pure Image Manifests
     needs: pure-build
     if: always() && needs.pure-build.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
 
@@ -398,7 +394,7 @@ jobs:
   cell-build:
     name: Cell CLI Dev Build
     needs: secrets
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     env:
       RELEASE_VERSION: v0.0.0
     steps:
@@ -452,7 +448,7 @@ jobs:
         include:
           - runner: ubuntu-latest
             arch: amd64
-          - runner: ubuntu-24.04-arm
+          - runner: blacksmith-4vcpu-ubuntu-2404-arm
             arch: arm64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
@@ -515,7 +511,7 @@ jobs:
         include:
           - runner: ubuntu-latest
             arch: amd64
-          - runner: ubuntu-24.04-arm
+          - runner: blacksmith-4vcpu-ubuntu-2404-arm
             arch: arm64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
