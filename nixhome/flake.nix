@@ -115,7 +115,7 @@
         # from fullstack
         "build" "go" "apple" "infra" "node" "project-management" "python" "qa-tools" "scraping"
         # ultimate additions
-        "android" "desktop" "electronics" "financial" "graphics" "news" "nixos"
+        "android" "desktop" "electronics" "graphics" "news" "nixos"
         "postgresql" "publishing" "security" "travel" "plex"
       ];
     };

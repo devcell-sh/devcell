@@ -8,7 +8,9 @@
     ../modules/android.nix
     ../modules/desktop
     ../modules/electronics.nix
-    ../modules/financial.nix
+    # CELL-293: financial temporarily removed from ultimate — yahoo-finance-mcp
+    # rebuilds from source on every fresh runner (custom github derivation, not
+    # on cache.nixos.org) and its pythonImportsCheck stalls CI on arm64.
     ../modules/graphics.nix
     ../modules/llm
     ../modules/media
@@ -27,7 +29,6 @@
   devcell.modules.android.enable = true;
   devcell.modules.desktop.enable = true;
   devcell.modules.electronics.enable = true;
-  devcell.modules.financial.enable = true;
   devcell.modules.graphics.enable = true;
   devcell.modules.news.enable = true;
   devcell.modules.nixos.enable = true;
