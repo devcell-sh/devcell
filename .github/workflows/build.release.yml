@@ -34,7 +34,7 @@ jobs:
           - runner: ubuntu-latest
             arch: amd64
             platform: linux/amd64
-          - runner: ubuntu-24.04-arm
+          - runner: blacksmith-4vcpu-ubuntu-2404-arm
             arch: arm64
             platform: linux/arm64
     runs-on: ${{ matrix.runner }}
@@ -54,12 +54,8 @@ jobs:
           df -h
 
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          buildkitd-config-inline: |
-            [worker.oci]
-              max-parallelism = 4
+      - name: Setup Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@v1
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -133,38 +129,19 @@ jobs:
 
       # Publish the populated /nix volume back to the GHCR cache so
       # subsequent dev + release builds can reuse it. Runs even on
-      # prior-step failure (partial volume is still useful), but skips
-      # under cancellation, cache-bust mode, or near-empty volume.
-      - name: Stream-publish /nix volume to GHCR cache image
+      # prior-step failure (partial volume is still useful).
+      - name: Publish nix cache
         if: ${{ !cancelled() && inputs.skip_nix_cache != true }}
-        timeout-minutes: 80
-        run: |
-          set -eo pipefail
-          HASH=${{ hashFiles('nixhome/**') }}
-          LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest"
-          EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}"
-
-          SIZE_KB=$(docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix:ro alpine du -s /nix 2>/dev/null | awk '{print $1}')
-          if [ "${SIZE_KB:-0}" -lt 1000000 ]; then
-            echo "skipping publish: /nix is only ${SIZE_KB}KB — won't overwrite cache with empty volume"
-            exit 0
-          fi
-          echo "publishing /nix (${SIZE_KB}KB) — job status: ${{ job.status }}"
-
-          docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix:ro alpine \
-            tar -cf - \
-              --exclude='nix/var/nix/daemon-socket' \
-              -C / nix \
-            | ./bin/cell nix-store push \
-                --base public.ecr.aws/docker/library/busybox:latest \
-                --image "$LATEST"
-          # Alias *-latest to the content-hashed tag without re-uploading blobs.
-          docker buildx imagetools create --tag "$EXACT" "$LATEST"
+        env:
+          ARCH: ${{ matrix.arch }}
+          HASH: ${{ hashFiles('nixhome/**') }}
+          STAGE: release
+        run: task nix-cache:publish
 
   docker-manifest:
     name: Docker Manifests
     needs: docker-build
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Set lowercase image name
         run: echo "IMAGE_NAME_LC=${IMAGE_NAME,,}" >> $GITHUB_ENV
@@ -200,7 +177,7 @@ jobs:
 
   cell-release:
     name: Cell CLI Release Build
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v5
         with:
@@ -242,7 +219,7 @@ jobs:
         include:
           - runner: ubuntu-latest
             arch: amd64
-          - runner: ubuntu-24.04-arm
+          - runner: blacksmith-4vcpu-ubuntu-2404-arm
             arch: arm64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30

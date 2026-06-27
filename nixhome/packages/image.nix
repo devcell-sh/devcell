@@ -183,8 +183,11 @@
     sandbox = false
     filter-syscalls = false
     sandbox-fallback = true
-    max-substitution-jobs = 128
-    http-connections = 128
+    # 128 concurrent downloads caused cache.nixos.org throttling (CELL-293)
+    # — symptoms were "curl error: Failed sending data to the peer" + HTTP 416.
+    # 16 is the upstream default; stays under the CDN's throttle threshold.
+    max-substitution-jobs = 16
+    http-connections = 16
     trusted-users = root *
     # Empty = build as the invoking user (no privilege drop to nixbld<N>
     # build users). The pure image is a single-user filesystem (devcell @
@@ -397,8 +400,11 @@
     sandbox = false
     filter-syscalls = false
     sandbox-fallback = true
-    max-substitution-jobs = 128
-    http-connections = 128
+    # 128 concurrent downloads caused cache.nixos.org throttling (CELL-293)
+    # — symptoms were "curl error: Failed sending data to the peer" + HTTP 416.
+    # 16 is the upstream default; stays under the CDN's throttle threshold.
+    max-substitution-jobs = 16
+    http-connections = 16
     trusted-users = root *
     # Empty = build as the invoking user (no privilege drop to nixbld<N>
     # build users). The pure image is a single-user filesystem (devcell @

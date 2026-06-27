@@ -365,3 +365,49 @@ tasks:
     desc: Round-trip nix-cache pipeline locally (~1 min, requires docker + crane)
     cmds:
       - go test -v -count=1 -run TestCacheRoundtrip ./test/...
+
+  # ── Nix-store GHCR cache pipeline ──────────────────────────────────────
+  # Stream the populated /nix volume to GHCR as a single-layer cache image.
+  # `cell nix-store push` uses pkg/v1/stream.NewLayer from go-containerregistry:
+  # stdin is gzipped lazily, the digest is computed incrementally, and the
+  # blob is uploaded via the OCI chunked-upload protocol — peak runner disk
+  # is the pipe buffer, not the volume size.
+  #
+  # Used by CI (build.dev.yml + build.release.yml) AND reproducible locally
+  # against a populated devcell-nix-store-<arch> volume.
+  nix-cache:publish:
+    desc: Publish the /nix Docker volume to GHCR as a nix-cache image
+    dir: "{{.TASKFILE_DIR}}"
+    requires:
+      vars: [ARCH, REGISTRY, IMAGE_NAME_LC, HASH]
+    vars:
+      STAGE: '{{.STAGE | default "publish"}}'
+      VOL: 'devcell-nix-store-{{.ARCH}}'
+      EXACT: '{{.REGISTRY}}/{{.IMAGE_NAME_LC}}:nix-cache-{{.ARCH}}-{{.HASH}}'
+      LATEST: '{{.REGISTRY}}/{{.IMAGE_NAME_LC}}:nix-cache-{{.ARCH}}-latest'
+      # gcr.io distroless static — ~2 MB, multi-arch manifest resolves
+      # automatically, generous anonymous pulls (no ECR-style rate limit).
+      BASE: 'gcr.io/distroless/static-debian12:latest'
+    cmds:
+      - |
+        set -eo pipefail
+        SIZE_KB=$(docker run --rm -v "{{.VOL}}:/nix:ro" alpine du -s /nix 2>/dev/null | awk '{print $1}')
+        if [ "${SIZE_KB:-0}" -lt 1000000 ]; then
+          echo "[{{.STAGE}}] skipping publish: /nix is only ${SIZE_KB}KB"
+          exit 0
+        fi
+        echo "[{{.STAGE}}] publishing /nix (${SIZE_KB}KB)"
+
+        docker run --rm -v "{{.VOL}}:/nix:ro" alpine \
+          tar -cf - \
+            --exclude='nix/var/nix/daemon-socket' \
+            -C / nix \
+          | ./bin/cell nix-store push \
+              --base "{{.BASE}}" \
+              --image "{{.LATEST}}"
+
+        docker buildx imagetools create --tag "{{.EXACT}}" "{{.LATEST}}"
+
+        echo "[{{.STAGE}}] pushed nix-cache images:"
+        echo "  {{.EXACT}}"
+        echo "  {{.LATEST}}"

@@ -103,8 +103,10 @@ fi
 # Nix config — must include ssl-cert-file so the daemon can reach cache.nixos.org.
 cat >> /etc/nix/nix.conf <<NIXCONF
 experimental-features = nix-command flakes
-max-substitution-jobs = 64
-http-connections = 64
+# 64+ concurrent downloads caused cache.nixos.org throttling — see CELL-293.
+# 16 is the upstream default; stays under the CDN's throttle threshold.
+max-substitution-jobs = 16
+http-connections = 16
 max-jobs = auto
 sandbox = true
 ssl-cert-file = $CACERT

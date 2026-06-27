@@ -30,7 +30,7 @@ env:
 jobs:
   secrets:
     name: Detect Secrets
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v5
         with:
@@ -54,7 +54,7 @@ jobs:
           - runner: ubuntu-latest
             arch: amd64
             platform: linux/amd64
-          - runner: ubuntu-24.04-arm
+          - runner: blacksmith-4vcpu-ubuntu-2404-arm
             arch: arm64
             platform: linux/arm64
     runs-on: ${{ matrix.runner }}
@@ -71,12 +71,8 @@ jobs:
           df -h
 
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          buildkitd-config-inline: |
-            [worker.oci]
-              max-parallelism = 4
+      - name: Setup Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@v1
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -166,6 +162,20 @@ jobs:
           ./bin/cell build --thin --stack base --image "$BASE_TAG" --debug
           echo "BASE_TAG=$BASE_TAG" >> "$GITHUB_ENV"
 
+      # Interim publish: lock in the base-stack derivations as a usable
+      # cache. If the ultimate build below fails catastrophically (OOM,
+      # runner kill, CDN flake), the next run still hydrates the base
+      # cache and skips re-deriving everything in base. Same semantics
+      # as the final publish — runs on prior-step failure, skipped when
+      # cache-bust mode is on or volume is empty.
+      - name: Publish nix cache (post-base, interim)
+        if: ${{ !cancelled() && inputs.skip_nix_cache != true }}
+        env:
+          ARCH: ${{ matrix.arch }}
+          HASH: ${{ hashFiles('nixhome/**') }}
+          STAGE: post-base
+        run: task nix-cache:publish
+
       - name: Build thin image (ultimate stack)
         env:
           DEVCELL_NIX_VOLUME: devcell-nix-store-${{ matrix.arch }}
@@ -180,53 +190,16 @@ jobs:
           docker push "$BASE_TAG"
           docker push "$ULT_TAG"
 
-      # Stream-publish the populated /nix volume to GHCR as a single-
-      # layer cache image. `cell nix-store push` uses
-      # `pkg/v1/stream.NewLayer` from go-containerregistry: stdin is
-      # gzipped lazily, the digest is computed incrementally, and the
-      # blob is uploaded via the OCI chunked-upload protocol — peak
-      # runner disk is the pipe buffer, not the volume size.
-      # `tar -cf` (not `-czf`): cell nix-store push gzips for us.
-      # `-C / nix`: archive entries land under `nix/...` natively
-      # (BusyBox tar doesn't implement --transform).
-      # `--exclude=nix/var/nix/daemon-socket`: Unix sockets can't tar.
-      # Publish even on prior-step failure — a partially-populated
-      # /nix volume still speeds up the next run's hydrate. Skip when:
-      #   - the job was cancelled (intentional, don't write garbage)
-      #   - skip_nix_cache=true (cache-bust mode, deliberately fresh)
-      #   - the volume is under 1 GB (hydrate-step failure → empty
-      #     volume, don't overwrite a healthy cache with nothing)
-      - name: Stream-publish /nix volume to GHCR cache image
+      # Final publish: re-pushes after ultimate also lands derivations
+      # into /nix. Overwrites the interim post-base cache with the
+      # fuller closure. Idempotent — same composite action as above.
+      - name: Publish nix cache (post-ultimate, final)
         if: ${{ !cancelled() && inputs.skip_nix_cache != true }}
-        timeout-minutes: 80
-        run: |
-          set -eo pipefail
-          HASH=${{ hashFiles('nixhome/**') }}
-          EXACT="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}"
-          LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest"
-
-          SIZE_KB=$(docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix:ro alpine du -s /nix 2>/dev/null | awk '{print $1}')
-          if [ "${SIZE_KB:-0}" -lt 1000000 ]; then
-            echo "skipping publish: /nix is only ${SIZE_KB}KB — won't overwrite cache with empty volume"
-            exit 0
-          fi
-          echo "publishing /nix (${SIZE_KB}KB) — job status: ${{ job.status }}"
-
-          docker run --rm -v devcell-nix-store-${{ matrix.arch }}:/nix:ro alpine \
-            tar -cf - \
-              --exclude='nix/var/nix/daemon-socket' \
-              -C / nix \
-            | ./bin/cell nix-store push \
-                --base public.ecr.aws/docker/library/busybox:latest \
-                --image "$LATEST"
-
-          # Alias the *-latest tag to the content-hashed tag without
-          # re-uploading blobs.
-          docker buildx imagetools create --tag "$EXACT" "$LATEST"
-
-          echo "pushed nix-cache images:"
-          echo "  $EXACT"
-          echo "  $LATEST"
+        env:
+          ARCH: ${{ matrix.arch }}
+          HASH: ${{ hashFiles('nixhome/**') }}
+          STAGE: post-ultimate
+        run: task nix-cache:publish
 
   docker-test:
     name: Docker Test (${{ matrix.arch }})
@@ -237,7 +210,7 @@ jobs:
         include:
           - runner: ubuntu-latest
             arch: amd64
-          - runner: ubuntu-24.04-arm
+          - runner: blacksmith-4vcpu-ubuntu-2404-arm
             arch: arm64
     runs-on: ${{ matrix.runner }}
     steps:
@@ -340,7 +313,7 @@ jobs:
     name: Docker Manifests
     needs: [docker-build]
     if: always() && needs.docker-build.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Set lowercase image name
         run: echo "IMAGE_NAME_LC=${IMAGE_NAME,,}" >> $GITHUB_ENV
@@ -373,7 +346,7 @@ jobs:
   cell-build:
     name: Cell CLI Dev Build
     needs: secrets
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     env:
       RELEASE_VERSION: v0.0.0
     steps:
@@ -427,7 +400,7 @@ jobs:
         include:
           - runner: ubuntu-latest
             arch: amd64
-          - runner: ubuntu-24.04-arm
+          - runner: blacksmith-4vcpu-ubuntu-2404-arm
             arch: arm64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
@@ -490,7 +463,7 @@ jobs:
         include:
           - runner: ubuntu-latest
             arch: amd64
-          - runner: ubuntu-24.04-arm
+          - runner: blacksmith-4vcpu-ubuntu-2404-arm
             arch: arm64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
