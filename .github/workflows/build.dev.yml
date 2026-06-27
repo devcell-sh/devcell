@@ -49,6 +49,10 @@ jobs:
     needs: secrets
     strategy:
       fail-fast: false
+      # Serialize amd64 + arm64 to avoid stressing GHCR + cache.nixos.org
+      # with two concurrent multi-GB push/pull pipelines from the same
+      # repo. Doubles wall-clock; halves peak network pressure.
+      max-parallel: 1
       matrix:
         include:
           - runner: ubuntu-latest
