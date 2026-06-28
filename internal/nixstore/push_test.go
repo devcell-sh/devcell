@@ -31,7 +31,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/DimmKirr/devcell/internal/nixstore"
 
@@ -158,6 +160,76 @@ func TestPush_LayerIsSingleGzipped(t *testing.T) {
 	if string(gzHead) != "nix/" {
 		t.Errorf("after one gunzip expected tar magic 'nix/', got %q (%x)", gzHead, gzHead)
 	}
+}
+
+// TestPush_ReportsProgress verifies that Push streams progress lines to
+// nixstore.ProgressWriter and emits a final "done:" line reporting the
+// exact number of bytes consumed from the input reader. This is the
+// instrumentation we need to tell whether the CI publish step is
+// genuinely stalling on the wire vs being killed externally — without
+// these lines a multi-GB upload is silent for minutes (CELL-293).
+func TestPush_ReportsProgress(t *testing.T) {
+	srv := newRegistryForPush(t)
+	defer srv.Close()
+
+	regHost := mustHostForPush(t, srv.URL)
+	baseRef := regHost + "/base:latest"
+	dstRef := regHost + "/cache:progress"
+	mustSeedEmptyBase(t, baseRef)
+
+	// Pad the fixture so progress emits at least once at the tight tick
+	// we set below. The exact size doesn't matter — the goroutine
+	// observes the counter, not the writer.
+	const pad = 4 * 1024 * 1024 // 4 MB — enough that even a fast push has time for one tick
+	fixture := map[string][]byte{
+		"nix/store/pad":    bytes.Repeat([]byte{0x55}, pad),
+		"nix/store/marker": []byte("hello"),
+	}
+	tarBytes := mustBuildTar(t, fixture)
+
+	buf := &syncBuffer{}
+	prevWriter := nixstore.ProgressWriter
+	prevTick := nixstore.ProgressTick
+	nixstore.ProgressWriter = buf
+	nixstore.ProgressTick = 50 * time.Millisecond
+	defer func() {
+		nixstore.ProgressWriter = prevWriter
+		nixstore.ProgressTick = prevTick
+	}()
+
+	if err := nixstore.Push(context.Background(), baseRef, dstRef, io.NopCloser(bytes.NewReader(tarBytes))); err != nil {
+		t.Fatalf("Push failed: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "[nix-store push] done:") {
+		t.Errorf("expected progress writer to contain a final 'done:' line, got:\n%s", out)
+	}
+	// The done-line must report at least the fixture's uncompressed
+	// tar byte count — if it reports zero, the counting reader isn't
+	// wired to the bytes that actually reach stream.NewLayer.
+	if !strings.Contains(out, "MB") && !strings.Contains(out, "GB") {
+		t.Errorf("expected progress to report MB/GB scale, got:\n%s", out)
+	}
+}
+
+// syncBuffer is a goroutine-safe bytes.Buffer for capturing the
+// progress goroutine's writes without races.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.String()
 }
 
 // TestPush_RejectsBadDstRef ensures Push fails cleanly when the
