@@ -55,9 +55,11 @@ jobs:
       max-parallel: 1
       matrix:
         include:
-          - runner: ubuntu-latest
-            arch: amd64
-            platform: linux/amd64
+          # amd64 temporarily disabled while we debug the post-base
+          # cache-publish hang on arm64. Re-enable once arm64 is healthy.
+          # - runner: ubuntu-latest
+          #   arch: amd64
+          #   platform: linux/amd64
           - runner: blacksmith-4vcpu-ubuntu-2404-arm
             arch: arm64
             platform: linux/arm64
@@ -212,8 +214,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-latest
-            arch: amd64
+          # amd64 disabled in step with docker-build above.
+          # - runner: ubuntu-latest
+          #   arch: amd64
           - runner: blacksmith-4vcpu-ubuntu-2404-arm
             arch: arm64
     runs-on: ${{ matrix.runner }}
@@ -334,17 +337,18 @@ jobs:
       - name: Create GHCR manifests (per stack + ultimate as canonical)
         run: |
           R=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}
-          # Per-stack multi-arch manifests
+          # amd64 inputs commented out in step with docker-build matrix
+          # above — re-add the `${R}:v0.0.0-amd64-*` arguments when amd64
+          # is re-enabled. arm64-only manifests are still valid OCI
+          # indexes; tags resolve cleanly on arm64 hosts.
           docker buildx imagetools create \
             -t "${R}:v0.0.0-base" \
-            "${R}:v0.0.0-amd64-base" \
             "${R}:v0.0.0-arm64-base"
           docker buildx imagetools create \
             -t "${R}:v0.0.0-ultimate" \
             -t "${R}:v0.0.0" \
             -t "${R}:latest" \
             -t "${R}:dev" \
-            "${R}:v0.0.0-amd64-ultimate" \
             "${R}:v0.0.0-arm64-ultimate"
 
   cell-build:
@@ -402,8 +406,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-latest
-            arch: amd64
+          # amd64 disabled in step with docker-build matrix above.
+          # - runner: ubuntu-latest
+          #   arch: amd64
           - runner: blacksmith-4vcpu-ubuntu-2404-arm
             arch: arm64
     runs-on: ${{ matrix.runner }}
@@ -465,8 +470,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-latest
-            arch: amd64
+          # amd64 disabled in step with docker-build matrix above.
+          # - runner: ubuntu-latest
+          #   arch: amd64
           - runner: blacksmith-4vcpu-ubuntu-2404-arm
             arch: arm64
     runs-on: ${{ matrix.runner }}
