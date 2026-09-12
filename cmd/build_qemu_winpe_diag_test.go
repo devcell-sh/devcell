@@ -1,3 +1,5 @@
+//go:build (darwin || linux) && qemu
+
 package main
 
 import (
