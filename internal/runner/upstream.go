@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"encoding/hex"
 	"fmt"
 	"os"
 	"strings"
@@ -48,9 +49,19 @@ func ResolveNixhomeRef(ver string) string {
 }
 
 // isDevVersion returns true for git-describe versions that don't correspond
-// to a real remote tag/branch (e.g. "v0.8.2-94-g0ac6be1-dirty").
+// to a real remote tag/branch (e.g. "v0.8.2-94-g0ac6be1-dirty", or a bare
+// commit hash like "bbae05b" from `git describe --always` with no reachable tags).
 func isDevVersion(v string) bool {
-	return strings.Contains(v, "-g") || strings.Contains(v, "-dirty")
+	return strings.Contains(v, "-g") || strings.Contains(v, "-dirty") || isBareCommitHash(v)
+}
+
+func isBareCommitHash(v string) bool {
+	n := len(v)
+	if n < 7 || n > 40 {
+		return false
+	}
+	_, err := hex.DecodeString(v + strings.Repeat("0", n%2))
+	return err == nil
 }
 
 // UpstreamFlakeRefNoVersion returns the unpinned ref — used by introspection

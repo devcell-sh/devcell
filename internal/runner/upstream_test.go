@@ -42,6 +42,21 @@ func TestUpstreamFlakeRef_DevVersionCoercesToDefault(t *testing.T) {
 	}
 }
 
+func TestUpstreamFlakeRef_BareCommitHashCoercesToDefault(t *testing.T) {
+	want := "github:devcell-sh/home/" + runner.DefaultNixhomeGitRef
+	for _, v := range []string{
+		"bbae05b",       // 7-char short hash (git describe --always)
+		"0ac6be1",       // another 7-char hash
+		"abcdef1234",    // 10-char hash
+		"a1b2c3d4e5f6",  // 12-char hash
+		"abc123def456abc123def456abc123def456abcd", // full 40-char hash
+	} {
+		if got := runner.UpstreamFlakeRef(v); got != want {
+			t.Errorf("UpstreamFlakeRef(%q) = %q, want %q", v, got, want)
+		}
+	}
+}
+
 func TestResolveNixhomeRef_EnvOverride(t *testing.T) {
 	t.Setenv("DEVCELL_NIXHOME", "/home/user/my-nixhome")
 	if got := runner.ResolveNixhomeRef("v1.0.0"); got != "/home/user/my-nixhome" {
