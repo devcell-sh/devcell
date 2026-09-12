@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/devcell-sh/go-winkit/isokit"
 	"github.com/devcell-sh/go-winkit/unattend"
-	"github.com/devcell-sh/go-winkit/winpe"
 
 	"github.com/devcell-sh/go-winkit/mctcatalog"
 	"github.com/devcell-sh/go-winkit/uupdump"
@@ -72,7 +72,7 @@ func DownloadWindowsISO(ctx context.Context, home, language string, noCache bool
 			// A cached image that firmware cannot boot (e.g. pure UDF with no
 			// El Torito, what hdiutil used to master) would burn a 20–40 min
 			// install cycle before failing at the EFI shell. Re-master instead.
-			if err := winpe.WindowsISOBootable(dest); err != nil {
+			if err := isokit.RequireEFIBootable(dest); err != nil {
 				obs.Logf("cached Windows ISO is unusable (%v) — re-mastering", err)
 				os.Remove(dest)
 				os.Remove(dest + ".done")
@@ -473,4 +473,3 @@ func DownloadPwsh(ctx context.Context, home string, noCache bool, obs Observer) 
 	}
 	return dest, nil
 }
-

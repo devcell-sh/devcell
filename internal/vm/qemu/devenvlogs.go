@@ -1,13 +1,24 @@
 package qemu
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/devcell-sh/go-winkit/isokit"
 	"github.com/devcell-sh/go-winkit/templates"
-	"github.com/devcell-sh/go-winkit/winpe"
+	"github.com/devcell-sh/go-winkit/unattend"
 )
+
+// GuestLog is a named log entry read off a FAT volume.
+type GuestLog struct {
+	Name    string
+	Content []byte
+	Err     error
+}
+
+// ErrNoSuchGuestLog is returned when a requested log file is absent.
+var ErrNoSuchGuestLog = errors.New("no such guest log")
 
 // The guest log volume: a FAT image any post-install VM can write logs to —
 // the same channel the install's answer volume provides, for the same reason.
@@ -32,10 +43,10 @@ func BuildGuestLogVolume(destPath string) error {
 // the failure mode that ruled out installing the module onto the guest disk.
 func BuildControlVolume(destPath string, payload map[string][]byte) error {
 	files := map[string][]byte{
-		"/" + GuestLogVolumeMarker: winpe.PadForFAT([]byte("devcell guest control volume\r\n")),
+		"/" + GuestLogVolumeMarker: unattend.PadForFAT([]byte("devcell guest control volume\r\n")),
 	}
 	for name, data := range payload {
-		files[name] = winpe.PadForFAT(data)
+		files[name] = unattend.PadForFAT(data)
 	}
 	if err := isokit.CreateFATImage(destPath, files); err != nil {
 		return fmt.Errorf("building control volume: %w", err)
@@ -46,15 +57,15 @@ func BuildControlVolume(destPath string, payload map[string][]byte) error {
 // CollectVolumeLogs reads the named files off a guest log volume — one entry
 // per name, absence reported rather than skipped, same contract as
 // CollectGuestLogs.
-func CollectVolumeLogs(imgPath string, names []string) []winpe.GuestLog {
-	logs := make([]winpe.GuestLog, 0, len(names))
+func CollectVolumeLogs(imgPath string, names []string) []GuestLog {
+	logs := make([]GuestLog, 0, len(names))
 	for _, name := range names {
 		data, err := isokit.ReadFileFromFAT(imgPath, "/"+name)
 		if err != nil {
-			logs = append(logs, winpe.GuestLog{Name: name, Err: fmt.Errorf("%w: %v", winpe.ErrNoSuchGuestLog, err)})
+			logs = append(logs, GuestLog{Name: name, Err: fmt.Errorf("%w: %v", ErrNoSuchGuestLog, err)})
 			continue
 		}
-		logs = append(logs, winpe.GuestLog{Name: name, Content: data})
+		logs = append(logs, GuestLog{Name: name, Content: data})
 	}
 	return logs
 }

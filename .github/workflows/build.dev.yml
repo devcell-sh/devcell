@@ -45,23 +45,22 @@ jobs:
             detect --source=. --verbose --redact
 
   docker-build:
-    name: Docker Build (${{ matrix.arch }})
+    name: Build (${{ matrix.stack }}/${{ matrix.arch }})
     needs: secrets
     strategy:
       fail-fast: false
-      # Serialize amd64 + arm64 to avoid stressing GHCR + cache.nixos.org
-      # with two concurrent multi-GB push/pull pipelines from the same
-      # repo. Doubles wall-clock; halves peak network pressure.
+      # Serialize jobs to avoid stressing GHCR + cache.nixos.org with
+      # concurrent multi-GB push/pull pipelines from the same repo.
       max-parallel: 1
       matrix:
+        stack: [base]
+        arch: [arm64, amd64]
         include:
-          # amd64 temporarily disabled while we debug the post-base
-          # cache-publish hang on arm64. Re-enable once arm64 is healthy.
-          # - runner: ubuntu-24.04
-          #   arch: amd64
-          #   platform: linux/amd64
-          - runner: ubuntu-24.04-arm
-            arch: arm64
+          - arch: amd64
+            runner: ubuntu-24.04
+            platform: linux/amd64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
             platform: linux/arm64
     runs-on: ${{ matrix.runner }}
     steps:
@@ -123,60 +122,25 @@ jobs:
             --volume "devcell-nix-store-${{ matrix.arch }}" \
           || echo "WARN: cache pull failed, continuing with empty volume"
 
-      # Build both stacks sequentially in the same job so the nix-store
-      # volume accumulates derivations from both — single tar dump at job
-      # end carries everything needed by docker-test. `cell build`
-      # reuses store paths across the two invocations (nix is
-      # content-addressed), so ultimate after base is incremental.
-      - name: Build thin image (base stack)
+      - name: Build image (${{ matrix.stack }})
         env:
           DEVCELL_NIX_VOLUME: devcell-nix-store-${{ matrix.arch }}
           DEVCELL_NIX_MAX_JOBS: "4"
         run: |
-          BASE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-base"
-          ./bin/cell build --stack base --image "$BASE_TAG" --debug
-          echo "BASE_TAG=$BASE_TAG" >> "$GITHUB_ENV"
+          IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-${{ matrix.stack }}"
+          ./bin/cell build --stack ${{ matrix.stack }} --image "$IMAGE_TAG" --debug
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
 
-      # Interim publish: lock in the base-stack derivations as a usable
-      # cache. If the ultimate build below fails catastrophically (OOM,
-      # runner kill, CDN flake), the next run still hydrates the base
-      # cache and skips re-deriving everything in base. Same semantics
-      # as the final publish — runs on prior-step failure, skipped when
-      # cache-bust mode is on or volume is empty.
-      - name: Publish nix cache (post-base, interim)
-        if: ${{ !cancelled() && inputs.skip_nix_cache != true }}
-        timeout-minutes: 45
-        env:
-          ARCH: ${{ matrix.arch }}
-          HASH: ${{ github.sha }}
-          STAGE: post-base
-          DEVCELL_NIX_PUSH_DEBUG: "1"
-        run: task nix-cache:publish
+      - name: Push to GHCR
+        run: docker push "$IMAGE_TAG"
 
-      - name: Build thin image (ultimate stack)
-        env:
-          DEVCELL_NIX_VOLUME: devcell-nix-store-${{ matrix.arch }}
-          DEVCELL_NIX_MAX_JOBS: "4"
-        run: |
-          ULT_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-ultimate"
-          ./bin/cell build --stack ultimate --image "$ULT_TAG" --debug
-          echo "ULT_TAG=$ULT_TAG" >> "$GITHUB_ENV"
-
-      - name: Push to GHCR (both stacks)
-        run: |
-          docker push "$BASE_TAG"
-          docker push "$ULT_TAG"
-
-      # Final publish: re-pushes after ultimate also lands derivations
-      # into /nix. Overwrites the interim post-base cache with the
-      # fuller closure. Idempotent — same composite action as above.
-      - name: Publish nix cache (post-ultimate, final)
+      - name: Publish nix cache
         if: ${{ !cancelled() && inputs.skip_nix_cache != true }}
         timeout-minutes: 120
         env:
           ARCH: ${{ matrix.arch }}
           HASH: ${{ github.sha }}
-          STAGE: post-ultimate
+          STAGE: post-${{ matrix.stack }}
           DEVCELL_NIX_PUSH_DEBUG: "1"
         run: task nix-cache:publish
 
@@ -187,9 +151,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # amd64 disabled in step with docker-build above.
-          # - runner: ubuntu-24.04
-          #   arch: amd64
+          - runner: ubuntu-24.04
+            arch: amd64
           - runner: ubuntu-24.04-arm
             arch: arm64
     runs-on: ${{ matrix.runner }}
@@ -233,28 +196,14 @@ jobs:
             --volume "devcell-nix-store-${{ matrix.arch }}" \
           || echo "WARN: cache pull failed, tests will use empty volume"
 
-      - name: Pull test images (base + ultimate)
-        run: |
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-base
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-ultimate
+      - name: Pull test image
+        run: docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-base
 
       - name: Run container tests
-        # Both `DEVCELL_USER_IMAGE` and `DEVCELL_TEST_IMAGE` point at the
-        # ultimate image (every module + tool baked in) so module-aware tests
-        # (kicad, plex, gui) find what they need. `DEVCELL_TEST_BASE_IMAGE`
-        # points at the smaller base image for entrypoint-only tests
-        # (TestEntrypoint_DebugTimestamps etc.). Setting `DEVCELL_USER_IMAGE`
-        # without `DEVCELL_USER_IMAGE_THIN` works because UserImageTagThin()
-        # falls back to DEVCELL_USER_IMAGE as-is (no `-thin` suffix appended)
-        # per CELL-286 prep.
-        # `DEVCELL_NIX_VOLUME` points cell at the per-arch volume we just
-        # hydrated from the GHCR cache, so `cell shell` / `cell claude` skip
-        # the lazy-build path entirely instead of falling back to the
-        # default-named volume (which would be empty).
         env:
           DEVCELL_NIX_VOLUME: devcell-nix-store-${{ matrix.arch }}
-          DEVCELL_TEST_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-ultimate
-          DEVCELL_USER_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-ultimate
+          DEVCELL_TEST_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-base
+          DEVCELL_USER_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-base
           DEVCELL_TEST_BASE_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:v0.0.0-${{ matrix.arch }}-base
           DEVCELL_TEST_PROJECT_DIR: ${{ runner.temp }}/devcell-test
           MCP_SECRET_TEST_PASSWORD: fake-secret-ci-value
@@ -279,22 +228,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create GHCR manifests (per stack + ultimate as canonical)
+      - name: Create multi-arch manifests
         run: |
           R=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}
-          # amd64 inputs commented out in step with docker-build matrix
-          # above — re-add the `${R}:v0.0.0-amd64-*` arguments when amd64
-          # is re-enabled. arm64-only manifests are still valid OCI
-          # indexes; tags resolve cleanly on arm64 hosts.
+
+          # Per-stack manifest combining both architectures.
+          for STACK in base; do
+            docker buildx imagetools create \
+              -t "${R}:v0.0.0-${STACK}" \
+              "${R}:v0.0.0-amd64-${STACK}" \
+              "${R}:v0.0.0-arm64-${STACK}"
+          done
+
+          # Canonical tags — point at base (the only stack for now).
           docker buildx imagetools create \
-            -t "${R}:v0.0.0-base" \
-            "${R}:v0.0.0-arm64-base"
-          docker buildx imagetools create \
-            -t "${R}:v0.0.0-ultimate" \
             -t "${R}:v0.0.0" \
             -t "${R}:latest" \
             -t "${R}:dev" \
-            "${R}:v0.0.0-arm64-ultimate"
+            "${R}:v0.0.0-amd64-base" \
+            "${R}:v0.0.0-arm64-base"
 
   cell-build:
     name: Cell CLI Dev Build
@@ -351,9 +303,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # amd64 disabled in step with docker-build matrix above.
-          # - runner: ubuntu-24.04
-          #   arch: amd64
+          - runner: ubuntu-24.04
+            arch: amd64
           - runner: ubuntu-24.04-arm
             arch: arm64
     runs-on: ${{ matrix.runner }}
@@ -413,9 +364,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # amd64 disabled in step with docker-build matrix above.
-          # - runner: ubuntu-24.04
-          #   arch: amd64
+          - runner: ubuntu-24.04
+            arch: amd64
           - runner: ubuntu-24.04-arm
             arch: arm64
     runs-on: ${{ matrix.runner }}
