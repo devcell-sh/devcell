@@ -12,9 +12,9 @@ import (
 // so a fork/rename is a one-line change.
 const (
 	UpstreamOwner = "devcell-sh"
-	UpstreamRepo  = "community-home"
-	// UpstreamSubdir is empty since the nixhome moved to its own repo
-	// (community-home); the flake now lives at the repo root.
+	UpstreamRepo  = "home"
+	// UpstreamSubdir is empty since the nixhome moved to its own repo;
+	// the flake lives at the repo root.
 	UpstreamSubdir = ""
 )
 
@@ -22,7 +22,7 @@ const (
 // devcell nixhome, pinned to `ref`. Empty / "v0.0.0" / dev-version coerces
 // to DefaultNixhomeGitRef so dev builds always point at a real branch.
 //
-// Example: UpstreamFlakeRef("v1.0.0") → "github:devcell-sh/community-home/v1.0.0"
+// Example: UpstreamFlakeRef("v1.0.0") → "github:devcell-sh/home/v1.0.0"
 func UpstreamFlakeRef(ref string) string {
 	if ref == "" || ref == "v0.0.0" || isDevVersion(ref) {
 		ref = DefaultNixhomeGitRef
