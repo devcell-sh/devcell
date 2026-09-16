@@ -241,7 +241,9 @@ var cellBoolFlags = map[string]bool{
 	"--thin":         true, // thin image mode (default)
 	"--no-thin":      true, // legacy, ignored
 	"--thick":        true, // legacy, ignored
-	"--no-1password": true, // skip [op] documents resolution at cell-open (CELL-42)
+	"--no-secrets":   true, // skip all secrets injection: op item get + op run -- prefix
+	"--skip-secrets": true, // alias for --no-secrets
+	"--no-1password": true, // alias for --no-secrets (legacy, CELL-42)
 	"--local":        true, // pin --engine=qemu to the in-container path (CELL-378)
 	"--auto-cleanup": true, // run the CELL-334 root reaper at cell start (CELL-390)
 	"--use-flake":    true, // opt-in to project-level flake.nix install (CELL-447)
@@ -700,13 +702,13 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 
 	// Loading secrets — CELL-261 phase, now expressed through PhaseRunner.
 	// Suppressed entirely when no [op].documents are configured, or when the
-	// user opted out via --no-1password / DEVCELL_NO_1PASSWORD.
+	// user opted out via --no-secrets / --no-1password / DEVCELL_NO_SECRETS / DEVCELL_NO_1PASSWORD.
 	var inheritEnv []string
 	opDocs := cellCfg.Op.ResolvedDocuments()
-	skipOp := scanFlag("--no-1password")
-	noOpEnv := os.Getenv("DEVCELL_NO_1PASSWORD")
+	skipSecrets := scanFlag("--no-secrets") || scanFlag("--skip-secrets") || scanFlag("--no-1password")
+	noSecretsEnv := firstNonEmpty(os.Getenv("DEVCELL_NO_SECRETS"), os.Getenv("DEVCELL_NO_1PASSWORD"))
 	switch {
-	case op.ShouldResolve(skipOp, noOpEnv, opDocs):
+	case op.ShouldResolve(skipSecrets, noSecretsEnv, opDocs):
 		ux.Debugf("1Password: resolving %d document(s): %v", len(opDocs), opDocs)
 		_ = pr.PhaseDetailedRunning("Loading secrets (please authorize 1Password)", "Loaded secrets", func() (string, error) {
 			if _, err := exec.LookPath("op"); err != nil {
@@ -736,8 +738,8 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 			}
 			return ux.FormatSecretsPhase(len(resolved), len(errs)), nil
 		})
-	case len(opDocs) > 0 && (skipOp || noOpEnv != ""):
-		ux.Debugf("1Password: skipped (--no-1password / DEVCELL_NO_1PASSWORD)")
+	case len(opDocs) > 0 && (skipSecrets || noSecretsEnv != ""):
+		ux.Debugf("1Password: skipped (--no-secrets / DEVCELL_NO_SECRETS)")
 	}
 
 	// Resolve deferred API keys that depend on 1Password secrets.
@@ -836,6 +838,7 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 		BootDir:      bootDirEnv,
 		TTY:          isatty.IsTerminal(os.Stdin.Fd()),
 		Detach:       startDetach,
+		NoSecrets:    skipSecrets,
 	}
 	argv := runner.BuildArgv(spec, runner.OsFS, exec.LookPath)
 
@@ -932,6 +935,15 @@ func scanStringFlag(flag string) string {
 		}
 		if strings.HasPrefix(arg, flag+"=") {
 			return arg[len(flag)+1:]
+		}
+	}
+	return ""
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
 		}
 	}
 	return ""

@@ -3,10 +3,11 @@ package op
 import "strings"
 
 // ShouldResolve reports whether the caller should invoke `op item get` for the
-// configured 1Password documents. Pure for testability — the caller threads in
-// the boolean flag (`--no-1password`), the env var value (`DEVCELL_NO_1PASSWORD`),
-// and the resolved document list. Skip when there are no documents, when the
-// user explicitly opted out via flag, or via a truthy env value (CELL-42).
+// configured 1Password documents. Pure for testability: the caller threads in
+// the boolean flag (--no-secrets / --no-1password), the env var value
+// (DEVCELL_NO_SECRETS / DEVCELL_NO_1PASSWORD), and the resolved document list.
+// Skip when there are no documents, when the user explicitly opted out via
+// flag, or via a truthy env value.
 func ShouldResolve(disableFlag bool, envValue string, docs []string) bool {
 	if len(docs) == 0 {
 		return false
