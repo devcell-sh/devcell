@@ -137,22 +137,6 @@ jobs:
           ./bin/cell build --stack base --image "$BASE_TAG" --debug
           echo "BASE_TAG=$BASE_TAG" >> "$GITHUB_ENV"
 
-      # Interim publish: lock in the base-stack derivations as a usable
-      # cache. If the ultimate build below fails catastrophically (OOM,
-      # runner kill, CDN flake), the next run still hydrates the base
-      # cache and skips re-deriving everything in base. Same semantics
-      # as the final publish — runs on prior-step failure, skipped when
-      # cache-bust mode is on or volume is empty.
-      - name: Publish nix cache (post-base, interim)
-        if: ${{ !cancelled() && inputs.skip_nix_cache != true }}
-        timeout-minutes: 45
-        env:
-          ARCH: ${{ matrix.arch }}
-          HASH: ${{ github.sha }}
-          STAGE: post-base
-          DEVCELL_NIX_PUSH_DEBUG: "1"
-        run: task nix-cache:publish
-
       - name: Build thin image (ultimate stack)
         env:
           DEVCELL_NIX_VOLUME: devcell-nix-store-${{ matrix.arch }}
@@ -167,10 +151,10 @@ jobs:
           docker push "$BASE_TAG"
           docker push "$ULT_TAG"
 
-      # Final publish: re-pushes after ultimate also lands derivations
-      # into /nix. Overwrites the interim post-base cache with the
-      # fuller closure. Idempotent — same composite action as above.
-      - name: Publish nix cache (post-ultimate, final)
+      # Single publish after both stacks: the volume now carries the
+      # full base+ultimate closure. Runs even when a prior step failed
+      # (unless cancelled) so a partial build still refreshes the cache.
+      - name: Publish nix cache
         if: ${{ !cancelled() && inputs.skip_nix_cache != true }}
         timeout-minutes: 120
         env:
