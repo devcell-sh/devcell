@@ -7,7 +7,7 @@ import (
 )
 
 // DarwinVMUser is the fixed nix-darwin/home-manager user inside the macOS VM
-// (community-home's darwinVMUser). Agent binaries are installed into its
+// (devcell-sh/home's darwinVMUser). Agent binaries are installed into its
 // per-user profile, regardless of which session user runs the cell.
 const DarwinVMUser = "devcell"
 

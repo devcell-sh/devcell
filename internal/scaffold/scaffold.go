@@ -196,7 +196,7 @@ func generateFlakeNixFull(stack string, modules []string, ver string, withNixhom
   description = "DevCell user stack — customise and run 'cell build'";
 
   # Follows main branch by default. To pin a specific release:
-  #   inputs.devcell.url = "github:devcell-sh/community-home/v1.0.0";
+  #   inputs.devcell.url = "github:devcell-sh/home/v1.0.0";
   # To use your own nixhome fork:
   #   inputs.devcell.url = "github:yourusername/nixhome";
   inputs.devcell.url = %s;
@@ -291,7 +291,7 @@ ENV PATH="/opt/python-tools/.venv/bin:${PATH}"
 // modelsSnippet is an optional commented-out [models] section for devcell.toml;
 // pass "" to use the default generic example.
 
-const defaultNixhomeRepo = "https://github.com/devcell-sh/community-home.git"
+const defaultNixhomeRepo = "https://github.com/devcell-sh/home.git"
 
 // IsGitURL returns true if source looks like a git URL or GitHub shorthand.
 func IsGitURL(source string) bool {
@@ -394,7 +394,7 @@ func ResolveNixhome(source, buildDir, ver string, force bool) error {
 
 // gitSource holds the parsed components of a git nixhome source.
 type gitSource struct {
-	RepoURL string // e.g. https://github.com/devcell-sh/community-home.git
+	RepoURL string // e.g. https://github.com/devcell-sh/home.git
 	Ref     string // branch/tag override (empty = use version default)
 	Subdir  string // subdirectory within repo (empty = repo root)
 }
