@@ -48,9 +48,28 @@ func ResolveNixhomeRef(ver string) string {
 }
 
 // isDevVersion returns true for git-describe versions that don't correspond
-// to a real remote tag/branch (e.g. "v0.8.2-94-g0ac6be1-dirty").
+// to a real remote tag/branch: the describe form ("v0.8.2-94-g0ac6be1-dirty")
+// and the bare short/full SHA that `git describe --tags --always` degrades to
+// in a shallow, tagless checkout (CI runners). A devcell commit SHA can never
+// exist as a ref in the nixhome repo, so treating it as one breaks the build.
+// Trade-off: an all-hex branch/tag name of 7–40 chars is swallowed too — pin
+// those via DEVCELL_NIXHOME instead.
 func isDevVersion(v string) bool {
-	return strings.Contains(v, "-g") || strings.Contains(v, "-dirty")
+	return strings.Contains(v, "-g") || strings.Contains(v, "-dirty") || isHexSHA(v)
+}
+
+// isHexSHA reports whether v looks like a bare git object name — 7 to 40
+// lowercase hex digits and nothing else.
+func isHexSHA(v string) bool {
+	if len(v) < 7 || len(v) > 40 {
+		return false
+	}
+	for _, c := range v {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // UpstreamFlakeRefNoVersion returns the unpinned ref — used by introspection

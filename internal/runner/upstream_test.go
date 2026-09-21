@@ -42,6 +42,34 @@ func TestUpstreamFlakeRef_DevVersionCoercesToDefault(t *testing.T) {
 	}
 }
 
+// Shallow, tagless CI checkouts degrade `git describe --tags --always` to a
+// bare short SHA — a devcell commit that can never exist as a ref in the
+// nixhome repo. Those must coerce to the default branch too.
+func TestUpstreamFlakeRef_BareCommitSHACoercesToDefault(t *testing.T) {
+	want := "github:devcell-sh/home/" + runner.DefaultNixhomeGitRef
+	for _, v := range []string{
+		"cb823b7",  // exact string from the failed Dev Build run
+		"372d58f",  // local shallow-clone describe output
+		"deadbeefcafe",
+		"0ac6be1d4fb50fe8760efc1e7df1aeafa9abbbea", // full 40-char SHA
+	} {
+		if got := runner.UpstreamFlakeRef(v); got != want {
+			t.Errorf("UpstreamFlakeRef(%q) = %q, want %q", v, got, want)
+		}
+	}
+}
+
+// Real tags and branch names must keep passing through verbatim — the SHA
+// heuristic must not swallow them.
+func TestUpstreamFlakeRef_TagsAndBranchesPassThrough(t *testing.T) {
+	for _, v := range []string{"v1.2.3", "main", "feature-x", "v0.9.0"} {
+		want := "github:devcell-sh/home/" + v
+		if got := runner.UpstreamFlakeRef(v); got != want {
+			t.Errorf("UpstreamFlakeRef(%q) = %q, want %q", v, got, want)
+		}
+	}
+}
+
 func TestResolveNixhomeRef_EnvOverride(t *testing.T) {
 	t.Setenv("DEVCELL_NIXHOME", "/home/user/my-nixhome")
 	if got := runner.ResolveNixhomeRef("v1.0.0"); got != "/home/user/my-nixhome" {
