@@ -219,6 +219,28 @@ func TestBuildExecCommand_NixSource(t *testing.T) {
 	}
 }
 
+func TestBuildExecCommand_DarwinHMProfileOnPath(t *testing.T) {
+	// home-manager installs agent binaries for the fixed nix-darwin VM user
+	// (devcell), but the session runs as the host's $USER — the exec command
+	// must bridge that user's profile bin dir onto PATH or `claude` is not
+	// found (CELL: --os macos dropped into "command not found").
+	cmd := tart.BuildExecCommand(tart.ExecSpec{Binary: "claude", RunAsUser: "dmitry"})
+	if !strings.Contains(cmd, "/etc/profiles/per-user/devcell/bin") {
+		t.Errorf("expected devcell per-user profile bin on PATH, got: %q", cmd)
+	}
+	if !strings.Contains(cmd, "/run/current-system/sw/bin") {
+		t.Errorf("expected nix-darwin system profile bin on PATH, got: %q", cmd)
+	}
+}
+
+func TestBuildSSHArgv_DarwinHMProfileOnPath(t *testing.T) {
+	argv := tart.BuildSSHArgv(tart.Spec{Binary: "claude", SSHUser: "dmitry", SSHPort: 22}, "192.168.64.2")
+	remoteCmd := argv[len(argv)-1]
+	if !strings.Contains(remoteCmd, "/etc/profiles/per-user/devcell/bin") {
+		t.Errorf("expected devcell per-user profile bin on PATH, got: %q", remoteCmd)
+	}
+}
+
 func TestBuildExecCommand_ProjectDirCd(t *testing.T) {
 	cmd := tart.BuildExecCommand(tart.ExecSpec{
 		Binary:     "claude",
@@ -226,6 +248,22 @@ func TestBuildExecCommand_ProjectDirCd(t *testing.T) {
 	})
 	if !strings.Contains(cmd, "cd ~/myproject") {
 		t.Errorf("expected 'cd ~/myproject' in exec command, got: %q", cmd)
+	}
+}
+
+func TestBuildExecCommand_WorkDirOverridesProjectDir(t *testing.T) {
+	// WorkDir carries the mirrored in-VM path (host path reproduced inside
+	// the VM); when set it must win over the ~/basename fallback.
+	cmd := tart.BuildExecCommand(tart.ExecSpec{
+		Binary:     "claude",
+		ProjectDir: "/Users/dmitry/dev/devcell-sh/devcell",
+		WorkDir:    "/Users/dmitry/dev/devcell-sh/devcell",
+	})
+	if !strings.Contains(cmd, "cd /Users/dmitry/dev/devcell-sh/devcell") {
+		t.Errorf("expected cd to mirrored WorkDir, got: %q", cmd)
+	}
+	if strings.Contains(cmd, "cd ~/devcell") {
+		t.Errorf("basename fallback must not be used when WorkDir is set: %q", cmd)
 	}
 }
 

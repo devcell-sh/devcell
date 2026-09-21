@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -118,7 +117,7 @@ func runTartAgent(
 			SSHTimeout: 120 * time.Second,
 			InitFunc: func() error {
 				logf("auto-build: VM not found — running build with stack=%q", stack)
-				return runBuildTart(cellName, hostHome, baseDir, stack, nil, false, false, false, cellCfg.Cell.ResolvedTartOCIImage())
+				return runBuildTart(cellName, hostHome, baseDir, stack, nil, false, false, false, cellCfg.Cell.ResolvedTartOCIImage(), "full")
 			},
 		}
 		acquireIn.ApplyDefaults()
@@ -192,10 +191,157 @@ func runTartAgent(
 			}
 		}
 
-		// Mount project directory inside the VM
-		projectBasename := filepath.Base(baseDir)
-		mountScript := tart.GenerateProjectMountScript("project", sessionUser, projectBasename)
-		logf("mounting project dir: tag=project user=%s basename=%s", sessionUser, projectBasename)
+		// --- Repair /nix shadow mount (pre-fix templates) ---
+		// The installer's darwin-store daemon can mount its tiny APFS volume
+		// over the JHFS+ nix disk at clone boot, hiding the nix-darwin system
+		// profile and s6. Detect and repair before anything touches /nix.
+		{
+			repairScript := tart.GenerateNixShadowRepairScript()
+			var repOut, repErr strings.Builder
+			repCmd := exec.CommandContext(context.Background(), "tart", "exec", instanceName, "bash", "-l", "-c", repairScript)
+			repCmd.Stdout = &repOut
+			repCmd.Stderr = &repErr
+			if err := repCmd.Run(); err != nil {
+				logf("nix shadow repair failed: %v\nstdout: %s\nstderr: %s", err, strings.TrimSpace(repOut.String()), strings.TrimSpace(repErr.String()))
+			} else {
+				logf("nix shadow: %s", strings.TrimSpace(repOut.String()))
+			}
+		}
+
+		// --- Activate s6 session services ---
+		// Runs s6 oneshot services (shell-rc, claude-config, etc.) that set up
+		// the session user's environment.
+		{
+			s6Script := tart.GenerateS6SessionActivateScript(sessionUser)
+			logf("activating s6 session services for %s (envDir=%s svcDir=%s)", sessionUser, tart.S6EnvDir, tart.S6ServicesDir)
+			logf("s6 script:\n%s", s6Script)
+			var s6Out, s6Err strings.Builder
+			s6Cmd := exec.CommandContext(context.Background(), "tart", "exec", instanceName, "bash", "-l", "-c", s6Script)
+			s6Cmd.Stdout = &s6Out
+			s6Cmd.Stderr = &s6Err
+			if err := s6Cmd.Run(); err != nil {
+				logf("s6 session activation failed: %v\nstdout: %s\nstderr: %s", err, strings.TrimSpace(s6Out.String()), strings.TrimSpace(s6Err.String()))
+			} else {
+				logf("s6 session: %s", strings.TrimSpace(s6Out.String()))
+			}
+		}
+
+		// --- Re-activate nix-darwin if /run/current-system is missing ---
+		// nix-darwin's boot activation (org.nixos.activate-system) may not
+		// have run yet, or may fail if the nix disk wasn't mounted in time.
+		// The system profile at /nix/var/nix/profiles/system/activate is the
+		// canonical way to re-trigger activation.
+		{
+			checkScript := `echo "nix_mounted=$(mount | grep /nix | head -1 || echo NONE)"
+echo "system_profile=$(ls -la /nix/var/nix/profiles/system 2>/dev/null || echo MISSING)"
+echo "activate_bin=$(test -x /nix/var/nix/profiles/system/activate && echo EXISTS || echo MISSING)"
+test -e /run/current-system && echo "RESULT=OK" || echo "RESULT=MISSING"`
+			var checkOut strings.Builder
+			checkCmd := exec.CommandContext(context.Background(), "tart", "exec", instanceName, "bash", "-l", "-c", checkScript)
+			checkCmd.Stdout = &checkOut
+			checkErr := checkCmd.Run()
+			if checkErr == nil {
+				logf("nix-darwin preflight: %s", strings.TrimSpace(checkOut.String()))
+			}
+			if checkErr == nil && strings.Contains(checkOut.String(), "RESULT=MISSING") {
+				logf("nix-darwin: /run/current-system missing — re-activating system profile")
+				activateScript := `set -e
+if [ -x /nix/var/nix/profiles/system/activate ]; then
+  sudo /nix/var/nix/profiles/system/activate 2>&1
+  echo "ACTIVATED"
+  ls -la /run/current-system 2>&1 || echo "still missing after activate"
+  ls /etc/profiles/per-user/devcell/bin/ 2>/dev/null | head -5 || echo "per-user bin still missing"
+else
+  echo "NO_PROFILE"
+  ls -la /nix/var/nix/profiles/ 2>&1
+fi`
+				var actOut, actErr strings.Builder
+				actCmd := exec.CommandContext(context.Background(), "tart", "exec", instanceName, "bash", "-l", "-c", activateScript)
+				actCmd.Stdout = &actOut
+				actCmd.Stderr = &actErr
+				if err := actCmd.Run(); err != nil {
+					logf("nix-darwin activation failed: %v\nstdout: %s\nstderr: %s", err, strings.TrimSpace(actOut.String()), strings.TrimSpace(actErr.String()))
+				} else {
+					logf("nix-darwin activation: %s", strings.TrimSpace(actOut.String()))
+				}
+			} else if checkErr == nil {
+				logf("nix-darwin: /run/current-system present — system already activated")
+			}
+		}
+
+		// --- Diagnostic: verify nix-darwin and home-manager paths ---
+		{
+			diagScript := fmt.Sprintf(`echo "=== VM PATH DIAGNOSTICS ==="
+
+echo "--- nix-daemon profile ---"
+ls /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh 2>&1
+
+echo "--- /run/current-system ---"
+ls -la /run/current-system 2>&1 || echo "MISSING"
+
+echo "--- nix-darwin system profile ---"
+ls -la /nix/var/nix/profiles/system 2>&1 || echo "MISSING"
+
+echo "--- /etc/profiles/per-user/%[1]s/bin (first 20) ---"
+ls /etc/profiles/per-user/%[1]s/bin/ 2>/dev/null | head -20
+test -d /etc/profiles/per-user/%[1]s/bin || echo "DIR NOT FOUND"
+
+echo "--- which claude ---"
+. /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh 2>/dev/null
+export PATH="/etc/profiles/per-user/%[1]s/bin:/run/current-system/sw/bin:$PATH"
+which claude 2>&1 || echo "NOT FOUND"
+
+echo "--- which node ---"
+which node 2>&1 || echo "NOT FOUND"
+
+echo "--- nix-darwin generation ---"
+ls -la /run/current-system 2>/dev/null || echo "NOT FOUND"
+
+echo "--- home-manager generations for %[1]s ---"
+ls -la /nix/var/nix/profiles/per-user/%[1]s/ 2>/dev/null || echo "NO PROFILES"
+
+echo "--- session user home ---"
+ls -la /Users/%[2]s/ 2>/dev/null | head -30
+
+echo "--- .zshenv content ---"
+cat /Users/%[2]s/.zshenv 2>/dev/null || echo "NO .zshenv"
+
+echo "--- .zshenv target check ---"
+if [ -L /Users/%[2]s/.zshenv ]; then
+  echo "symlink -> $(readlink /Users/%[2]s/.zshenv)"
+  echo "target exists: $(test -e /Users/%[2]s/.zshenv && echo YES || echo NO)"
+fi
+
+echo "--- nix /nix mount ---"
+mount | grep /nix || echo "NOT MOUNTED"
+
+echo "--- nix-daemon status ---"
+sudo launchctl print system/org.nixos.nix-daemon 2>&1 | head -3 || echo "NOT LOADED"
+
+echo "--- exec PATH (as session user) ---"
+echo "$PATH"
+
+echo "=== END DIAGNOSTICS ==="`,
+				tart.DarwinVMUser,
+				sessionUser)
+			var diagOut, diagErr strings.Builder
+			diagCmd := exec.CommandContext(context.Background(), "tart", "exec", instanceName, "bash", "-l", "-c", diagScript)
+			diagCmd.Stdout = &diagOut
+			diagCmd.Stderr = &diagErr
+			if err := diagCmd.Run(); err != nil {
+				logf("VM diagnostics failed: %v\nstderr: %s", err, strings.TrimSpace(diagErr.String()))
+			} else {
+				logf("VM diagnostics:\n%s", diagOut.String())
+			}
+		}
+
+		// Mount project directory inside the VM at the mirrored host path
+		// (e.g. /Users/dmitry/dev/acme/proj on the host appears at the same
+		// path in the VM), falling back to ~/<basename> for projects outside
+		// the host home.
+		projectPathVM := tart.ProjectPathInVM(hostHome, baseDir, sessionUser)
+		mountScript := tart.GenerateProjectMountScript("project", sessionUser, projectPathVM)
+		logf("mounting project dir: tag=project user=%s target=%s", sessionUser, projectPathVM)
 		var mountStderr strings.Builder
 		mountCmd := exec.CommandContext(context.Background(), "tart", "exec", instanceName, "bash", "-l", "-c", mountScript)
 		mountCmd.Stderr = &mountStderr
@@ -203,7 +349,7 @@ func runTartAgent(
 			logf("project mount failed: %v (stderr: %s)", err, strings.TrimSpace(mountStderr.String()))
 			return fmt.Errorf("mounting project directory in VM: %w (stderr: %s)", err, strings.TrimSpace(mountStderr.String()))
 		}
-		logf("project directory mounted at /Users/%s/%s", sessionUser, projectBasename)
+		logf("project directory mounted at %s", projectPathVM)
 	}
 
 	// --- lifecycle: simulated VM start (mock only) ---
@@ -226,6 +372,7 @@ func runTartAgent(
 		UserArgs:   userArgs,
 		EnvVars:    envVars,
 		ProjectDir: baseDir,
+		WorkDir:    tart.ProjectPathInVM(hostHome, baseDir, sessionUser),
 		RunAsUser:  runAsUser,
 	})
 	logf("exec command: %s", execCmd)

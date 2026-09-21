@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/DimmKirr/devcell/internal/cfg"
 	"github.com/DimmKirr/devcell/internal/config"
@@ -35,6 +36,7 @@ func init() {
 	buildCmd.Flags().String("image", "", "override the built image tag (e.g. devcell-user:dev-thin); env DEVCELL_BUILD_IMAGE has lower precedence")
 	buildCmd.Flags().Bool("force", false, "recreate VM even if it already exists (tart only)")
 	buildCmd.Flags().Bool("no-cache", false, "re-download OCI image, bypassing tart cache (tart only)")
+	buildCmd.Flags().String("stage", "full", `build stage: "base" (infra only) or "full" (default, includes stack activation) (tart only)`)
 }
 
 func runBuild(cmd *cobra.Command, _ []string) error {
@@ -57,6 +59,7 @@ func runBuild(cmd *cobra.Command, _ []string) error {
 		"update":     scanFlag("--update"),
 		"no_cache":   scanFlag("--no-cache"),
 		"force":      scanFlag("--force"),
+		"stage":      cmd.Flags().Lookup("stage").Value.String(),
 	})
 
 	// ── tart engine ──────────────────────────────────────────────────────────
@@ -71,8 +74,16 @@ func runBuild(cmd *cobra.Command, _ []string) error {
 		}
 		force, _ := cmd.Flags().GetBool("force")
 		noCache, _ := cmd.Flags().GetBool("no-cache")
+		stage := cmd.Flags().Lookup("stage").Value.String()
+		if stage != "base" && stage != "full" {
+			return fmt.Errorf("--stage must be \"base\" or \"full\", got %q", stage)
+		}
+		update, _ := cmd.Flags().GetBool("update")
+		if update {
+			force = true
+		}
 		tartOCIImage := cellCfgTart.Cell.ResolvedTartOCIImage()
-		return runBuildTart(c.CellName, c.HostHome, c.BaseDir, stack, nil, force, noCache, scanFlag("--dry-run"), tartOCIImage)
+		return runBuildTart(c.CellName, c.HostHome, c.BaseDir, stack, nil, force, noCache, scanFlag("--dry-run"), tartOCIImage, stage)
 	}
 
 	// ── qemu engine ─────────────────────────────────────────────────────────
@@ -254,7 +265,7 @@ func runBuildThin(c config.Config, stackOverride, imageOverride string, forceRec
 	coreImage := cellCfg.Nix.ResolvedImage()
 	tag := runner.ResolveBuildTag(imageOverride, runner.UserImageTagThin())
 	volumeName := runner.ThinStoreVolume()
-	containerName := "devcell-thin-builder"
+	containerName := runner.ThinBuilderContainerName(c.AppName)
 
 	// ── Ensure core image exists for target platform ───────────────────────
 	targetPlatform := runner.DockerPlatform(runner.DetectArch())
@@ -281,7 +292,18 @@ func runBuildThin(c config.Config, stackOverride, imageOverride string, forceRec
 	buildLabel := runner.BuildLabel("Building thin image", stack, explicitStack)
 	sp := ux.NewProgressSpinner(buildLabel)
 
-	_ = exec.CommandContext(ctx, "docker", "rm", "-f", containerName).Run()
+	// Reclaim this app's builder slot. A builder left behind by a crashed or
+	// interrupted run is removed; a *running* one is never killed — builds
+	// for other apps have their own name and are untouched either way.
+	exists, running := runner.BuilderContainerState(ctx, containerName)
+	remove, err := runner.ReclaimBuilderSlot(containerName, exists, running)
+	if err != nil {
+		sp.Fail(buildLabel + " failed")
+		return err
+	}
+	if remove {
+		_ = exec.CommandContext(ctx, "docker", "rm", "-f", containerName).Run()
+	}
 
 	// CELL-41: pass the real user-facing stack name + modules CSV so the
 	// container's metadata.json reports them truthfully. The HM target stays
@@ -358,6 +380,12 @@ func runBuildThin(c config.Config, stackOverride, imageOverride string, forceRec
 	cmd.Stderr = out
 	if err := cmd.Run(); err != nil {
 		sp.Fail(buildLabel + " failed")
+		if runner.BuilderOrphanedByCancel(err, ctx.Err()) {
+			// ctx is already cancelled; use a fresh one so the cleanup runs.
+			rmCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			_ = exec.CommandContext(rmCtx, "docker", "rm", "-f", containerName).Run()
+			cancel()
+		}
 		if !ux.Verbose && buf.Len() > 0 {
 			fmt.Fprint(os.Stderr, buf.String())
 		}
@@ -371,4 +399,3 @@ func runBuildThin(c config.Config, stackOverride, imageOverride string, forceRec
 	sp.Success(successLabel)
 	return nil
 }
-

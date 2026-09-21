@@ -23,7 +23,7 @@ import (
 // Mirrors the Docker build flow: init scaffolds config/keys (no images),
 // build creates and provisions the image. The VM is booted for provisioning
 // and shut down when done — cell shell starts it again for the session.
-func runBuildTart(cellName, hostHome, projectDir, stack string, modules []string, force, noCache, dryRun bool, tartOCIImage string) error {
+func runBuildTart(cellName, hostHome, projectDir, stack string, modules []string, force, noCache, dryRun bool, tartOCIImage, stage string) error {
 	cfg := tart.BuildConfig{
 		CellName: cellName,
 		HomeDir:  hostHome,
@@ -35,19 +35,40 @@ func runBuildTart(cellName, hostHome, projectDir, stack string, modules []string
 		return err
 	}
 
-	templateName := tart.TemplateVMName(stack, modules)
+	// Determine template name and clone source based on stage.
+	var templateName string
+	var cloneSource string
+	var cloneFromBase bool
+
+	switch stage {
+	case "base":
+		templateName = tart.BaseTemplateName
+		cloneSource = tartOCIImage
+	default: // "full"
+		templateName = tart.TemplateVMName(stack, modules)
+		if _, err := tart.TartGet(context.Background(), tart.BaseTemplateName); err == nil {
+			cloneSource = tart.BaseTemplateName
+			cloneFromBase = true
+			ux.Debugf("base template %s found: will clone locally (fast path)", tart.BaseTemplateName)
+		} else {
+			cloneSource = tartOCIImage
+			ux.Debugf("no base template: full build from OCI")
+		}
+	}
+
 	buildVM := "devcell-build-tmp"
 
 	nixhomeRef := runner.ResolveNixhomeRef(version.Version)
 
-	ux.Debugf("build config: cell=%s stack=%s cpus=%d mem=%dGB sshPort=%d",
-		cfg.CellName, cfg.Stack, cfg.CPUs, cfg.MemoryGB, cfg.SSHPort)
-	ux.Debugf("template: %s  buildVM: %s  force=%v noCache=%v", templateName, buildVM, force, noCache)
+	ux.Debugf("build config: cell=%s stack=%s stage=%s cpus=%d mem=%dGB sshPort=%d",
+		cfg.CellName, cfg.Stack, stage, cfg.CPUs, cfg.MemoryGB, cfg.SSHPort)
+	ux.Debugf("template: %s  cloneSource: %s  buildVM: %s  force=%v noCache=%v", templateName, cloneSource, buildVM, force, noCache)
 	ux.Debugf("nixhome: %s  projectDir: %s", nixhomeRef, projectDir)
 
 	if dryRun {
 		fmt.Printf("Would build macOS VM template: %s\n", templateName)
-		fmt.Printf("  OCI image: %s\n", tartOCIImage)
+		fmt.Printf("  Stage: %s\n", stage)
+		fmt.Printf("  Clone source: %s\n", cloneSource)
 		fmt.Printf("  Stack: %s\n", cfg.Stack)
 		fmt.Printf("  CPUs: %d  Memory: %dGB\n", cfg.CPUs, cfg.MemoryGB)
 		if len(cfg.Modules) > 0 {
@@ -122,8 +143,12 @@ func runBuildTart(cellName, hostHome, projectDir, stack string, modules []string
 		return err
 	}
 
-	// --- Phase 2: Clone OCI image → build VM ---
-	if err := pr.PhaseDetailed("Cloning VM from OCI image", func() (string, error) {
+	// --- Phase 2: Clone source → build VM ---
+	cloneLabel := "Cloning VM from OCI image"
+	if cloneFromBase {
+		cloneLabel = "Cloning VM from base template"
+	}
+	if err := pr.PhaseDetailed(cloneLabel, func() (string, error) {
 		if _, getErr := tart.TartGet(ctx, templateName); getErr == nil {
 			if !force {
 				return "", fmt.Errorf("template %s already exists — use --force to rebuild", templateName)
@@ -140,12 +165,12 @@ func runBuildTart(cellName, hostHome, projectDir, stack string, modules []string
 			_ = tart.TartDelete(ctx, buildVM)
 		}
 
-		ux.Debugf("cloning %s → %s (noCache=%v)", tartOCIImage, buildVM, noCache)
+		ux.Debugf("cloning %s → %s (noCache=%v)", cloneSource, buildVM, noCache)
 		args := []string{"clone"}
-		if noCache {
+		if noCache && !cloneFromBase {
 			args = append(args, "--no-cache")
 		}
-		args = append(args, tartOCIImage, buildVM)
+		args = append(args, cloneSource, buildVM)
 		cmd := exec.CommandContext(ctx, "tart", args...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -185,10 +210,21 @@ func runBuildTart(cellName, hostHome, projectDir, stack string, modules []string
 		getOut, _ := exec.CommandContext(ctx, "tart", "get", buildVM).CombinedOutput()
 		ux.Debugf("tart get %s (pre-boot):\n%s", buildVM, string(getOut))
 	}
+	// --- Detect host nix store for caching ---
+	hostNixPath := tart.DetectHostNixStore()
+	if hostNixPath != "" {
+		ux.Debugf("host nix store detected at %s (valid: store/ + db.sqlite present) — will share as read-only substituter", hostNixPath)
+	} else {
+		ux.Debugf("no host nix store found at /nix — VM will download from cache.nixos.org")
+	}
+
 	// --- Phase 4: Boot VM ---
 	sharedDirs := map[string]string{
 		"nixhome": nixhomeRef,
 		"home":    cellHome,
+	}
+	if hostNixPath != "" {
+		sharedDirs["hostnix"] = hostNixPath + ":ro"
 	}
 	disks := []string{nixVolumePath}
 	ux.Debugf("booting VM %s with shared dirs: %v, disks: %v", buildVM, sharedDirs, disks)
@@ -226,20 +262,24 @@ func runBuildTart(cellName, hostHome, projectDir, stack string, modules []string
 		return err
 	}
 
-	// --- Phase 6: Bootstrap passwordless sudo ---
-	if err := pr.PhaseDetailed("Bootstrapping passwordless sudo", func() (string, error) {
-		bootstrapCmd := fmt.Sprintf(
-			"echo '%s' | sudo -S sh -c \"mkdir -p /etc/sudoers.d && echo '%s ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/%s && chmod 440 /etc/sudoers.d/%s\"",
-			tartImagePassword, tartImageUser, tartImageUser, tartImageUser,
-		)
-		ux.Debugf("bootstrap: configuring passwordless sudo for %s", tartImageUser)
-		if err := tart.TartExec(ctx, buildVM, []string{"bash", "-l", "-c", bootstrapCmd}, os.Stdout, os.Stderr); err != nil {
-			return "", fmt.Errorf("bootstrap sudo: %w", err)
+	// --- Phase 6: Bootstrap passwordless sudo (skip when cloning from base) ---
+	if !cloneFromBase {
+		if err := pr.PhaseDetailed("Bootstrapping passwordless sudo", func() (string, error) {
+			bootstrapCmd := fmt.Sprintf(
+				"echo '%s' | sudo -S sh -c \"mkdir -p /etc/sudoers.d && echo '%s ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/%s && chmod 440 /etc/sudoers.d/%s\"",
+				tartImagePassword, tartImageUser, tartImageUser, tartImageUser,
+			)
+			ux.Debugf("bootstrap: configuring passwordless sudo for %s", tartImageUser)
+			if err := tart.TartExec(ctx, buildVM, []string{"bash", "-l", "-c", bootstrapCmd}, os.Stdout, os.Stderr); err != nil {
+				return "", fmt.Errorf("bootstrap sudo: %w", err)
+			}
+			return tartImageUser, nil
+		}); err != nil {
+			stopVM()
+			return err
 		}
-		return tartImageUser, nil
-	}); err != nil {
-		stopVM()
-		return err
+	} else {
+		ux.Debugf("skipping sudo bootstrap: base template already has passwordless sudo")
 	}
 
 	// --- Diagnostic: host-side post-boot checks ---
@@ -283,17 +323,27 @@ echo "=== END GUEST DIAGNOSTICS ==="`
 		}
 	}
 
-	// --- Phase 7: Full provisioning via tart exec ---
+	// --- Phase 7: Provisioning via tart exec ---
 	initCfg := tart.InitConfig{
-		CellName: cellName,
-		HomeDir:  hostHome,
-		Stack:    stack,
-		Username: tartImageUser,
-		Password: tartImagePassword,
+		CellName:   cellName,
+		HomeDir:    hostHome,
+		Stack:      stack,
+		Username:   tartImageUser,
+		Password:   tartImagePassword,
+		HasHostNix: hostNixPath != "",
 	}
 	initCfg.ApplyDefaults()
-	steps := tart.ProvisionSteps(initCfg, pubKey, false)
-	ux.Debugf("provisioning: %d steps via tart exec", len(steps))
+
+	var steps []tart.ProvisionStep
+	switch {
+	case stage == "base":
+		steps = tart.BaseProvisionSteps(initCfg, pubKey)
+	case cloneFromBase:
+		steps = tart.StackProvisionSteps(initCfg)
+	default:
+		steps = tart.ProvisionSteps(initCfg, pubKey, false)
+	}
+	ux.Debugf("provisioning: %d steps via tart exec (stage=%s, cloneFromBase=%v)", len(steps), stage, cloneFromBase)
 
 	const reformatMarker = "DEVCELL_REFORMAT_NEEDED:"
 	for i, step := range steps {

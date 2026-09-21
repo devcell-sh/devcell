@@ -58,7 +58,8 @@ type InitConfig struct {
 	CPUs     uint
 	MemoryGB uint64
 	DiskGB   uint64
-	SSHPort  uint16
+	SSHPort    uint16
+	HasHostNix bool
 }
 
 // ApplyDefaults fills zero-value fields with sensible defaults.

@@ -1,6 +1,8 @@
 package runner
 
 import (
+	"context"
+	"errors"
 	"runtime"
 	"strconv"
 	"strings"
@@ -9,7 +11,7 @@ import (
 
 const (
 	testCoreImage = "ghcr.io/test/devcell:v0.0.0-core"
-	testContainer = "devcell-thin-builder"
+	testContainer = "devcell-builder-test-1"
 	testVolume    = "devcell-nix-store"
 	testNixhome   = "/home/bob/nixhome"
 	testThinTag   = "devcell-user:base-thin"
@@ -1183,6 +1185,88 @@ func TestParseMemoryLimit(t *testing.T) {
 		got, ok := parseMemoryLimit(c.in)
 		if ok != c.ok || got != c.want {
 			t.Errorf("parseMemoryLimit(%q) = (%d, %v), want (%d, %v)", c.in, got, ok, c.want, c.ok)
+		}
+	}
+}
+
+// ── Builder container identity + slot reclaim ────────────────────────────────
+//
+// One fixed builder name meant every `cell build` (explicit or auto-triggered
+// from `cell` in another project) began with `docker rm -f devcell-thin-builder`
+// and SIGKILLed whatever build was in flight — exit 137 with no OOM anywhere.
+// The builder is now named per app, and a *running* builder is never removed.
+
+func TestThinBuildArgv_BuilderLabels(t *testing.T) {
+	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "aarch64", "base", "go,node", "myproject")
+	labels := map[string]bool{}
+	for i, a := range argv {
+		if a == "--label" && i+1 < len(argv) {
+			labels[argv[i+1]] = true
+		}
+	}
+	for _, want := range []string{"devcell.role=thin-builder", "devcell.project=myproject", "devcell.stack=base"} {
+		if !labels[want] {
+			t.Errorf("missing label %q in builder argv", want)
+		}
+	}
+}
+
+func TestThinBuilderContainerName_PerApp(t *testing.T) {
+	got := ThinBuilderContainerName("nmd.gg-20")
+	if got != "devcell-builder-nmd.gg-20" {
+		t.Fatalf("ThinBuilderContainerName = %q, want devcell-builder-nmd.gg-20", got)
+	}
+}
+
+func TestReclaimBuilderSlot_AbsentDoesNothing(t *testing.T) {
+	remove, err := ReclaimBuilderSlot("devcell-builder-x", false, false)
+	if err != nil || remove {
+		t.Fatalf("absent builder: remove=%v err=%v, want false/nil", remove, err)
+	}
+}
+
+func TestReclaimBuilderSlot_ExitedIsRemoved(t *testing.T) {
+	remove, err := ReclaimBuilderSlot("devcell-builder-x", true, false)
+	if err != nil || !remove {
+		t.Fatalf("exited builder: remove=%v err=%v, want true/nil", remove, err)
+	}
+}
+
+func TestReclaimBuilderSlot_RunningIsNeverKilled(t *testing.T) {
+	remove, err := ReclaimBuilderSlot("devcell-builder-nmd.gg-20", true, true)
+	if remove {
+		t.Fatal("running builder must not be scheduled for removal")
+	}
+	if err == nil {
+		t.Fatal("running builder must surface an error to the caller")
+	}
+	if !errors.Is(err, ErrBuilderRunning) {
+		t.Fatalf("err = %v, want ErrBuilderRunning", err)
+	}
+	for _, want := range []string{"devcell-builder-nmd.gg-20", "docker logs -f"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q should mention %q", err.Error(), want)
+		}
+	}
+}
+
+// Ctrl-C cancels the exec context, which SIGKILLs the `docker run` client but
+// leaves the container running as an orphan that holds the shared /nix volume.
+// The caller must remove its own builder in exactly that case.
+func TestBuilderOrphanedByCancel(t *testing.T) {
+	cases := []struct {
+		name   string
+		runErr error
+		ctxErr error
+		want   bool
+	}{
+		{"clean exit", nil, nil, false},
+		{"build failed on its own", errors.New("exit status 1"), nil, false},
+		{"cancelled mid-build", errors.New("signal: killed"), context.Canceled, true},
+	}
+	for _, c := range cases {
+		if got := BuilderOrphanedByCancel(c.runErr, c.ctxErr); got != c.want {
+			t.Errorf("%s: BuilderOrphanedByCancel = %v, want %v", c.name, got, c.want)
 		}
 	}
 }
