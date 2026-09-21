@@ -380,6 +380,14 @@ tasks:
     env:
       DOCKER_HOST: '{{.DOCKER_SOCK}}'
 
+  test:tart:
+    desc: "Host-side diagnostics for the tart (--os macos) path: env, flake metadata, aarch64-darwin platform preflight. Artifacts → test/results/"
+    platforms: [darwin]
+    silent: true
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - go test -v -count=1 -timeout 600s -run TestTartDarwinIntegration ./cmd/ {{.CLI_ARGS}}
+
   test:vagrant:
     desc: Run E2E install test in a clean Debian VM (QEMU). Requires vagrant + vagrant-qemu plugin.
     dir: "{{.TASKFILE_DIR}}/test/vagrant"
@@ -535,6 +543,68 @@ tasks:
   debug:
     cmds:
       - task: debug:macos
+
+  # ── macOS tart VM /nix + s6 diagnostics (read-only) → .scratch/debug/macos-nix.log ─────
+  debug:macos:nix:
+    desc: "Probe the tart session VM: /nix mounts, darwin-store daemon, fstab, s6 tree → .scratch/debug/macos-nix.log"
+    platforms: [darwin]
+    silent: true
+    vars:
+      VM: '{{.VM | default "CELL-tart"}}'
+      LOG: '{{.TASKFILE_DIR}}/.scratch/debug/macos-nix.log'
+      NIX_IMG: '{{.HOME}}/.devcell/darwin/nix.img'
+      CELL_HOME: '{{.HOME}}/.devcell/CELL'
+    cmds:
+      - mkdir -p {{.TASKFILE_DIR}}/.scratch/debug
+      - |
+        {
+          echo "=== debug:macos:nix $(date -u +%Y%m%dT%H%M%SZ) VM={{.VM}} ==="
+          echo "--- host: tart list ---"
+          tart list 2>&1 || true
+
+          if ! tart list 2>/dev/null | grep -E "^local[[:space:]]+{{.VM}}[[:space:]]" | grep -q running; then
+            echo "--- VM not running — booting in background (left running afterwards) ---"
+            nohup tart run --no-graphics \
+              --dir home:{{.CELL_HOME}} \
+              --dir project:{{.TASKFILE_DIR}} \
+              --disk {{.NIX_IMG}} \
+              {{.VM}} >/dev/null 2>&1 &
+          fi
+          echo "--- waiting for guest agent (max 120s) ---"
+          ok=""
+          for i in $(seq 1 40); do
+            if tart exec {{.VM}} true 2>/dev/null; then ok=1; break; fi
+            sleep 3
+          done
+          if [ -z "$ok" ]; then echo "FATAL: guest agent never came up"; exit 1; fi
+
+          probe() { echo ""; echo "--- $1 ---"; shift; tart exec {{.VM}} bash -c "$*" 2>&1 || true; }
+
+          probe "/nix mount table (order matters: last line shadows)"  '/sbin/mount | grep -n /nix'
+          probe "df /nix (which device actually serves /nix)"          'df /nix'
+          probe "diskutil list (all disks/volumes)"                    'diskutil list'
+          probe "fstab (is the installer APFS entry really gone?)"     'cat /etc/fstab'
+          probe "synthetic.conf"                                       'cat /etc/synthetic.conf'
+          probe "LaunchDaemons on disk (darwin-store plist still present?)" 'ls -la /Library/LaunchDaemons/'
+          probe "launchctl: org.nixos.darwin-store"                    'sudo launchctl print system/org.nixos.darwin-store 2>&1 | head -25'
+          probe "launchctl: com.devcell.mount-nix"                     'sudo launchctl print system/com.devcell.mount-nix 2>&1 | head -25'
+          probe "launchctl: org.nixos.nix-daemon"                      'sudo launchctl print system/org.nixos.nix-daemon 2>&1 | head -25'
+          probe "launchctl: com.devcell.s6-svscan"                     'sudo launchctl print system/com.devcell.s6-svscan 2>&1 | head -25'
+          probe "s6-svscan plist on disk"                              'ls -la /Library/LaunchDaemons/ | grep -i s6; cat /Library/LaunchDaemons/*s6*.plist 2>/dev/null'
+          probe "boot log: mount-nix vs darwin-store race"             'log show --last boot --predicate "process == \"diskarbitrationd\" OR eventMessage CONTAINS \"DevcellNix\" OR eventMessage CONTAINS \"Nix Store\"" 2>/dev/null | tail -40'
+          probe "visible /nix top-level"                               'ls -la /nix/ | head -15'
+          probe "visible /nix/var/nix/profiles"                        'ls -la /nix/var/nix/profiles/ 2>&1'
+          probe "system profile + current-system"                      'ls -la /nix/var/nix/profiles/system 2>&1; readlink /run/current-system 2>&1'
+          probe "s6 in system PATH"                                    'ls /run/current-system/sw/bin/ 2>/dev/null | grep -i ^s6 | head; command -v s6-rc s6-svscan 2>&1'
+          probe "/etc/s6 tree"                                         'ls -laR /etc/s6/ 2>&1 | head -60'
+          probe "per-user devcell profile"                             'ls /etc/profiles/per-user/devcell/bin 2>&1 | head -20'
+          probe "store roots that prove JHFS+ content exists"          'ls /nix/store/ 2>/dev/null | head -10; ls /nix/store/ 2>/dev/null | wc -l'
+
+          echo ""
+          echo "=== done (VM {{.VM}} left running) ==="
+        } 2>&1 | tee {{.LOG}}
+        echo "full log: {{.LOG}}"
+
   # ── Forced QEMU Windows autobuild with full log capture (CELL-428/429) ─────
   debug:autobuild:
     desc: "Forced QEMU Windows template build with full log capture → .scratch/debug/autobuild.log"

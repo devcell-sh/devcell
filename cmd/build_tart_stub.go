@@ -4,6 +4,6 @@ package main
 
 import "fmt"
 
-func runBuildTart(cellName, hostHome, projectDir, stack string, modules []string, force, noCache, dryRun bool, tartOCIImage string) error {
+func runBuildTart(cellName, hostHome, projectDir, stack string, modules []string, force, noCache, dryRun bool, tartOCIImage, stage string) error {
 	return fmt.Errorf("cell build --engine=tart requires macOS on Apple Silicon (darwin/arm64)")
 }

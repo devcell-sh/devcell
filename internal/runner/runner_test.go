@@ -417,6 +417,20 @@ func TestArgv_NoOpPrefixWhenOpMissing(t *testing.T) {
 	}
 }
 
+func TestArgv_NoSecretsSuppressesOpPrefix(t *testing.T) {
+	spec := runner.RunSpec{
+		Config:       baseConfig(),
+		CellCfg:      cfg.CellConfig{},
+		Binary:       "claude",
+		DefaultFlags: []string{"--dangerously-skip-permissions"},
+		NoSecrets:    true,
+	}
+	argv := runner.BuildArgv(spec, noopFS(), opLookPath)
+	if argv[0] == "op" {
+		t.Error("op run -- prefix must be suppressed when NoSecrets is true")
+	}
+}
+
 // --- cfg env and volumes ---
 
 func TestArgv_CfgEnvVarsInArgv(t *testing.T) {

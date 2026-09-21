@@ -227,6 +227,7 @@ type RunSpec struct {
 	BootDir      string              // CELL-264: host-side boot dir for fsnotify sentinels; empty disables the bind-mount
 	TTY          bool                // allocate a pseudo-TTY (-it); set from isatty check on stdin
 	Detach       bool                // run container in detached mode (-d); set by `cell start`
+	NoSecrets    bool                // skip `op run --` prefix and all secrets injection
 }
 
 func (s RunSpec) getenv(key string) string {
@@ -243,9 +244,11 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 
 	var argv []string
 
-	// 1Password passthrough
-	if opPath, err := lookPath("op"); err == nil && opPath != "" {
-		argv = append(argv, "op", "run", "--")
+	// 1Password passthrough (suppressed by --no-secrets)
+	if !spec.NoSecrets {
+		if opPath, err := lookPath("op"); err == nil && opPath != "" {
+			argv = append(argv, "op", "run", "--")
+		}
 	}
 
 	dockerRunFlags := []string{"--rm", "--shm-size=" + spec.CellCfg.Docker.ResolvedShmSize(), "--device=/dev/fuse"}

@@ -1,6 +1,10 @@
 package tart
 
-import "fmt"
+import (
+	"fmt"
+	"path/filepath"
+	"strings"
+)
 
 // GenerateSSHEnablementScript returns a shell script to enable SSH on macOS.
 func GenerateSSHEnablementScript() string {
@@ -193,8 +197,10 @@ fi
 sudo diskutil mount -mountPoint /nix "$LABEL"
 
 # --- Update fstab: remove installer's APFS entry, add our JHFS+ ---
+# The installer writes "UUID=<uuid> /nix apfs rw,noauto,..." — match on the
+# mountpoint+fstype, not the volume name (which never appears in the entry).
 echo "updating fstab..."
-sudo sed -i '' '/Nix.Store/d' /etc/fstab 2>/dev/null || true
+sudo sed -i '' -E '/\/nix[[:space:]]*apfs/d' /etc/fstab 2>/dev/null || true
 grep -q "$LABEL" /etc/fstab 2>/dev/null || \
   echo "LABEL=$LABEL /nix hfs rw,nobrowse" | sudo tee -a /etc/fstab > /dev/null
 
@@ -222,8 +228,12 @@ sudo tee /Library/LaunchDaemons/com.devcell.mount-nix.plist > /dev/null <<'BOOTP
 BOOTPLIST
 sudo launchctl bootstrap system /Library/LaunchDaemons/com.devcell.mount-nix.plist 2>/dev/null || true
 
-# --- Disable installer's APFS mount daemon (fails on clone anyway) ---
+# --- Remove installer's APFS mount daemon ---
+# bootout alone doesn't survive reboot: the plist would reload on every clone
+# boot and mount the tiny installer APFS volume OVER the JHFS+ disk,
+# shadowing the real store (observed as missing system profile + dead s6).
 sudo launchctl bootout system/org.nixos.darwin-store 2>/dev/null || true
+sudo rm -f /Library/LaunchDaemons/org.nixos.darwin-store.plist
 
 # --- Restart nix daemon on the new mount ---
 echo "restarting nix-daemon..."
@@ -236,6 +246,41 @@ ls /nix/ 2>/dev/null | head -5 || echo "(empty — first use)"
 echo "=== Nix store swap complete ==="`,
 		NixVolumeLabel,
 	)
+}
+
+// GenerateNixShadowRepairScript returns a best-effort script that detects and
+// repairs the installer-APFS-over-JHFS+ shadow mount on /nix.
+//
+// Templates built before the swap-script fix keep the installer's
+// org.nixos.darwin-store LaunchDaemon, which re-mounts the tiny APFS
+// "Nix Store" volume (initial install only, ~71 store paths) over the JHFS+
+// DevcellNix disk at every clone boot. That hides the nix-darwin system
+// profile, s6 binaries, and per-user profiles. This runs at session start,
+// before the s6/nix-darwin preflight. Deliberately not `set -e`: on a healthy
+// VM every step is a no-op and the session must proceed.
+func GenerateNixShadowRepairScript() string {
+	return `DEV=$(df /nix 2>/dev/null | awk 'NR==2{print $1}')
+if [ -n "$DEV" ] && diskutil info "$DEV" 2>/dev/null | grep -q "Volume Name:.*Nix Store"; then
+  echo "nix-shadow: installer APFS $DEV is shadowing /nix — unmounting"
+  sudo diskutil unmount "$DEV" 2>/dev/null || sudo diskutil unmount force "$DEV" 2>/dev/null || true
+
+  # Kill the persistence vectors so the shadow doesn't return next boot
+  sudo launchctl bootout system/org.nixos.darwin-store 2>/dev/null || true
+  sudo rm -f /Library/LaunchDaemons/org.nixos.darwin-store.plist
+  sudo sed -i '' -E '/\/nix[[:space:]]*apfs/d' /etc/fstab 2>/dev/null || true
+
+  # If nothing serves /nix now, mount the JHFS+ disk
+  if ! /sbin/mount | grep -q " /nix "; then
+    sudo diskutil mount -mountPoint /nix DevcellNix 2>/dev/null || true
+  fi
+
+  # Restart the nix-daemon against the real store
+  sudo launchctl kickstart -k system/org.nixos.nix-daemon 2>/dev/null || true
+
+  echo "nix-shadow: /nix now served by $(df /nix 2>/dev/null | awk 'NR==2{print $1}')"
+else
+  echo "nix-shadow: no shadow detected ($DEV serves /nix)"
+fi`
 }
 
 // GenerateNixDarwinActivateScript returns the nix-darwin activation command.
@@ -256,13 +301,12 @@ echo "nix-darwin: flake dir listing=$(ls %s/flake.nix %s/flake.lock 2>&1)"
 echo "nix-darwin: /etc/nix/nix.conf=$(cat /etc/nix/nix.conf 2>/dev/null || echo MISSING)"
 echo "nix-darwin: existing users=$(dscl . -list /Users UniqueID 2>/dev/null | grep -E 'devcell|_nixbld' | head -10)"
 
-# nix-darwin manages /etc/{bashrc,zshrc} — activation aborts if they contain
-# unrecognized content. The official Nix installer modifies both files (appends
-# nix-daemon.sh sourcing). Renaming to .before-nix-darwin is nix-darwin's
-# idiomatic handoff: it signals "I consent, you own this file now."
+# nix-darwin manages several /etc files — activation aborts if they contain
+# unrecognized content. The Nix installer and macOS defaults write files that
+# conflict. Renaming to .before-nix-darwin is nix-darwin's idiomatic handoff.
 # Idempotent: skip if .before-nix-darwin already exists (prior activation).
 echo "nix-darwin: checking /etc files for nix-darwin handoff..."
-for f in /etc/bashrc /etc/zshrc; do
+for f in /etc/bashrc /etc/zshrc /etc/zshenv /etc/zprofile /etc/nix/nix.conf /etc/shells; do
   if [ -f "$f" ] && [ ! -f "$f.before-nix-darwin" ]; then
     sudo mv "$f" "$f.before-nix-darwin"
     echo "  backed up $f -> $f.before-nix-darwin (nix-darwin will manage it)"
@@ -271,9 +315,71 @@ for f in /etc/bashrc /etc/zshrc; do
   fi
 done
 
+# nix's libgit2 fetcher runs as root (HOME=/var/root) but the flake repo sits
+# on a VirtioFS share owned by the automount user — libgit2 aborts with
+# "repository path ... is not owned by current user". Mark all paths safe in
+# root's global gitconfig (libgit2 reads $HOME/.gitconfig; written directly so
+# no git binary is needed). Idempotent via the grep guard.
+sudo sh -c 'grep -qs "directory = \*" /var/root/.gitconfig 2>/dev/null || printf "[safe]\n\tdirectory = *\n" >> /var/root/.gitconfig'
+echo "nix-darwin: root gitconfig=$(sudo cat /var/root/.gitconfig 2>/dev/null || echo MISSING)"
+
 sudo PATH="$PATH" NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE" HOME=/var/root nix \
   --extra-experimental-features 'nix-command flakes' \
   run nix-darwin -- switch --flake %s#%s --show-trace --print-build-logs 2>&1`, flakeDir, stack, flakeDir, flakeDir, flakeDir, stack)
+}
+
+// GenerateHostNixSubstituterScript returns a guest-side script that configures
+// the host's shared /nix store as a local substituter. The host's /nix is
+// shared read-only via VirtioFS at /Volumes/My Shared Files/hostnix.
+//
+// To avoid SQLite-over-VirtioFS locking issues, the script copies the nix
+// database locally and symlinks the store paths from the VirtioFS mount.
+func GenerateHostNixSubstituterScript() string {
+	return `set -e
+echo "=== Configure host nix store as local substituter ==="
+
+HOST_NIX="/Volumes/My Shared Files/hostnix"
+BRIDGE="/tmp/host-nix-root"
+
+if [ ! -d "$HOST_NIX/store" ]; then
+  echo "host nix store not available at $HOST_NIX/store — skipping"
+  exit 0
+fi
+
+STORE_COUNT=$(ls "$HOST_NIX/store" 2>/dev/null | wc -l | tr -d ' ')
+echo "found host nix store: $STORE_COUNT paths"
+
+# Build a hybrid bridge: local DB copy + symlinked store
+sudo mkdir -p "$BRIDGE/nix/var/nix/db"
+
+# Copy the database locally so SQLite can open it without VirtioFS locking
+if [ -f "$HOST_NIX/var/nix/db/db.sqlite" ]; then
+  echo "copying host nix database..."
+  sudo cp "$HOST_NIX/var/nix/db/db.sqlite" "$BRIDGE/nix/var/nix/db/db.sqlite"
+  echo "database copied ($(du -sh "$BRIDGE/nix/var/nix/db/db.sqlite" | cut -f1))"
+else
+  echo "WARNING: host nix database not found — skipping"
+  exit 0
+fi
+
+# Symlink the store paths (content-addressable, immutable, safe for reads)
+sudo ln -sfn "$HOST_NIX/store" "$BRIDGE/nix/store"
+
+ls "$BRIDGE/nix/store" > /dev/null 2>&1 || { echo "WARNING: store symlink broken — skipping"; exit 0; }
+
+# Add as extra substituter in nix.conf (effective for builds before nix-darwin activation overwrites it)
+if ! grep -q "host-nix-root" /etc/nix/nix.conf 2>/dev/null; then
+  echo "extra-substituters = local?root=$BRIDGE" | sudo tee -a /etc/nix/nix.conf
+  echo "trusted-substituters = local?root=$BRIDGE" | sudo tee -a /etc/nix/nix.conf
+  sudo launchctl kickstart -k system/org.nixos.nix-daemon 2>/dev/null || true
+  sleep 2
+  echo "host nix substituter configured and daemon restarted"
+else
+  echo "host nix substituter already configured"
+fi
+
+echo "=== Host nix substituter ready ==="
+`
 }
 
 // GenerateGrantSSHdFDAScript returns a boot-time script that grants Full Disk
@@ -408,17 +514,31 @@ echo "=== VirtioFS mount done ==="`,
 		mountPoint)
 }
 
-// GenerateProjectMountScript returns a script to mount the project VirtioFS
-// share into the user's home directory, mirroring Docker's bind-mount behavior.
-func GenerateProjectMountScript(tag, username, projectBasename string) string {
-	mountPoint := fmt.Sprintf("/Users/%s/%s", username, projectBasename)
+// ProjectPathInVM maps the host project path to its in-VM location.
+// When the project lives under the host home, the relative path is mirrored
+// into the session user's VM home — so /Users/dmitry/dev/acme/proj on the
+// host appears at the same path inside the VM (session user == host $USER).
+// Projects outside the host home fall back to ~/<basename>.
+func ProjectPathInVM(hostHome, baseDir, sessionUser string) string {
+	rel, err := filepath.Rel(hostHome, baseDir)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return fmt.Sprintf("/Users/%s/%s", sessionUser, filepath.Base(baseDir))
+	}
+	return fmt.Sprintf("/Users/%s/%s", sessionUser, rel)
+}
+
+// GenerateProjectMountScript returns a script to symlink the project VirtioFS
+// share at mountPoint (an absolute in-VM path from ProjectPathInVM),
+// mirroring Docker's bind-mount behavior. Parent directories are created as
+// the session user so they stay writable.
+func GenerateProjectMountScript(tag, username, mountPoint string) string {
 	return fmt.Sprintf(`set -e
 echo "=== project mount: tag=%s target=%s ==="
 
 AUTOMOUNT_PATH="/Volumes/My Shared Files/%s"
 if [ -d "$AUTOMOUNT_PATH" ]; then
   echo "found automount share at $AUTOMOUNT_PATH"
-  sudo mkdir -p "$(dirname %s)"
+  sudo -u %s mkdir -p "$(dirname %s)"
   sudo ln -sfn "$AUTOMOUNT_PATH" %s
   sudo chown -h %s %s
   echo "symlinked %s -> $AUTOMOUNT_PATH"
@@ -435,7 +555,8 @@ ls %s/ | head -5 || echo "WARNING: mount point is empty"
 echo "=== project mount done ==="`,
 		tag, mountPoint,
 		tag,
-		mountPoint, mountPoint,
+		username, mountPoint,
+		mountPoint,
 		username, mountPoint,
 		mountPoint,
 		tag, mountPoint,
@@ -485,16 +606,83 @@ if [ -d "$AUTOMOUNT_PATH" ]; then
   for item in "$AUTOMOUNT_PATH"/.[!.]* "$AUTOMOUNT_PATH"/*; do
     [ -e "$item" ] || continue
     name=$(basename "$item")
+    # Shell rc files are platform-specific: the shared copies carry Linux
+    # paths (/home/<user>, /opt/devcell). The s6 shell-rc service generates
+    # macOS-correct ones locally instead.
+    case "$name" in
+      .zshenv|.zshrc|.profile|.bashrc) continue ;;
+    esac
     target="/Users/$USERNAME/$name"
     if [ ! -e "$target" ] && [ ! -L "$target" ]; then
       sudo ln -sfn "$item" "$target"
       sudo chown -h "$USERNAME":staff "$target"
     fi
   done
+  # Drop rc symlinks created by earlier runs of this script — they point at
+  # the shared Linux-flavored files and would shadow shell-rc's output.
+  for rc in .zshenv .zshrc .profile .bashrc; do
+    if [ -L "/Users/$USERNAME/$rc" ]; then
+      sudo rm -f "/Users/$USERNAME/$rc"
+    fi
+  done
   echo "CellHome contents linked into /Users/$USERNAME"
 else
   echo "no CellHome VirtioFS share at $AUTOMOUNT_PATH — skipping"
 fi`, username)
+}
+
+// S6EnvDir is where session env vars are written for s6 service scripts.
+// /etc on macOS is a symlink to /private/etc (Data volume, writable by root).
+// nix-darwin already manages /etc/s6/ via the s6-darwin-renderer activation script.
+const S6EnvDir = "/etc/s6/env"
+
+// S6ServicesDir is where s6 service definitions live (installed by nix-darwin's
+// s6-darwin-renderer.nix activation script; read by com.devcell.s6-svscan).
+const S6ServicesDir = "/etc/s6/services"
+
+// GenerateS6SessionActivateScript returns a script that activates s6-rc
+// session services for a newly created session user.
+//
+// The script sets env vars that s6 service scripts read (HOST_USER, SESSION_HOME,
+// DEVCELL_HOME) and then runs s6-rc oneshot services if s6 is installed.
+// Paths use /etc/s6/ to match nix-darwin's s6-darwin-renderer output.
+func GenerateS6SessionActivateScript(sessionUser string) string {
+	return fmt.Sprintf(`set -e
+export HOST_USER="%s"
+export SESSION_HOME="/Users/%s"
+export DEVCELL_HOME="/Users/%s"
+
+# Source nix-daemon profile so s6/s6-rc are on PATH (tart exec runs as admin
+# whose default PATH doesn't include /run/current-system/sw/bin).
+. /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh 2>/dev/null || true
+export PATH="/run/current-system/sw/bin${PATH:+:}${PATH}"
+
+S6_ENV="%s"
+S6_SVC="%s"
+
+if command -v s6-rc >/dev/null 2>&1 && [ -d "$S6_SVC" ]; then
+  sudo mkdir -p "$S6_ENV"
+  echo "$HOST_USER" | sudo tee "$S6_ENV/HOST_USER" > /dev/null
+  echo "$SESSION_HOME" | sudo tee "$S6_ENV/SESSION_HOME" > /dev/null
+  echo "$DEVCELL_HOME" | sudo tee "$S6_ENV/DEVCELL_HOME" > /dev/null
+  echo "s6: activating session services for $HOST_USER"
+  for svc in shell-rc claude-config codex-config gemini-config opencode-config homedir gcroot mise; do
+    if [ -d "$S6_SVC/$svc" ]; then
+      if [ -f "$S6_SVC/$svc/type" ] && [ "$(cat "$S6_SVC/$svc/type")" = "oneshot" ] && [ -x "$S6_SVC/$svc/up" ]; then
+        echo "s6: running $svc"
+        sudo -E "$S6_SVC/$svc/up" 2>&1 || echo "s6: $svc failed (non-fatal)"
+      fi
+    fi
+  done
+  echo "s6: session services activated"
+else
+  echo "s6: s6-rc not available — skipping session activation"
+fi`,
+		sessionUser,
+		sessionUser,
+		DarwinVMUser,
+		S6EnvDir,
+		S6ServicesDir)
 }
 
 // ProvisionedMarkerPath is on the boot disk's writable Data volume.

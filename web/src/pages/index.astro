@@ -4,62 +4,20 @@ import Hero from '../components/Hero.astro';
 import FeatureCards from '../components/FeatureCards.astro';
 import Quickstart from '../components/Quickstart.astro';
 import WhatsInside from '../components/WhatsInside.astro';
-import StackTable from '../components/StackTable.astro';
 import FAQ from '../components/FAQ.astro';
 
 const stableVersion = process.env.STABLE_VERSION || '';
 
-const stacks = [
-  { category: "AI Agents",             tools: ["Claude Code", "OpenAI Codex", "OpenCode"] },
-  { category: "Languages & Runtimes",  tools: ["Go", "Node.js", "Python", "Ruby", "Swift / LLVM"] },
-  { category: "Infrastructure & IaC",  tools: ["Terraform", "OpenTofu", "Docker", "Compose", "Vagrant", "Packer", "Helm", "Nix"] },
-  { category: "Finance & Data",        tools: ["Yahoo Finance", "EdgarTools SEC", "FRED API"] },
-  { category: "Productivity & Travel", tools: ["Linear", "Notion", "Inoreader RSS", "Google Maps", "TripIt"] },
-  { category: "Electronics & Design",  tools: ["KiCad", "Inkscape (vector graphics)", "ngspice", "ESPHome", "PlatformIO", "wokwi-cli"] },
-  { category: "Android & Mobile",      tools: ["ADB", "apktool", "jadx", "Android SDK (x86_64, addon)"] },
-  { category: "Desktop & Browser",     tools: ["VNC", "RDP", "Chromium (stealth)", "Playwright", "PulseAudio"] },
-];
-
-const logos = [
-  { src: "/logos/claude-icon.svg", alt: "Claude", title: "Claude Code" },
-  { src: "/logos/openai-icon.svg", alt: "OpenAI", title: "OpenAI Codex" },
-  { src: "/logos/ollama.svg", alt: "Ollama", title: "Ollama (local models)" },
-  { src: "/logos/go.svg", alt: "Go", title: "Go" },
-  { src: "/logos/nodejs-icon.svg", alt: "Node.js", title: "Node.js 22" },
-  { src: "/logos/python.svg", alt: "Python", title: "Python 3.13" },
-  { src: "/logos/ruby.svg", alt: "Ruby", title: "Ruby" },
-  { src: "/logos/swift.svg", alt: "Swift", title: "Swift / LLVM" },
-  { src: "/logos/terraform-icon.svg", alt: "Terraform", title: "Terraform" },
-  { src: "/logos/opentofu.svg", alt: "OpenTofu", title: "OpenTofu" },
-  { src: "/logos/docker-icon.svg", alt: "Docker", title: "Docker" },
-  { src: "/logos/vagrant.svg", alt: "Vagrant", title: "Vagrant (VM engine)" },
-  { src: "/logos/nix.svg", alt: "Nix", title: "Nix" },
-  { src: "/logos/packer.svg", alt: "Packer", title: "Packer" },
-  { src: "/logos/git-icon.svg", alt: "Git", title: "Git" },
-  { src: "/logos/tmux.svg", alt: "tmux", title: "tmux (terminal multiplexer)" },
-  { src: "/logos/chrome.svg", alt: "Chromium", title: "Stealth Chromium" },
-  { src: "/logos/playwright.svg", alt: "Playwright", title: "Playwright" },
-  { src: "/logos/google-maps.svg", alt: "Google Maps", title: "Google Maps MCP" },
-  { src: "/logos/linear-icon.svg", alt: "Linear", title: "Linear MCP" },
-  { src: "/logos/notion-icon.svg", alt: "Notion", title: "Notion MCP" },
-  { src: "/logos/inkscape.svg", alt: "Inkscape", title: "Inkscape (vector graphics)" },
-  { src: "/logos/kicad.svg", alt: "KiCad", title: "KiCad EDA" },
-  { src: "/logos/sqlite.svg", alt: "SQLite", title: "SQLite" },
-  { src: "/logos/postgresql.svg", alt: "PostgreSQL", title: "PostgreSQL" },
-  { src: "/logos/1password.svg", alt: "1Password", title: "1Password (secret injection)" },
-];
-
-const stackColumns = ["base", "go", "node", "python", "fullstack", "electronics", "ultimate"];
+const stackColumns = ["base", "go", "node", "python", "fullstack", "ultimate"];
 const stackFeatures = [
-  { name: "Dev essentials",  note: "zsh, git, tmux, ripgrep, jq, sqlite, mise, nix", in: ["base","go","node","python","fullstack","electronics","ultimate"] },
+  { name: "Dev essentials",  note: "zsh, git, tmux, ripgrep, jq, sqlite, mise, nix", in: ["base","go","node","python","fullstack","ultimate"] },
   { name: "Go environment",      note: "Go toolchain",                                 in: ["go","fullstack","ultimate"] },
   { name: "Node.js environment", note: "Node.js 22, npm",                             in: ["node","fullstack","ultimate"] },
   { name: "Python environment",  note: "Python 3.13, uv",                             in: ["python","fullstack","ultimate"] },
   { name: "Infra tools",     note: "Terraform, OpenTofu, Packer, Helm",               in: ["go","fullstack","ultimate"] },
-  { name: "Stealth browser", note: "Anti-fingerprint Chromium + Playwright, anti-bot cookie sync", in: ["node","python","fullstack","ultimate"], partial: ["node","python","fullstack"] },
-  { name: "Electronics & DIY", note: "KiCad, ngspice, ESPHome, PlatformIO, wokwi-cli", in: ["electronics","ultimate"] },
-  { name: "GUI desktop",     note: "VNC + RDP + Fluxbox + PulseAudio",                in: ["electronics","ultimate"] },
-  { name: "12+ MCP servers",  note: "Finance, maps, productivity, vector graphics (Inkscape) — growing",   in: ["ultimate"] },
+  { name: "Browser + sessions", note: "Chromium + Playwright, cookie sync via cell login", in: ["node","python","fullstack","ultimate"], partial: ["node","python","fullstack"] },
+  { name: "GUI desktop",     note: "VNC + RDP + Fluxbox + PulseAudio",                in: ["ultimate"] },
+  { name: "12+ MCP servers with backing tools",  note: "Inkscape, OpenTofu, maps, finance, productivity — growing",   in: ["ultimate"] },
 ];
 
 const logoGrid = [
@@ -75,28 +33,18 @@ const logoGrid = [
 const faqItems = [
   { q: "Do I need an API key or Claude subscription?",
     a: "Bring your own license or model. Claude Max, Pro, and API keys all work — devcell starts the same client you already use, just inside a container. Same goes for Codex and OpenCode." },
-  { q: "Can I run DevCell without Docker — e.g. natively on Apple Silicon?",
-    a: "Yes. Pass --engine=vagrant (or --macos) and devcell provisions a Debian ARM64 VM via Vagrant and UTM instead of a Docker container. The same nixhome toolchain installs via Nix inside the VM. All cell commands work identically: cell claude --macos, cell build --macos, cell rdp --macos. The VM shows up alongside Docker cells in cell rdp --list." },
-  { q: "How does the agent log into websites without seeing passwords?",
-    a: "Run cell login <url> on your host to open a real browser window — no CDP, no debugging ports that trip bot detection. Log in normally, press Enter, and devcell extracts cookies and localStorage via a headless CDP pass after the browser closes. Playwright inside the container replays the session without ever exposing credentials to the agent. Add --force to wipe a stale session and start fresh." },
-  { q: "How does 1Password integration work?",
-    a: "List document names under [op] documents in devcell.toml. On cell start, the CLI reads each 1Password document on your host (requires op CLI and an active session), maps every field to an env var by label, and injects them into the container at runtime. Secrets are written to a RAM-only tmpfs at /run/secrets/ — they're gone when the container stops and never touch disk inside the container." },
+  { q: "Why not just write my own Dockerfile?",
+    a: "You can — the afternoon is the demo; the maintenance is the product. A hand-rolled container needs MCP wiring, backing apps, a display server, secrets handling, UID mapping, and per-agent flags — and needs them again after every client update. Everything devcell ships is defined in the open nixhome modules: read them, fork them, or reuse them standalone if you'd rather keep your own setup." },
   { q: "How is DevCell different from Dev Containers?",
-    a: "Dev Containers are editor-first — you write a Dockerfile + devcontainer.json per project for VS Code or GitHub Codespaces. DevCell is agent-first: one command, 7 pre-built Nix-pinned stacks, 12+ MCP servers auto-merged at startup, stealth Chromium + Playwright, VNC/RDP built in, and 1Password secret injection. No per-project Dockerfile maintenance." },
+    a: "Dev Containers are editor-first — a Dockerfile + devcontainer.json per project for VS Code or Codespaces. DevCell is agent-first: one command, pre-built Nix-pinned stacks shared across projects, MCP servers with their backing tools in the image, VNC/RDP built in, secrets on tmpfs. No per-project Dockerfile drifting apart." },
   { q: "How is DevCell different from OpenClaw?",
-    a: "OpenClaw is a multi-channel messaging gateway (WhatsApp, Telegram, Slack) with AI features. DevCell is a sandboxed coding environment for AI agents. Key differences: DevCell has mandatory container isolation (OpenClaw is network-exposed by default with multiple critical CVEs in 2026), curated MCP servers with backing tools shipped in the image (OpenClaw has an open marketplace with 1,184 malicious skills found), and Claude Max/Pro subscriptions work directly (OpenClaw requires API keys since Anthropic blocked subscription auth in Jan 2026)." },
-  { q: "How does cell models work — do I need a local GPU?",
-    a: "No GPU needed. cell models fetches live models from OpenRouter (Anthropic, OpenAI, Google) and shows them alongside any locally installed ollama models, ranked by SWE-Bench score and speed. Set [llm.models] default in devcell.toml to pin a model; with --ollama enabled, cell claude auto-selects the best-ranked local model if nothing is pinned." },
+    a: "Different layers. OpenClaw is an assistant framework; devcell is the contained machine an agent runs on. They compose: run OpenClaw inside a cell and its skills keep working while your SSH keys and credentials stay out of reach." },
   { q: "Can the agent install packages inside the container?",
     a: "Yes. The agent can run apt, npm install, pip install, nix — whatever the project needs. Network access is unrestricted. Port forwarding and extra volume mounts are configurable in devcell.toml." },
-  { q: "What about file permissions?",
-    a: "Permissions are pass-through. The container user matches your host UID, so files the agent creates are owned by you. No chown headaches." },
   { q: "Does my existing Claude Code config carry over?",
     a: "Your project-level config (CLAUDE.md, .claude/) is mounted with your project. Host ~/.claude/skills is mounted read-write, the rest of ~/.claude is read-only. Your host-machine config stays safe. (Subject to change.)" },
-  { q: "Why not just run Docker myself?",
-    a: "You can. devcell saves you from maintaining a Dockerfile per project, wiring up MCP server configs, forwarding git identity, injecting secrets, and setting up entrypoint orchestration. One command instead of 20 minutes of Docker plumbing." },
-  { q: "How big are the images?",
-    a: "Base is ~1.3 GB, ultimate is ~20 GB. First run lets you pick a stack and builds automatically. Base builds in under 2 minutes, ultimate takes ~5 minutes." },
+  { q: "How big are the images? Can I skip Docker?",
+    a: "Base is ~1.3 GB and builds in under 2 minutes; ultimate is ~20 GB. First run lets you pick a stack. No Docker? --engine=vagrant provisions the same cell as a VM (UTM/Vagrant on Apple Silicon) — same toolchain, same commands." },
 ];
 
 ---
@@ -722,19 +670,18 @@ const faqItems = [
     }
 </style>
 
-<Base title="devcell - AI agent sandbox" description="Run Claude Code, Codex, or OpenCode with auto-approve. Your project directory goes in, SSH keys and host credentials stay out.">
+<Base title="devcell — your agent's own computer" description="Run Claude Code, Codex, or OpenCode with full auto-approve in an isolated agent workspace — equipped with real tools, a desktop, and your browser sessions. SSH keys and host credentials stay absent.">
   <Hero stableVersion={stableVersion} logoGrid={logoGrid} />
   <FeatureCards />
   <Quickstart />
-  <WhatsInside stacks={stacks} logos={logos} />
-  <StackTable stackColumns={stackColumns} stackFeatures={stackFeatures} />
+  <WhatsInside stackColumns={stackColumns} stackFeatures={stackFeatures} />
   <FAQ faqItems={faqItems} />
 
   <div class="qs-wrap">
   <section id="get-started">
     <p class="section-label">Get started</p>
     <h2>Ready to try it?</h2>
-    <p class="stacks-more" style="margin-bottom: 1.25rem;">One command. Pick your stack on first run.</p>
+    <p class="stacks-more" style="margin-bottom: 1.25rem;">One command. One question on first run. Enter takes the default.</p>
     <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
       <a href="#quickstart" class="btn">Install now ↑</a>
       <a href="/docs/quickstart" class="btn btn-secondary">Read the docs</a>

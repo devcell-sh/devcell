@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -639,6 +640,9 @@ echo "Done — thin image: %s"`,
 
 	args := []string{
 		"docker", "run", "--rm", "--privileged", "--name", containerName,
+		"--label", "devcell.role=thin-builder",
+		"--label", "devcell.project=" + projectName,
+		"--label", "devcell.stack=" + stack,
 		"--platform", platform,
 		"--user", "0",
 		"-v", volumeName + ":/nix",
@@ -699,4 +703,54 @@ func isFlakeRef(s string) bool {
 		}
 	}
 	return false
+}
+
+// ── Builder container identity + slot reclaim ────────────────────────────────
+
+// ThinBuilderContainerName names the thin builder for one app
+// (`<project>-<bunk>`, the same key as `cell-<app>-run`). One fixed name for
+// every project meant a build starting in project B force-removed — SIGKILLed,
+// exit 137 with no OOM anywhere — the build project A had in flight.
+func ThinBuilderContainerName(appName string) string {
+	return "devcell-builder-" + appName
+}
+
+// ErrBuilderRunning is returned when the app's builder slot is occupied by a
+// live container. Callers must never remove it; wait or let it finish.
+var ErrBuilderRunning = errors.New("builder already running")
+
+// ReclaimBuilderSlot decides what to do with a pre-existing builder container
+// of the same name before starting a new build: nothing when absent, remove
+// when it exited (a crashed or interrupted run left it behind), and refuse —
+// never kill — when it is running.
+func ReclaimBuilderSlot(name string, exists, running bool) (remove bool, err error) {
+	switch {
+	case !exists:
+		return false, nil
+	case running:
+		return false, fmt.Errorf("%w: %s — another build for this project is in flight; "+
+			"follow it with `docker logs -f %s` or remove it with `docker rm -f %s` if it is stale",
+			ErrBuilderRunning, name, name, name)
+	default:
+		return true, nil
+	}
+}
+
+// BuilderContainerState reports whether a container with the given name
+// exists and whether it is currently running.
+func BuilderContainerState(ctx context.Context, name string) (exists, running bool) {
+	out, err := exec.CommandContext(ctx, "docker", "container", "inspect",
+		"--format", "{{.State.Running}}", name).Output()
+	if err != nil {
+		return false, false
+	}
+	return true, strings.TrimSpace(string(out)) == "true"
+}
+
+// BuilderOrphanedByCancel is true when the `docker run` client died because
+// the caller's context was cancelled (Ctrl-C / SIGTERM). The client is
+// SIGKILLed but the container keeps running — an orphan holding the shared
+// /nix volume — so the caller must remove its own builder in that case.
+func BuilderOrphanedByCancel(runErr, ctxErr error) bool {
+	return runErr != nil && ctxErr != nil
 }

@@ -6,13 +6,25 @@ import (
 	"strings"
 )
 
+// DarwinVMUser is the fixed nix-darwin/home-manager user inside the macOS VM
+// (community-home's darwinVMUser). Agent binaries are installed into its
+// per-user profile, regardless of which session user runs the cell.
+const DarwinVMUser = "devcell"
+
+// nixProfileSource makes nix and the home-manager-installed agent binaries
+// available in the exec shell. Sourcing nix-daemon.sh only yields nix itself;
+// the session user (host $USER) is not DarwinVMUser, so its per-user profile
+// and the nix-darwin system profile must be bridged onto PATH explicitly.
+const nixProfileSource = `. /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh 2>/dev/null || . "$HOME/.nix-profile/etc/profile.d/nix.sh" 2>/dev/null || true; export PATH="/etc/profiles/per-user/` + DarwinVMUser + `/bin:/run/current-system/sw/bin:$PATH"`
+
 // ExecSpec describes a command to run inside a tart VM via `tart exec`.
 type ExecSpec struct {
 	Binary     string   // binary to run (e.g. "zsh", "claude")
 	Flags      []string // default flags for the binary
 	UserArgs   []string // user-provided args
 	EnvVars    []string // KEY=VAL pairs to set in the environment
-	ProjectDir string   // host project path — basename is used for cd ~/basename
+	ProjectDir string   // host project path — basename fallback for cd ~/basename
+	WorkDir    string   // absolute in-VM project path (ProjectPathInVM); wins over ProjectDir
 	RunAsUser  string   // if set, wrap command with sudo -u <user> -i
 }
 
@@ -36,15 +48,17 @@ func BuildExecCommand(spec ExecSpec) string {
 	agentCmd := shellJoinTokens(tokens)
 
 	var cmd string
-	if spec.ProjectDir != "" {
+	switch {
+	case spec.WorkDir != "":
+		cmd = "cd " + shellQuoteToken(spec.WorkDir) + " && " + agentCmd
+	case spec.ProjectDir != "":
 		basename := filepath.Base(spec.ProjectDir)
 		cmd = "cd ~/" + shellQuoteToken(basename) + " && " + agentCmd
-	} else {
+	default:
 		cmd = agentCmd
 	}
 
-	const nixSource = `. /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh 2>/dev/null || . "$HOME/.nix-profile/etc/profile.d/nix.sh" 2>/dev/null || true`
-	innerCmd := nixSource + "; " + cmd
+	innerCmd := nixProfileSource + "; " + cmd
 
 	if spec.RunAsUser != "" {
 		return "sudo -u " + shellQuoteToken(spec.RunAsUser) + " -i bash -l -c " + shellQuoteToken(innerCmd)
@@ -87,10 +101,7 @@ func BuildSSHArgv(spec Spec, host string) []string {
 		remoteCmd = agentCmd
 	}
 
-	// Explicitly source the nix daemon profile before running the agent binary.
-	// Determinate installer puts the profile here; fall back to home-manager path.
-	const nixSource = `. /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh 2>/dev/null || . "$HOME/.nix-profile/etc/profile.d/nix.sh" 2>/dev/null || true`
-	remoteCmd = nixSource + "; " + remoteCmd
+	remoteCmd = nixProfileSource + "; " + remoteCmd
 
 	// Build the SSH argv.
 	userHost := spec.SSHUser + "@" + host
