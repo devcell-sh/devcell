@@ -24,7 +24,7 @@ const (
 //
 // Example: UpstreamFlakeRef("v1.0.0") → "github:devcell-sh/home/v1.0.0"
 func UpstreamFlakeRef(ref string) string {
-	if ref == "" || ref == "v0.0.0" || isDevVersion(ref) {
+	if ref == "" || ref == "v0.0.0" || ref == "0.0.0" || isDevVersion(ref) {
 		ref = DefaultNixhomeGitRef
 	}
 	s := fmt.Sprintf("github:%s/%s/%s", UpstreamOwner, UpstreamRepo, ref)

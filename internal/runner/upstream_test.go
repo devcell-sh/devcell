@@ -29,6 +29,15 @@ func TestUpstreamFlakeRef_V000CoercesToDefault(t *testing.T) {
 	}
 }
 
+// GoReleaser's {{.Version}} strips the "v" prefix, so the dev build injects
+// "0.0.0" (not "v0.0.0"). Both forms must coerce to the default branch.
+func TestUpstreamFlakeRef_Bare000CoercesToDefault(t *testing.T) {
+	want := "github:devcell-sh/home/" + runner.DefaultNixhomeGitRef
+	if got := runner.UpstreamFlakeRef("0.0.0"); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 func TestUpstreamFlakeRef_DevVersionCoercesToDefault(t *testing.T) {
 	want := "github:devcell-sh/home/" + runner.DefaultNixhomeGitRef
 	for _, v := range []string{
