@@ -9,14 +9,14 @@ const { stableVersion, logoGrid } = Astro.props;
 <div class="hero-wrap">
   <div class="hero">
     <div>
-      <p class="hero-eyebrow">AI Agent Sandbox · Open Source · Apache 2.0 · <a href="https://github.com/DimmKirr/devcell" class="eyebrow-stars">★ Star on GitHub</a> <a href="https://github.com/DimmKirr/devcell"><img src="https://img.shields.io/github/stars/DimmKirr/devcell?style=flat&label=&color=C8FF00" alt="GitHub stars" class="star-badge" /></a>{stableVersion ? <Fragment> · <a href="https://github.com/DimmKirr/devcell/releases" class="eyebrow-stars">{stableVersion}</a></Fragment> : <Fragment> · <a href="https://github.com/DimmKirr/devcell/releases" class="eyebrow-stars">Releases</a></Fragment>}</p>
-      <h1>Agentic Coding,<br/>Without the<br/><span class="hl">Blast Radius.</span></h1>
+      <p class="hero-eyebrow">Agent Workspace · Open Source · Apache&nbsp;2.0 · <a href="https://github.com/DimmKirr/devcell" class="eyebrow-stars" style="white-space: nowrap;">★ Star on GitHub</a> <a href="https://github.com/DimmKirr/devcell"><img src="https://img.shields.io/github/stars/DimmKirr/devcell?style=flat&label=&color=C8FF00" alt="GitHub stars" class="star-badge" /></a>{stableVersion ? <Fragment> · <a href="https://github.com/DimmKirr/devcell/releases" class="eyebrow-stars">{stableVersion}</a></Fragment> : <Fragment> · <a href="https://github.com/DimmKirr/devcell/releases" class="eyebrow-stars">Releases</a></Fragment>}</p>
+      <h1>Your Agent<br/>Gets <span class="hl">Its&nbsp;Own</span><br/>Computer.</h1>
       <p class="hero-desc">
-        Your AI agent can <code>rm -rf /</code> and you're fine.
-        Auto-approve on your bare machine means the agent sees your SSH keys, other repos,
-        every credential on disk.<br/><br/>
-        devcell puts a container between your project and everything else.
-        Your code goes in. Nothing else comes along.
+        Auto-approve everything. The agent works inside a cell — a container or VM
+        with its own home, tools, and desktop. Your SSH keys, other repos, and
+        credentials aren't hidden from it; they're absent.<br/><br/>
+        And inside, it has more than your machine ever gave it: real tools behind
+        its MCP servers, a browser with your sessions, a screen it can see.
       </p>
       <div class="hero-actions">
         <a href="https://github.com/DimmKirr/devcell" class="btn btn-primary">View on GitHub →</a>
@@ -33,6 +33,7 @@ const { stableVersion, logoGrid } = Astro.props;
       <div><span class="t-path">~/myproject</span> <span class="t-dim">$</span> <span class="t-cmd"> cell claude</span></div>
       <div class="t-dim">Opening Cell myproject …</div>
       <div><span class="t-ok">✔</span><span class="t-dim"> mounted /home/alex/myproject</span></div>
+      <div><span class="t-ok">✔</span><span class="t-dim"> ~/.ssh, ~/.aws: not mounted</span></div>
       <div class="t-hr">───────────────────────────────────────</div>
       <div class="t-splash">
         <div class="t-splash-logo">
