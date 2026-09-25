@@ -1,5 +1,7 @@
 package qemu
 
+const KeepAliveScriptName = `devcell-keepalive.ps1`
+
 // InteractiveShellCommand is the agent command for a hands-on
 // troubleshooting session inside a booted image.
 //

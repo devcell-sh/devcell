@@ -108,8 +108,8 @@ github.com/devcell-sh/go-regedit v0.1.0 h1:+eT+eLZQZtDpKhzjlGBP2DdyNuUhFTX+8354j
 github.com/devcell-sh/go-regedit v0.1.0/go.mod h1:pWEerGIoAAVu00kuyFaXCmIzIWghcJYwiK8xGha1L5E=
 github.com/devcell-sh/go-wimlib v0.1.0 h1:pg1WxyqfMm/9Anmp9amfr+nMKwzAc4D5ra4n8qkZkMg=
 github.com/devcell-sh/go-wimlib v0.1.0/go.mod h1:BFGCDzvSqoVtHxQ8j5GhXHmO8c3w/kLnHDJaOogPstE=
-github.com/devcell-sh/go-winkit v0.2.1-0.20260907050558-a2d304a6c6ef h1:xEM/DUsE4tVi5T9YGkWBtB/kYZETjeB9iSKOiSKhr2s=
-github.com/devcell-sh/go-winkit v0.2.1-0.20260907050558-a2d304a6c6ef/go.mod h1:BvIWCv/xVDAYJCVaspbZ9ceumdHa8kF9oBimT/guSQo=
+github.com/devcell-sh/go-winkit v0.2.1-0.20260925055439-8c91bd7fede0 h1:PJQnfUQ4BDfFM5UOYnkak0YH/NRpkWA2IyYMboOmnPc=
+github.com/devcell-sh/go-winkit v0.2.1-0.20260925055439-8c91bd7fede0/go.mod h1:+j8CjFv6IeBMIbp10M+cuzXTB9uA/cC9GWwZs0wtPXU=
 github.com/digitalocean/go-libvirt v0.0.0-20260609165003-6254771e63a8 h1:R4zqGCPowg1bfJXFxsS122mzkivaMz+wPLxBsF9qsiY=
 github.com/digitalocean/go-libvirt v0.0.0-20260609165003-6254771e63a8/go.mod h1:qb0Ofa71d3oXARQf633h2tNaeBxLsVxuDp+jcsVO2+4=
 github.com/diskfs/go-diskfs v1.9.4 h1:0j2d7eG4IjyxL6+ChWbDPocdBCF6HQ4HBWU2WDYWVnc=
@@ -207,6 +207,8 @@ github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnr
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
 github.com/klauspost/compress v1.19.2 h1:hMRETovs/pu/dVWN7zIT1PGG8t509MwT6bO7XSi26R8=
 github.com/klauspost/compress v1.19.2/go.mod h1:cwPg85FWrGar70rWktvGQj8/hthj3wpl0PGDogxkrSQ=
+github.com/kr/fs v0.1.0 h1:Jskdu9ieNAYnjxsi0LbQp1ulIKZV1LAFgK1tWhpZgl8=
+github.com/kr/fs v0.1.0/go.mod h1:FFnZGqtBN9Gxj7eW1uZ42v5BccTP0vu6NEaFoC2HwRg=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
 github.com/kr/pretty v0.2.1/go.mod h1:ipq/a2n7PKx3OHsz4KJII5eveXtPO4qwEXGdVfWzfnI=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
@@ -283,6 +285,8 @@ github.com/pierrec/lz4/v4 v4.1.26 h1:GrpZw1gZttORinvzBdXPUXATeqlJjqUG/D87TKMnhjY
 github.com/pierrec/lz4/v4 v4.1.26/go.mod h1:EoQMVJgeeEOMsCqCzqFm2O0cJvljX2nGZjcRIPL34O4=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
+github.com/pkg/sftp v1.13.11 h1:0N92SLTB8JqASJB14ZLHHzFnBV8mG9zw4K7jghEFWuE=
+github.com/pkg/sftp v1.13.11/go.mod h1:uNkH9roSXglNJqM+glJJi+TQXQUm0fXFWqCFmT8hsN0=
 github.com/pkg/xattr v0.4.12 h1:rRTkSyFNTRElv6pkA3zpjHpQ90p/OdHQC1GmGh1aTjM=
 github.com/pkg/xattr v0.4.12/go.mod h1:di8WF84zAKk8jzR1UBTEWh9AUlIZZ7M/JNt8e9B6ktU=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=

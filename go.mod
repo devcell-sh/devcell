@@ -40,7 +40,8 @@ require (
 
 require (
 	github.com/diskfs/go-diskfs v1.9.4 // indirect
-	github.com/gliderlabs/ssh v0.3.8 // indirect
+	github.com/kr/fs v0.1.0 // indirect
+	github.com/pkg/sftp v1.13.11 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 )
 
@@ -51,7 +52,6 @@ require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/anchore/go-lzo v0.1.0 // indirect
 	github.com/andybalholm/brotli v1.1.1 // indirect
-	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
@@ -83,7 +83,7 @@ require (
 	github.com/devcell-sh/go-nixoci v0.1.0
 	github.com/devcell-sh/go-regedit v0.1.0
 	github.com/devcell-sh/go-wimlib v0.1.0
-	github.com/devcell-sh/go-winkit v0.2.1-0.20260907050558-a2d304a6c6ef
+	github.com/devcell-sh/go-winkit v0.2.1-0.20260925055439-8c91bd7fede0
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/djherbis/times v1.6.0 // indirect
 	github.com/docker/cli v29.7.2+incompatible // indirect

@@ -16,7 +16,7 @@ func TestSpec_ApplyDefaults(t *testing.T) {
 	assert.Equal(t, uint64(4), s.MemoryGB)
 	assert.NotZero(t, s.SSHPort, "a forwarded SSH port must be chosen")
 	assert.Equal(t, "127.0.0.1", s.SSHHost)
-	assert.Equal(t, "devcell", s.SSHUser)
+	assert.Equal(t, "winkit", s.SSHUser)
 	assert.Equal(t, "none", s.DisplayType)
 }
 

@@ -14,8 +14,8 @@ import (
 	"github.com/devcell-sh/go-winkit/unattend"
 	"github.com/devcell-sh/go-winkit/winpe"
 
-	"github.com/devcell-sh/go-winkit/mctcatalog"
-	"github.com/devcell-sh/go-winkit/uupdump"
+	"github.com/devcell-sh/go-winkit/media/mctcatalog"
+	"github.com/devcell-sh/go-winkit/media/uupdump"
 )
 
 const (

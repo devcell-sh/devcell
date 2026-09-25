@@ -11,10 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devcell-sh/go-winkit/diag"
 	"github.com/devcell-sh/go-winkit/winpe"
 
-	"github.com/devcell-sh/go-winkit/isokit"
+	"github.com/devcell-sh/go-winkit/media/isokit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -142,7 +141,7 @@ func TestEmptyDiskBoot_StallDetected(t *testing.T) {
 
 		// vCPU PC
 		if regs, err := QMPHumanMonitor(qmpSock, "info registers"); err == nil {
-			pollPC = diag.ExtractRegister(regs, "PC=")
+			pollPC = ExtractRegister(regs, "PC=")
 		}
 
 		n := stall.Observe(StallSignal{ScreenHash: pollHash, ReadBytes: pollRead, PC: pollPC})
