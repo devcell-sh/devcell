@@ -47,6 +47,7 @@ in
     qemu_project_sync = opt types.str;
     default_command = opt types.str;
     flake = opt types.bool;
+    volumes = opt (types.listOf types.str);
   };
   docker = {
     privileged = opt types.bool;
@@ -60,6 +61,7 @@ in
     cpus = opt types.str;
     max_jobs = opt types.int;
     cores = opt types.int;
+    threads = opt types.int;
   };
   nix = {
     image = opt types.str;

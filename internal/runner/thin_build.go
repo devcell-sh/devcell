@@ -371,10 +371,8 @@ mkdir -p /etc/nix
 cat > /etc/nix/nix.conf <<NIXCONF
 build-users-group = nixbld
 experimental-features = nix-command flakes
-# 64+ concurrent downloads caused cache.nixos.org throttling — see CELL-293.
-# 16 is the upstream default; stays under the CDN's throttle threshold.
-max-substitution-jobs = 16
-http-connections = 16
+max-substitution-jobs = ${DEVCELL_BUILD_THREADS:-128}
+http-connections = ${DEVCELL_BUILD_THREADS:-128}
 max-jobs = ${DEVCELL_NIX_MAX_JOBS:-auto}
 # cores bounds make -j inside each job. nix defaults to 0 ("use every CPU"),
 # which ignores the container's --cpus quota — nproc reports the host count.
@@ -673,6 +671,9 @@ echo "Done — thin image: %s"`,
 	}
 	if v := nixConcurrencyEnv("DEVCELL_NIX_CORES", lim.Cores); v != "" {
 		args = append(args, "-e", "DEVCELL_NIX_CORES="+v)
+	}
+	if v := strings.TrimSpace(os.Getenv("DEVCELL_BUILD_THREADS")); v != "" {
+		args = append(args, "-e", "DEVCELL_BUILD_THREADS="+v)
 	}
 	args = append(args,
 		"-v", "/var/run/docker.sock:/var/run/docker.sock",

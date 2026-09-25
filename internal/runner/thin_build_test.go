@@ -1250,6 +1250,38 @@ func TestReclaimBuilderSlot_RunningIsNeverKilled(t *testing.T) {
 	}
 }
 
+// nix.conf must set max-substitution-jobs and http-connections from the
+// DEVCELL_BUILD_THREADS env var, defaulting to 128.
+func TestThinBuildArgv_NixConfDefaultBuildThreads(t *testing.T) {
+	t.Setenv("DEVCELL_BUILD_THREADS", "")
+	argv := ThinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+	script := argv[len(argv)-1]
+	if !strings.Contains(script, "max-substitution-jobs = ${DEVCELL_BUILD_THREADS:-128}") {
+		t.Error("nix.conf must set max-substitution-jobs from DEVCELL_BUILD_THREADS (default 128)")
+	}
+	if !strings.Contains(script, "http-connections = ${DEVCELL_BUILD_THREADS:-128}") {
+		t.Error("nix.conf must set http-connections from DEVCELL_BUILD_THREADS (default 128)")
+	}
+}
+
+func TestThinBuildArgv_BuildThreadsEnvPassedToContainer(t *testing.T) {
+	t.Setenv("DEVCELL_BUILD_THREADS", "64")
+	withCapacity(t, bigHostCPU, bigHostMem, true)
+	argv := ThinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+	if got := argvEnvValue(argv, "DEVCELL_BUILD_THREADS"); got != "64" {
+		t.Errorf("DEVCELL_BUILD_THREADS must be forwarded to the container; got %q, want 64", got)
+	}
+}
+
+func TestThinBuildArgv_BuildThreadsDefaultOmittedFromArgv(t *testing.T) {
+	t.Setenv("DEVCELL_BUILD_THREADS", "")
+	withCapacity(t, bigHostCPU, bigHostMem, true)
+	argv := ThinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+	if got := argvEnvValue(argv, "DEVCELL_BUILD_THREADS"); got != "" {
+		t.Errorf("default build threads should not be passed as env var (nix.conf has its own default); got %q", got)
+	}
+}
+
 // Ctrl-C cancels the exec context, which SIGKILLs the `docker run` client but
 // leaves the container running as an orphan that holds the shared /nix volume.
 // The caller must remove its own builder in exactly that case.

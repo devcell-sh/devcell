@@ -67,6 +67,7 @@ type CellSection struct {
 	QemuProjectSync string            `toml:"qemu_project_sync"` // project sync for qemu/libvirt engines: "push" (default), "two-way", "off"; env: DEVCELL_QEMU_PROJECT_SYNC (CELL-383)
 	DefaultCommand  string            `toml:"default_command"`   // subcommand to run when `cell` is invoked with no args; env: DEVCELL_DEFAULT_COMMAND
 	Flake           *bool             `toml:"flake"`             // enable project-level flake.nix install; default: false (opt-in); env: DEVCELL_FLAKE
+	Volumes         []string          `toml:"volumes"`           // shorthand volume list: "/path", "/host:/container", "/host:/container:ro"
 }
 
 // ResolvedQemuProjectSync returns the effective project sync mode:
@@ -413,9 +414,31 @@ func (c CellSection) ResolvedHostname(computed string) string {
 	return computed
 }
 
-// VolumeMount holds a single [[volumes]] entry.
+// VolumeMount holds a single [[volumes]] entry or a [cell] volumes element.
 type VolumeMount struct {
 	Mount string `toml:"mount"`
+}
+
+// mergeCellVolumes appends [cell] volumes entries (strings) into the
+// top-level Volumes slice, deduplicating by container path. The
+// [[volumes]] table-array takes precedence on conflict.
+func mergeCellVolumes(c *CellConfig) {
+	if len(c.Cell.Volumes) == 0 {
+		return
+	}
+	seen := make(map[string]bool, len(c.Volumes))
+	for _, v := range c.Volumes {
+		seen[v.ContainerPath()] = true
+	}
+	for _, s := range c.Cell.Volumes {
+		vm := VolumeMount{Mount: s}
+		cp := vm.ContainerPath()
+		if seen[cp] {
+			continue
+		}
+		seen[cp] = true
+		c.Volumes = append(c.Volumes, vm)
+	}
 }
 
 // Resolved returns the mount string in `host:container[:mode]` form,
@@ -682,6 +705,7 @@ type BuildSection struct {
 	CPUs    string `toml:"cpus"`     // docker --cpus quota (e.g. "8"); "0" = no quota; env: DEVCELL_BUILD_CPUS
 	MaxJobs int    `toml:"max_jobs"` // nix max-jobs; 0 = derived from ceiling; env: DEVCELL_NIX_MAX_JOBS
 	Cores   int    `toml:"cores"`    // nix cores (make -j per job); 0 = derived; env: DEVCELL_NIX_CORES
+	Threads int    `toml:"threads"`  // nix download threads (max-substitution-jobs + http-connections); 0 = 128; env: DEVCELL_BUILD_THREADS
 }
 
 // NixSection holds [nix] config for nix image and nixhome settings.
@@ -829,6 +853,7 @@ func LoadFile(path string) (CellConfig, error) {
 		return CellConfig{}, err
 	}
 	migrateGUIField(&c)
+	mergeCellVolumes(&c)
 	sort.Strings(c.Cell.Modules)
 	return c, nil
 }

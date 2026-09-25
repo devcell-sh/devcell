@@ -37,6 +37,7 @@ func init() {
 	buildCmd.Flags().Bool("force", false, "recreate VM even if it already exists (tart only)")
 	buildCmd.Flags().Bool("no-cache", false, "re-download OCI image, bypassing tart cache (tart only)")
 	buildCmd.Flags().String("stage", "full", `build stage: "base" (infra only) or "full" (default, includes stack activation) (tart only)`)
+	buildCmd.Flags().Int("build-threads", 0, "nix download threads (max-substitution-jobs + http-connections); default 128; env DEVCELL_BUILD_THREADS")
 }
 
 func runBuild(cmd *cobra.Command, _ []string) error {
@@ -160,6 +161,9 @@ func runBuild(cmd *cobra.Command, _ []string) error {
 	imageOverride := cmd.Flags().Lookup("image").Value.String()
 	if imageOverride == "" {
 		imageOverride = os.Getenv("DEVCELL_BUILD_IMAGE")
+	}
+	if bt, _ := cmd.Flags().GetInt("build-threads"); bt > 0 {
+		os.Setenv("DEVCELL_BUILD_THREADS", strconv.Itoa(bt))
 	}
 	return runBuildThin(c, stackOverride, imageOverride, scanFlag("--update"))
 }
@@ -326,6 +330,9 @@ func runBuildThin(c config.Config, stackOverride, imageOverride string, forceRec
 	if cellCfg.Build.Cores > 0 {
 		applyBuildEnv("DEVCELL_NIX_CORES", strconv.Itoa(cellCfg.Build.Cores))
 	}
+	if cellCfg.Build.Threads > 0 {
+		applyBuildEnv("DEVCELL_BUILD_THREADS", strconv.Itoa(cellCfg.Build.Threads))
+	}
 
 	argv := runner.ThinBuildArgvFull(coreImage, containerName, volumeName, nixhomeRef, tag, homeManagerTarget, runner.DetectArch(), stack, modulesCSV, projectName)
 
@@ -339,7 +346,11 @@ func runBuildThin(c config.Config, stackOverride, imageOverride string, forceRec
 		if lim.Cores > 0 {
 			cores = fmt.Sprintf("%d", lim.Cores)
 		}
-		ux.Debugf("build limits: --memory=%s --cpus=%s nix max-jobs=%s cores=%s", lim.Memory, lim.CPUs, maxJobs, cores)
+		threads := "128"
+		if v := os.Getenv("DEVCELL_BUILD_THREADS"); v != "" {
+			threads = v
+		}
+		ux.Debugf("build limits: --memory=%s --cpus=%s nix max-jobs=%s cores=%s threads=%s", lim.Memory, lim.CPUs, maxJobs, cores, threads)
 	} else {
 		ux.Debugf("build limits: uncapped (daemon too small for a ceiling)")
 	}

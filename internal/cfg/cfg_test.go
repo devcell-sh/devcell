@@ -166,6 +166,54 @@ func TestVolumeMount_ContainerPath(t *testing.T) {
 	}
 }
 
+func TestLoadFile_CellVolumes(t *testing.T) {
+	dir := t.TempDir()
+	p := writeTOML(t, dir, "test.toml", `
+[cell]
+volumes = [
+  "/Users/dmitry/Library/CloudStorage/Box-Box",
+  "/host/path:/container/path:ro",
+  "/same:/same",
+]
+`)
+	c, err := cfg.LoadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Volumes) != 3 {
+		t.Fatalf("want 3 volumes, got %d: %+v", len(c.Volumes), c.Volumes)
+	}
+	if c.Volumes[0].Mount != "/Users/dmitry/Library/CloudStorage/Box-Box" {
+		t.Errorf("vol[0] = %q", c.Volumes[0].Mount)
+	}
+	if c.Volumes[1].Mount != "/host/path:/container/path:ro" {
+		t.Errorf("vol[1] = %q", c.Volumes[1].Mount)
+	}
+}
+
+func TestLoadFile_CellVolumesAndTableArray(t *testing.T) {
+	dir := t.TempDir()
+	p := writeTOML(t, dir, "test.toml", `
+[cell]
+volumes = ["/cell/path"]
+
+[[volumes]]
+mount = "/table/host:/table/container"
+
+[[volumes]]
+mount = "/cell/path"
+`)
+	c, err := cfg.LoadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// [[volumes]] takes precedence: /cell/path appears as a [[volumes]] entry,
+	// so [cell] volumes should not duplicate it.
+	if len(c.Volumes) != 2 {
+		t.Fatalf("want 2 volumes (deduped), got %d: %+v", len(c.Volumes), c.Volumes)
+	}
+}
+
 func TestApplyEnv_ImageTagOverride(t *testing.T) {
 	c := cfg.CellConfig{Cell: cfg.CellSection{ImageTag: "v0.0.0-ultimate"}}
 	cfg.ApplyEnv(&c, func(k string) string {
