@@ -9,6 +9,37 @@ import (
 // can never drift from the Go TOML schema. `task hm:generate` (a dep of
 // cell:build) writes nix/home-manager/options.nix from HMOptionsNix.
 
+func TestNixAttrName_QuotesNonIdentifiers(t *testing.T) {
+	cases := map[string]string{
+		"documents":  "documents",
+		"publish_ip": "publish_ip",
+		"image-tag":  "image-tag",
+		"2fa":        `"2fa"`,
+		"a.b":        `"a.b"`,
+	}
+	for in, want := range cases {
+		if got := nixAttrName(in); got != want {
+			t.Errorf("nixAttrName(%q) = %s, want %s", in, got, want)
+		}
+	}
+}
+
+func TestHMOptionsNix_SecretsExposeOnlyCanonicalOnePassword(t *testing.T) {
+	out := HMOptionsNix()
+	start := strings.Index(out, "  secrets = {")
+	if start < 0 {
+		t.Fatal("secrets section missing")
+	}
+	end := strings.Index(out[start:], "\n  };")
+	block := out[start : start+end]
+	if !strings.Contains(block, "onepassword = {") {
+		t.Errorf("secrets block should declare onepassword:\n%s", block)
+	}
+	if strings.Contains(block, "op = {") {
+		t.Errorf("TOML-only alias op must not appear in nix options:\n%s", block)
+	}
+}
+
 func TestHMOptionsNix_HeaderMarksGenerated(t *testing.T) {
 	out := HMOptionsNix()
 	for _, want := range []string{"Code generated", "DO NOT EDIT", "task hm:generate"} {

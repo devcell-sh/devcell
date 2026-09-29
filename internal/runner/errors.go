@@ -64,7 +64,7 @@ func TranslateError(err error) string {
 	// Port already in use — common when multiple cells try to claim the same port.
 	case strings.Contains(lower, "address already in use") ||
 		strings.Contains(lower, "bind: address already"):
-		return "Port already in use. Another cell or a host process owns the port. Stop it, or set `[ports].forward` in .devcell.toml to remap."
+		return "Port already in use. Another cell or a host process owns the port. Stop it, or set `[cell] ports` in .devcell.toml to remap."
 
 	// Mise install failure — fallback before the install version reaches lockfile.
 	case strings.Contains(lower, "mise") && strings.Contains(lower, "install failed"):

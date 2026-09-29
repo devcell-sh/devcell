@@ -3,6 +3,8 @@ package cfg
 import (
 	"fmt"
 	"reflect"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -51,17 +53,17 @@ func writeSection(b *strings.Builder, t reflect.Type, depth int) {
 			continue
 		}
 		key := tomlKey(f)
-		if key == "-" {
+		if key == "-" || f.Tag.Get("hm") == "-" {
 			continue
 		}
 		ft := f.Type
 		if ft.Kind() == reflect.Struct {
-			fmt.Fprintf(b, "%s  %s = ", pad, key)
+			fmt.Fprintf(b, "%s  %s = ", pad, nixAttrName(key))
 			writeSection(b, ft, depth+1)
 			b.WriteString(";\n")
 			continue
 		}
-		fmt.Fprintf(b, "%s  %s = opt %s;\n", pad, key, nixType(ft, depth+1))
+		fmt.Fprintf(b, "%s  %s = opt %s;\n", pad, nixAttrName(key), nixType(ft, depth+1))
 	}
 	fmt.Fprintf(b, "%s}", pad)
 }
@@ -103,6 +105,16 @@ func elemType(t reflect.Type, depth int) string {
 	b.WriteString(";\n")
 	fmt.Fprintf(&b, "%s})", pad)
 	return b.String()
+}
+
+var nixIdentRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_'-]*$`)
+
+// nixAttrName quotes TOML keys that aren't valid nix identifiers (e.g. "2fa").
+func nixAttrName(key string) string {
+	if nixIdentRe.MatchString(key) {
+		return key
+	}
+	return strconv.Quote(key)
 }
 
 // tomlKey resolves the TOML key for a struct field: the tag's name part,

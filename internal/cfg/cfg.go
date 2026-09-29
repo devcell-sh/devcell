@@ -69,6 +69,8 @@ type CellSection struct {
 	Flake           *bool             `toml:"flake"`             // enable project-level flake.nix install; default: false (opt-in); env: DEVCELL_FLAKE
 	Packages        []string          `toml:"packages"`          // shorthand for [packages.nix] stable: nix packages baked into the image at build time
 	Volumes         []string          `toml:"volumes"`           // shorthand volume list: "/path", "/host:/container", "/host:/container:ro"
+	Ports           []string          `toml:"ports"`             // shorthand port forwards: "3000", "8080:3000" (merged into [ports] forward)
+	Mcps            []string          `toml:"mcps"`              // shorthand MCP servers to enable: ["playwright", "aws-api"] (merged into [mcp] enabled)
 }
 
 // ResolvedQemuProjectSync returns the effective project sync mode:
@@ -442,6 +444,44 @@ func mergeCellVolumes(c *CellConfig) {
 	}
 }
 
+// mergeCellPorts appends [cell] ports entries into [ports] forward,
+// deduplicating by value. Existing [ports] forward entries take precedence.
+func mergeCellPorts(c *CellConfig) {
+	if len(c.Cell.Ports) == 0 {
+		return
+	}
+	seen := make(map[string]bool, len(c.Ports.Forward))
+	for _, p := range c.Ports.Forward {
+		seen[p] = true
+	}
+	for _, p := range c.Cell.Ports {
+		if seen[p] {
+			continue
+		}
+		seen[p] = true
+		c.Ports.Forward = append(c.Ports.Forward, p)
+	}
+}
+
+// mergeCellMcps appends [cell] mcps entries into [mcp] enabled,
+// deduplicating by value. Existing [mcp] enabled entries take precedence.
+func mergeCellMcps(c *CellConfig) {
+	if len(c.Cell.Mcps) == 0 {
+		return
+	}
+	seen := make(map[string]bool, len(c.Mcp.Enabled))
+	for _, m := range c.Mcp.Enabled {
+		seen[m] = true
+	}
+	for _, m := range c.Cell.Mcps {
+		if seen[m] {
+			continue
+		}
+		seen[m] = true
+		c.Mcp.Enabled = append(c.Mcp.Enabled, m)
+	}
+}
+
 // Resolved returns the mount string in `host:container[:mode]` form,
 // expanding the single-path shorthand where a colonless value means
 // "mount this path at the same path inside the container".
@@ -574,7 +614,25 @@ func (p PortsSection) ResolvedPublishIP() string {
 	return p.PublishIP
 }
 
-// OpSection holds [op] config for 1Password secret injection.
+// SecretsSection holds [secrets.*] config, one subtable per secret provider.
+type SecretsSection struct {
+	OnePassword OnePasswordSecrets `toml:"onepassword"`
+	Op          OnePasswordSecrets `toml:"op" hm:"-"` // alias for [secrets.onepassword]; TOML-only, not a nix option
+}
+
+// OnePasswordSecrets holds [secrets.onepassword] (alias [secrets.op]) config.
+type OnePasswordSecrets struct {
+	Documents []string `toml:"documents"` // 1Password document names to resolve via `op item get`
+}
+
+// mergeSecrets appends [secrets.onepassword] and [secrets.op] documents into
+// [op] documents, which remains the field consumers read.
+func mergeSecrets(c *CellConfig) {
+	docs := unionDedupStrings(c.Secrets.OnePassword.Documents, c.Secrets.Op.Documents)
+	c.Op.Documents = unionDedupStrings(c.Op.Documents, docs)
+}
+
+// OpSection holds the deprecated [op] config; [secrets.onepassword] merges into it.
 type OpSection struct {
 	Documents []string `toml:"documents"` // 1Password document names to resolve via `op item get`
 	Items     []string `toml:"items"`     // deprecated: use documents (kept for backwards compat)
@@ -828,6 +886,7 @@ type CellConfig struct {
 	Git       GitSection     `toml:"git"`
 	Ports     PortsSection   `toml:"ports"`
 	Op        OpSection      `toml:"op"`
+	Secrets   SecretsSection `toml:"secrets"`
 	Aws       AwsSection     `toml:"aws"`
 	Mcp       McpSection     `toml:"mcp"`
 	Stealth   StealthSection `toml:"stealth"`
@@ -837,6 +896,8 @@ type CellConfig struct {
 	Volumes   []VolumeMount
 	Packages  PackagesSection
 	Wireguard []WireguardEntry `toml:"wireguard"`
+
+	DeprecatedUses []DeprecatedUse `toml:"-"` // deprecated keys found while loading, in file order
 }
 
 // LoadFile parses a TOML file into CellConfig.
@@ -850,11 +911,16 @@ func LoadFile(path string) (CellConfig, error) {
 		return CellConfig{}, err
 	}
 	var c CellConfig
-	if _, err := toml.Decode(string(data), &c); err != nil {
+	md, err := toml.Decode(string(data), &c)
+	if err != nil {
 		return CellConfig{}, err
 	}
+	c.DeprecatedUses = detectDeprecations(md, path)
 	migrateGUIField(&c)
 	mergeCellVolumes(&c)
+	mergeCellPorts(&c)
+	mergeCellMcps(&c)
+	mergeSecrets(&c)
 	sort.Strings(c.Cell.Modules)
 	return c, nil
 }
@@ -920,9 +986,10 @@ func mergeNixPkgTier(global, project []string) []string {
 // escape hatch; otherwise project values are unioned with global, deduped.
 func Merge(global, project CellConfig) CellConfig {
 	out := CellConfig{
-		Cell: global.Cell,
-		Env:  make(map[string]string),
-		Mise: make(map[string]string),
+		Cell:           global.Cell,
+		Env:            make(map[string]string),
+		Mise:           make(map[string]string),
+		DeprecatedUses: append(append([]DeprecatedUse(nil), global.DeprecatedUses...), project.DeprecatedUses...),
 	}
 
 	// Copy global env

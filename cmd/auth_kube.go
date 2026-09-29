@@ -27,7 +27,7 @@ var authKubeCmd = &cobra.Command{
 mints a token, and writes a sibling kubeconfig (default: <source>-read) that
 authenticates as the SA. Reads work; writes return 403 from the cluster.
 
-Pair the output kubeconfig with a [[volumes]] mount in .devcell.toml so the
+Pair the output kubeconfig with a [cell] volumes mount in .devcell.toml so the
 cell sees it; the kubernetes-mcp-server and your own kubectl inside the cell
 will both use it transparently.
 

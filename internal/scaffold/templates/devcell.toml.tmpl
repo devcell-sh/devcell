@@ -9,8 +9,20 @@
 # graphics, infra, news, nixos, qa-tools, scraping, travel, go, node, python
 # modules = ["electronics", "desktop"]
 #
+# Nix packages baked into the image (nixpkgs stable tier, merged with hiPrio).
+# packages = ["curl", "jq", "htop"]
+#
+# Extra volume mounts. Supports /path, /host:/container, /host:/container:ro.
+# volumes = ["~/data:/data:ro"]
+#
+# Port forwards from container to host. Bare port = same on both sides.
+# ports = ["3000", "8080:3000"]
+#
+# MCP servers to enable.
+# mcps = ["playwright", "aws-api"]
+#
 # Timezone (IANA format). If omitted, inherits host $TZ.
-# timezone = "Europe/Prague"
+# timezone = "America/New_York"
 
 # AI agent configuration — all LLM settings in one place.
 # [llm]
@@ -36,7 +48,7 @@
 # 1Password documents whose fields are passed into the container as env vars.
 # Requires `op` CLI on the host. Each field in the document becomes an env var:
 # e.g. a field labeled "API_KEY" with value "sk-123" → env var API_KEY=sk-123.
-# [op]
+# [secrets.onepassword]
 # documents = ["prod-api-keys", "dev-secrets"]
 
 # AWS credential scoping. When true, credentials are scoped to read-only
@@ -50,10 +62,6 @@
 # enabled = true
 # wm = "icewm"   # or "fluxbox"
 
-# Port forwarding from container to host. Bare port = same on both sides.
-# [ports]
-# forward = ["3000", "8080:3000"]
-
 # Extra environment variables forwarded into the container.
 [env]
 # GITHUB_TOKEN = "ghp_xxx"
@@ -64,13 +72,6 @@
 [mise]
 # trusted_config_paths = "/"
 # idiomatic_version_file = "true"
-
-# Extra volume mounts appended to docker run.
-# [[volumes]]
-# mount = "~/work/secrets:/run/secrets:ro"
-#
-# [[volumes]]
-# mount = "~/.ssh:/home/user/.ssh:ro"
 
 {{MODELS_SECTION}}
 

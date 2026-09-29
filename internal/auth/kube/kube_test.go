@@ -321,16 +321,19 @@ func TestBootstrap_Success_WritesFile_PrintsTOML(t *testing.T) {
 		t.Errorf("output mode = %o, want 0600", mode)
 	}
 
-	// TOML snippet present and includes [[volumes]] + [env] KUBECONFIG=.
+	// TOML snippet uses [cell] volumes (not deprecated [[volumes]]) + [env] KUBECONFIG=.
 	s := buf.String()
-	if !strings.Contains(s, "[[volumes]]") {
-		t.Errorf("output should contain [[volumes]] block: %s", s)
+	if strings.Contains(s, "[[volumes]]") {
+		t.Errorf("output must not suggest deprecated [[volumes]]: %s", s)
+	}
+	if !strings.Contains(s, "[cell]") || !strings.Contains(s, "volumes = [\"") {
+		t.Errorf("output should contain [cell] volumes line: %s", s)
 	}
 	if !strings.Contains(s, `KUBECONFIG = "`) {
 		t.Errorf("output should contain KUBECONFIG line: %s", s)
 	}
-	if !strings.Contains(s, ":ro\"") {
-		t.Errorf("mount should end with :ro\": %s", s)
+	if !strings.Contains(s, ":ro\"]") {
+		t.Errorf("mount should end with :ro\"]: %s", s)
 	}
 	// Mount must be file→file (NOT parent-dir, which would leak the admin
 	// kubeconfig sitting next to it).
@@ -343,7 +346,7 @@ func TestBootstrap_Success_WritesFile_PrintsTOML(t *testing.T) {
 	// Container side must mirror host path (same convention as runner.go's
 	// project bind mount); KUBECONFIG must point at the same path. NOT a
 	// translated /home/<user>/... path.
-	if !strings.Contains(s, `mount = "`+out+":"+out+`:ro"`) {
+	if !strings.Contains(s, `volumes = ["`+out+":"+out+`:ro"]`) {
 		t.Errorf("mount should mirror host path on container side, got: %s", s)
 	}
 	if !strings.Contains(s, `KUBECONFIG = "`+out+`"`) {

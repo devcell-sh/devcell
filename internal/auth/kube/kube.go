@@ -314,8 +314,8 @@ func printTOMLSnippet(out io.Writer, opts Options) {
 	// Mount the FILE only, not the parent dir, so the admin kubeconfig sitting
 	// next to it stays invisible to the cell.
 	fmt.Fprintf(out, "Add to your .devcell.toml:\n\n")
-	fmt.Fprintf(out, "    [[volumes]]\n")
-	fmt.Fprintf(out, "    mount = \"%s:%s:ro\"\n\n", opts.Output, opts.Output)
+	fmt.Fprintf(out, "    [cell]\n")
+	fmt.Fprintf(out, "    volumes = [\"%s:%s:ro\"]\n\n", opts.Output, opts.Output)
 	fmt.Fprintf(out, "    [env]\n")
 	fmt.Fprintf(out, "    KUBECONFIG = \"%s\"\n\n", opts.Output)
 	fmt.Fprintf(out, "Then restart the cell.\n")

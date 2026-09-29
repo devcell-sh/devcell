@@ -214,6 +214,44 @@ mount = "/cell/path"
 	}
 }
 
+func TestLoadFile_CellPorts(t *testing.T) {
+	dir := t.TempDir()
+	p := writeTOML(t, dir, "test.toml", `
+[cell]
+ports = ["3000", "8080:3000", "9090"]
+
+[ports]
+forward = ["9090"]
+`)
+	c, err := cfg.LoadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"9090", "3000", "8080:3000"}
+	if strings.Join(c.Ports.Forward, ",") != strings.Join(want, ",") {
+		t.Errorf("Ports.Forward = %v, want %v", c.Ports.Forward, want)
+	}
+}
+
+func TestLoadFile_CellMcps(t *testing.T) {
+	dir := t.TempDir()
+	p := writeTOML(t, dir, "test.toml", `
+[cell]
+mcps = ["playwright", "aws-api"]
+
+[mcp]
+enabled = ["aws-api"]
+`)
+	c, err := cfg.LoadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"aws-api", "playwright"}
+	if strings.Join(c.Mcp.Enabled, ",") != strings.Join(want, ",") {
+		t.Errorf("Mcp.Enabled = %v, want %v", c.Mcp.Enabled, want)
+	}
+}
+
 func TestApplyEnv_ImageTagOverride(t *testing.T) {
 	c := cfg.CellConfig{Cell: cfg.CellSection{ImageTag: "v0.0.0-ultimate"}}
 	cfg.ApplyEnv(&c, func(k string) string {

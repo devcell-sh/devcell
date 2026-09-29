@@ -49,6 +49,8 @@ in
     flake = opt types.bool;
     packages = opt (types.listOf types.str);
     volumes = opt (types.listOf types.str);
+    ports = opt (types.listOf types.str);
+    mcps = opt (types.listOf types.str);
   };
   docker = {
     privileged = opt types.bool;
@@ -98,6 +100,11 @@ in
   op = {
     documents = opt (types.listOf types.str);
     items = opt (types.listOf types.str);
+  };
+  secrets = {
+    onepassword = {
+      documents = opt (types.listOf types.str);
+    };
   };
   aws = {
     read_only = opt types.bool;

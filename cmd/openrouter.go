@@ -19,7 +19,7 @@ const (
 func FillOpenRouterKey(env map[string]string) error {
 	apiKey := os.Getenv("OPENROUTER_API_KEY")
 	if apiKey == "" {
-		return fmt.Errorf("--openrouter requires OPENROUTER_API_KEY env var (set it or add to [op] documents)")
+		return fmt.Errorf("--openrouter requires OPENROUTER_API_KEY env var (set it or add to [secrets.onepassword] documents)")
 	}
 	env["OPENROUTER_API_KEY"] = apiKey
 	return nil

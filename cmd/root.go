@@ -132,11 +132,23 @@ func applyDefaultCommand() {
 	osArgs = os.Args // keep scanFlag/scanStringFlag on the rewritten argv
 }
 
+// warnConfigDeprecations goes to stderr so --format json/yaml stdout stays parseable.
+func warnConfigDeprecations(w io.Writer, c cfg.CellConfig) {
+	for _, u := range c.DeprecatedUses {
+		fmt.Fprintf(w, "warning: %s\n", u.Warning())
+	}
+}
+
 func Execute() {
 	defer ux.CloseDebugLog()
 	telemetry.Init(resolveConfigDir())
 	defer telemetry.Close()
 	applyDefaultCommand()
+	if len(os.Args) < 2 || !strings.HasPrefix(os.Args[1], "__complete") {
+		if c, err := config.LoadFromOS(); err == nil {
+			warnConfigDeprecations(os.Stderr, cfg.LoadFromOS(c.ConfigDir, c.BaseDir))
+		}
+	}
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "\n cell %s\n", version.Full())
 		baseVer, userVer := runner.ImageVersions(context.Background())
@@ -701,7 +713,7 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 	}
 
 	// Loading secrets — CELL-261 phase, now expressed through PhaseRunner.
-	// Suppressed entirely when no [op].documents are configured, or when the
+	// Suppressed entirely when no [secrets.onepassword] documents are configured, or when the
 	// user opted out via --no-secrets / --no-1password / DEVCELL_NO_SECRETS / DEVCELL_NO_1PASSWORD.
 	var inheritEnv []string
 	opDocs := cellCfg.Op.ResolvedDocuments()
