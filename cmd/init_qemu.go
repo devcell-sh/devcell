@@ -14,6 +14,23 @@ import (
 	"github.com/DimmKirr/devcell/internal/vm/qemu"
 )
 
+// qemuKeyDir is where a cell's VM SSH keypair lives.
+//
+// ~/.devcell/<cell>/.ssh — per cell, and engine-neutral: libvirt boots the same
+// templates with the same keys, so naming the directory after qemu was an
+// accident of which engine needed keys first.
+//
+// A cell that already has a key under the legacy qemu/ path keeps it. The
+// public half is baked into a built template, so relocating the private half
+// would leave a multi-hour template nothing can log into.
+func qemuKeyDir(home, cellName string) string {
+	legacy := filepath.Join(home, ".devcell", cellName, "qemu")
+	if _, err := os.Stat(filepath.Join(legacy, "id_ed25519")); err == nil {
+		return legacy
+	}
+	return filepath.Join(home, ".devcell", cellName, ".ssh")
+}
+
 // runInitQemu prepares directories, SSH keypair, and downloads VirtIO drivers
 // for a QEMU Windows VM. Mirrors runInitTart: scaffold config, no VM creation.
 // The actual VM creation happens in `cell build --engine=qemu`.
