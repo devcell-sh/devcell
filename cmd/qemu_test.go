@@ -47,8 +47,8 @@ func TestEngineQemu_DryRunPrintsSSH(t *testing.T) {
 	if !strings.Contains(s, "ssh") {
 		t.Errorf("expected 'ssh' in dry-run output, got:\n%s", s)
 	}
-	if !strings.Contains(s, "powershell") {
-		t.Errorf("expected 'powershell' in dry-run output, got:\n%s", s)
+	if !strings.Contains(s, "wsl -d winkit") {
+		t.Errorf("expected the WSL guest command in dry-run output, got:\n%s", s)
 	}
 	if strings.Contains(s, "docker run") {
 		t.Errorf("qemu engine should not print docker run argv, got:\n%s", s)
@@ -64,8 +64,8 @@ func TestEngineQemu_DryRunContainsBinary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(string(out), "claude") {
-		t.Errorf("expected 'claude' in dry-run output, got:\n%s", out)
+	if !strings.Contains(string(out), " claude --dangerously-skip-permissions") {
+		t.Errorf("expected the claude agent and its default flags in the guest command, got:\n%s", out)
 	}
 }
 
@@ -92,7 +92,7 @@ func TestEngineQemu_DryRunContainsEnvVars(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(string(out), "TERM=") {
+	if !strings.Contains(string(out), "TERM=xterm-256color") {
 		t.Errorf("expected TERM= in dry-run output, got:\n%s", out)
 	}
 }
@@ -107,8 +107,8 @@ func TestEngineQemu_DryRunSSHPort(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(string(out), "-p 10122") {
-		t.Errorf("expected '-p 10122' (bunk-based SSH port) in dry-run output, got:\n%s", out)
+	if !strings.Contains(string(out), "127.0.0.1:10122") {
+		t.Errorf("expected bunk-based SSH port 10122 in dry-run output, got:\n%s", out)
 	}
 }
 
@@ -121,8 +121,8 @@ func TestEngineQemu_DryRunCustomSSHPort(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(string(out), "-p 3333") {
-		t.Errorf("expected '-p 3333' (custom SSH port) in dry-run output, got:\n%s", out)
+	if !strings.Contains(string(out), "127.0.0.1:3333") {
+		t.Errorf("expected custom SSH port 3333 in dry-run output, got:\n%s", out)
 	}
 }
 
@@ -370,12 +370,12 @@ func TestQemuE2E_FullLifecycle(t *testing.T) {
 		if !strings.Contains(s, "ssh") {
 			t.Errorf("expected 'ssh' in shell dry-run output, got:\n%s", s)
 		}
-		if !strings.Contains(s, "powershell") {
-			t.Errorf("expected 'powershell' in shell dry-run output, got:\n%s", s)
+		if !strings.Contains(s, "wsl -d winkit") {
+			t.Errorf("expected the WSL guest command in shell dry-run output, got:\n%s", s)
 		}
 		// DEVCELL_BUNK=1 → bunk-based SSH port (10122)
-		if !strings.Contains(s, "-p 10122") {
-			t.Errorf("expected '-p 10122' (bunk-based SSH port) in shell dry-run output, got:\n%s", s)
+		if !strings.Contains(s, "127.0.0.1:10122") {
+			t.Errorf("expected bunk-based SSH port 10122 in shell dry-run output, got:\n%s", s)
 		}
 		t.Logf("Shell dry-run output:\n%s", s)
 	})

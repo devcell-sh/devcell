@@ -172,8 +172,8 @@ func TestEngineQemu_LocalFlagPinsLocalQemu(t *testing.T) {
 	if strings.Contains(s, "<domain") {
 		t.Errorf("--local must pin the in-container qemu path, got:\n%s", s)
 	}
-	if !strings.Contains(s, "powershell") {
-		t.Errorf("--local qemu dry-run must print the ssh argv, got:\n%s", s)
+	if !strings.Contains(s, "wsl -d winkit") {
+		t.Errorf("--local qemu dry-run must print the WSL guest command, got:\n%s", s)
 	}
 	if strings.Contains(s, "--local") {
 		t.Errorf("--local must be stripped from forwarded args, got:\n%s", s)

@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"syscall"
 
@@ -73,11 +75,46 @@ func peStartOpts(cellName, hostHome, stack string, cellCfg cfg.CellSection, sshP
 // peGuestCommand assembles the PowerShell command that runs inside the PE
 // guest. User args are forwarded into WSL1 via `wsl -d winkit -- <args>`.
 // With no args, an interactive WSL shell is opened.
-func peGuestCommand(userArgs []string) string {
-	if len(userArgs) == 0 {
+func peGuestCommand(env, argv []string) string {
+	if len(env) == 0 && len(argv) == 0 {
 		return "wsl -d winkit"
 	}
-	return "wsl -d winkit -- " + strings.Join(userArgs, " ")
+	var parts []string
+	if len(env) > 0 {
+		parts = append(parts, "env")
+		parts = append(parts, env...)
+	}
+	parts = append(parts, argv...)
+	for i, p := range parts {
+		parts[i] = shellQuote(p)
+	}
+	return "wsl -d winkit -- " + strings.Join(parts, " ")
+}
+
+// peGuestInvocation merges the forwarded env with the agent's extra env
+// (sorted for stable output) and builds the agent argv.
+func peGuestInvocation(env []string, extraEnv map[string]string, binary string, defaultFlags, userArgs []string) ([]string, []string) {
+	keys := make([]string, 0, len(extraEnv))
+	for k := range extraEnv {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	merged := append([]string(nil), env...)
+	for _, k := range keys {
+		merged = append(merged, k+"="+extraEnv[k])
+	}
+	argv := append([]string{binary}, defaultFlags...)
+	return merged, append(argv, userArgs...)
+}
+
+var shellSafeRe = regexp.MustCompile(`^[A-Za-z0-9_@%+=:,./-]+$`)
+
+// shellQuote single-quotes s for the WSL guest's POSIX shell when needed.
+func shellQuote(s string) string {
+	if shellSafeRe.MatchString(s) {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // runBuildQemu builds a Windows VM image using WinPE + WSL1 + Nix via go-winkit.

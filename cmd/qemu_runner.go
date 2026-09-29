@@ -38,6 +38,7 @@ var winkitStartFunc = winkit.Start
 func runQemuAgent(
 	binary string,
 	defaultFlags, userArgs []string,
+	extraEnv map[string]string,
 	cellCfg cfg.CellConfig,
 	baseDir, hostHome, cellName string,
 	dryRun, background, debug bool,
@@ -88,6 +89,7 @@ func runQemuAgent(
 		filteredUserArgs = append(filteredUserArgs, a)
 	}
 	userArgs = filteredUserArgs
+	guestEnv, guestArgv := peGuestInvocation(envVars, extraEnv, binary, defaultFlags, userArgs)
 
 	stack := cellCfg.Cell.ResolvedStack()
 	if stackOverride != "" {
@@ -114,7 +116,7 @@ func runQemuAgent(
 
 	// --- dry-run: print what would happen and exit ---
 	if dryRun {
-		cmd := peGuestCommand(userArgs)
+		cmd := peGuestCommand(guestEnv, guestArgv)
 		fmt.Printf("PE+WSL1 runner (dry-run)\n")
 		fmt.Printf("  image:   %s\n", imagePath)
 		fmt.Printf("  ssh:     127.0.0.1:%d\n", sshPort)
@@ -178,14 +180,13 @@ func runQemuAgent(
 		logf("gosshd ready")
 
 		// Execute command via gosshd
-		return execViaGosshd(ctx, sshPort, userArgs, machine, logf)
+		return execViaGosshd(ctx, sshPort, peGuestCommand(guestEnv, guestArgv), machine, logf)
 	}
 
 	// --- mock mode ---
 	logf("[qemu] would boot PE VM and connect via gosshd")
 	logf("[qemu] guest gosshd ready (simulated)")
-	cmd := peGuestCommand(userArgs)
-	logf("[qemu] would run: %s", cmd)
+	logf("[qemu] would exec: %s", peGuestCommand(guestEnv, guestArgv))
 	return nil
 }
 
@@ -212,10 +213,9 @@ func waitForGosshd(ctx context.Context, port uint16, timeout time.Duration) erro
 	return fmt.Errorf("gosshd at %s did not answer within %s: %w", addr, timeout, lastErr)
 }
 
-// execViaGosshd connects to the PE guest's gosshd and runs the user command
-// inside WSL1. For interactive sessions (no args), it opens an interactive
-// WSL shell.
-func execViaGosshd(ctx context.Context, port uint16, userArgs []string, machine vmapi.VM, logf func(string, ...any)) error {
+// execViaGosshd connects to the PE guest's gosshd and runs cmd (a
+// peGuestCommand string) inside WSL1.
+func execViaGosshd(ctx context.Context, port uint16, cmd string, machine vmapi.VM, logf func(string, ...any)) error {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	client, err := gosshd.Dial(ctx, addr)
 	if err != nil {
@@ -223,7 +223,6 @@ func execViaGosshd(ctx context.Context, port uint16, userArgs []string, machine 
 	}
 	defer client.Close()
 
-	cmd := peGuestCommand(userArgs)
 	logf("running via gosshd: %s", cmd)
 
 	exitCode, err := client.RunStream(ctx, cmd, os.Stdout, os.Stderr)

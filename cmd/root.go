@@ -405,7 +405,7 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 	if engine == "qemu" {
 		telemetry.Track("command_run", map[string]any{"command": filepath.Base(binary), "engine": "qemu"})
 		return runQemuAgent(
-			binary, defaultFlags, userArgs,
+			binary, defaultFlags, userArgs, extraEnv,
 			cellCfgForEngine,
 			c.BaseDir, c.HostHome, c.CellName,
 			scanFlag("--dry-run"),
