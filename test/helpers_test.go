@@ -385,6 +385,23 @@ func image() string {
 	return ultimateTag
 }
 
+// requirePrebuiltImage skips short tests when image() would have to build one.
+func requirePrebuiltImage(t *testing.T) {
+	t.Helper()
+	if !testing.Short() {
+		return
+	}
+	tag, _ := imageTagForVariant(
+		os.Getenv("DEVCELL_TEST_VARIANT"),
+		os.Getenv("DEVCELL_TEST_PURE_IMAGE"),
+		os.Getenv("DEVCELL_TEST_IMAGE"),
+		imageExists,
+	)
+	if tag == "" || (tag == localImpureUltimateTag && os.Getenv("DEVCELL_TEST_IMAGE") == "") {
+		t.Skip("short: no prebuilt test image; set DEVCELL_TEST_IMAGE or run `cell build`")
+	}
+}
+
 // pureImage returns the pure (nix2container) variant tag for tests asserting
 // pure-image-specific behavior. Skips the test if no pure image is available
 // (env override or local tag from `task image:pure:build:ultimate`).
@@ -748,6 +765,7 @@ func requireDockerSocket(t *testing.T) {
 func startContainer(t *testing.T, env map[string]string) testcontainers.Container {
 	t.Helper()
 	requireDockerSocket(t)
+	requirePrebuiltImage(t)
 	ctx := context.Background()
 
 	req := testcontainers.ContainerRequest{

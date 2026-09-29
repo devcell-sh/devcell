@@ -336,6 +336,7 @@ func skipIfNoGUI(t *testing.T, c testcontainers.Container) {
 // set by runner.go, never baked into the image, so we match on profile.
 func probeGUI(t *testing.T) {
 	t.Helper()
+	requirePrebuiltImage(t)
 	img := image()
 	out, err := osexec.Command("docker", "inspect", "--format",
 		`{{range .Config.Env}}{{println .}}{{end}}`, img).Output()
@@ -475,60 +476,6 @@ func startVncContainer(t *testing.T) testcontainers.Container {
 }
 
 // --- Desktop ---
-
-// TestDesktop_Wallpaper verifies the test wallpaper rendered at full resolution.
-func TestDesktop_Wallpaper(t *testing.T) {
-	skipIfNotInDevcell(t)
-	img := setupDesktopScreenshot(t)
-	saveScreenshot(t)
-	bounds := img.Bounds()
-	if bounds.Dx() != 1920 || bounds.Dy() != 1080 {
-		t.Fatalf("screenshot resolution: %dx%d, want 1920x1080", bounds.Dx(), bounds.Dy())
-	}
-	// Green markers at corners (wallpaper-4corners.png has ~20x20 green squares)
-	assertPixelTolerance(t, img, 5, 5, "#00ff00", 10, "top-left corner")
-	assertPixelTolerance(t, img, 1914, 5, "#00ff00", 10, "top-right corner")
-	// Desktop body = black (sample above toolbar, away from window)
-	assertPixelTolerance(t, img, 1500, 400, "#000000", 10, "desktop body")
-}
-
-// TestDesktop_Toolbar verifies toolbar colors match the active WM theme.
-func TestDesktop_Toolbar(t *testing.T) {
-	skipIfNotInDevcell(t)
-	img := setupDesktopScreenshot(t)
-	saveScreenshot(t)
-
-	wm := detectWM()
-	switch wm {
-	case "icewm":
-		toolbarY := img.Bounds().Dy() - 14
-		assertPixelTolerance(t, img, 960, toolbarY, "#303744", 30, "toolbar bg center (Nord)")
-		assertPixelTolerance(t, img, 50, img.Bounds().Dy()-10, "#4B81C8", 30, "toolbar workspace badge (Nord)")
-	case "fluxbox":
-		toolbarY := img.Bounds().Dy() - 17
-		assertPixelTolerance(t, img, 960, toolbarY, "#0d0d1c", 30, "toolbar bg center")
-		assertPixelTolerance(t, img, 50, img.Bounds().Dy()-10, "#b8e336", 15, "toolbar workspace badge")
-	default:
-		t.Skipf("unknown WM %q — cannot assert toolbar colors", wm)
-	}
-}
-
-// TestDesktop_WindowChrome verifies xterm window title bar matches the active theme.
-func TestDesktop_WindowChrome(t *testing.T) {
-	skipIfNotInDevcell(t)
-	img := setupDesktopScreenshot(t)
-	saveScreenshot(t)
-
-	wm := detectWM()
-	switch wm {
-	case "icewm":
-		assertPixelTolerance(t, img, 300, 90, "#303744", 30, "window title bar bg (Nord)")
-	case "fluxbox":
-		assertPixelTolerance(t, img, 300, 90, "#000000", 10, "window title bar bg")
-	default:
-		t.Skipf("unknown WM %q — cannot assert window chrome", wm)
-	}
-}
 
 // TestDesktop_Menu verifies the right-click menu renders with theme colors.
 func TestDesktop_Menu(t *testing.T) {

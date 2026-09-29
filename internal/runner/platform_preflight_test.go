@@ -3,6 +3,8 @@ package runner_test
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -52,12 +54,14 @@ func TestPreflightPlatformCheck_MissingAttribute_SkipsGracefully(t *testing.T) {
 		t.Skip("nix not in PATH")
 	}
 
-	// Use a real flake ref but a system key that doesn't exist.
-	// The nixhome flake has platformStrictCheck.{x86_64,aarch64}-linux
-	// but not "mips64el-linux".
+	dir := t.TempDir()
+	flake := `{ outputs = _: { platformStrictCheck = { }; }; }`
+	if err := os.WriteFile(filepath.Join(dir, "flake.nix"), []byte(flake), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	err := runner.PreflightPlatformCheck(
 		context.Background(),
-		"path:../../nixhome",
+		"path:"+dir,
 		"mips64el-linux",
 	)
 	if err != nil {

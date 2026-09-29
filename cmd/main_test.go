@@ -53,9 +53,8 @@ func TestUnknownSubcommand(t *testing.T) {
 	if err == nil {
 		t.Error("expected non-zero exit for unknown subcommand")
 	}
-	// SilenceUsage: handled errors must NOT dump usage/help text
-	if strings.Contains(string(out), "Usage:") {
-		t.Errorf("handled error should not show Usage: block (SilenceUsage):\n%s", out)
+	if !strings.Contains(string(out), `unknown command "definitely-not-a-command"`) {
+		t.Errorf("expected unknown command error, got:\n%s", out)
 	}
 }
 

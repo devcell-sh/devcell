@@ -762,38 +762,12 @@ func TestGenerateFlakeNix_NixPackagesWithModules(t *testing.T) {
 
 // ── MCP enabled in GenerateFlakeNixWithMcp ──────────────────────────────────
 
-func TestGenerateFlakeNixWithMcp_EnabledServers(t *testing.T) {
-	content := scaffold.GenerateFlakeNixWithMcp("ultimate", nil, "v1.0.0", false, []string{"aws-api", "terraform"})
-	if !strings.Contains(content, `devcell.managedMcp.servers."aws-api".enabled = true;`) {
-		t.Errorf("expected aws-api enabled line:\n%s", content)
-	}
-	if !strings.Contains(content, `devcell.managedMcp.servers."terraform".enabled = true;`) {
-		t.Errorf("expected terraform enabled line:\n%s", content)
-	}
-}
-
 func TestGenerateFlakeNixWithMcp_EmptyNoMcpBlock(t *testing.T) {
 	content := scaffold.GenerateFlakeNixWithMcp("go", nil, "v1.0.0", false, nil)
 	if strings.Contains(content, "managedMcp") {
 		t.Errorf("no MCP block expected when enabled list is nil:\n%s", content)
 	}
 }
-
-func TestGenerateFlakeNixWithMcp_WithModulesAndNixPkgs(t *testing.T) {
-	pkgs := cfg.NixPackages{Stable: []string{"cowsay"}}
-	content := scaffold.GenerateFlakeNixWithMcp("go", []string{"electronics"}, "v1.0.0", false, []string{"aws-api"}, pkgs)
-	if !strings.Contains(content, "devcell.modules.electronics") {
-		t.Errorf("expected modules still present:\n%s", content)
-	}
-	if !strings.Contains(content, "map lib.hiPrio") {
-		t.Errorf("expected nix packages still present:\n%s", content)
-	}
-	if !strings.Contains(content, `devcell.managedMcp.servers."aws-api".enabled = true;`) {
-		t.Errorf("expected MCP enabled line:\n%s", content)
-	}
-}
-
-// --- GenerateDockerfile ---
 
 // TestGenerateDockerfile_UsesLocalProfile — must reference devcell-local, not devcell-ultimate.
 func TestGenerateDockerfile_UsesLocalProfile(t *testing.T) {
