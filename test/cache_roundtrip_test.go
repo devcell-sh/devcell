@@ -234,7 +234,7 @@ func dockerHostAddr(t *testing.T) string {
 func cellBuildCore(t *testing.T, repoRoot, srcVol string) {
 	t.Helper()
 	cmd := osexec.Command(filepath.Join(repoRoot, "bin/cell"),
-		"build", "--thin", "--stack", "core",
+		"build", "--stack", "core",
 		"--image", "cache-test-cell:fixture")
 	cmd.Env = append(os.Environ(), "DEVCELL_NIX_VOLUME="+srcVol)
 	cmd.Dir = repoRoot

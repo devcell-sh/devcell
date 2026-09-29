@@ -38,7 +38,7 @@ var ansiRe = regexp.MustCompile(`\x1b\[[0-9;?]*[a-zA-Z]`)
 func TestCellShell_LoadingSecretsCheckboxAppearsBeforePrompt(t *testing.T) {
 	if testing.Short() {
 		t.Skip("long: drives `cell shell` against a real container image — " +
-			"set DEVCELL_TEST_THIN_IMAGE or run `cell build --thin`")
+			"set DEVCELL_TEST_THIN_IMAGE or run `cell build`")
 	}
 
 	cellBin, err := ensureCellBinary()
@@ -128,7 +128,7 @@ documents = ["op://devcell-test/secrets"]
 func TestCellShell_PhasesAppearInOrder(t *testing.T) {
 	if testing.Short() {
 		t.Skip("long: drives `cell shell` against a real container image — " +
-			"set DEVCELL_TEST_THIN_IMAGE or run `cell build --thin`")
+			"set DEVCELL_TEST_THIN_IMAGE or run `cell build`")
 	}
 
 	cellBin, err := ensureCellBinary()
@@ -222,14 +222,14 @@ documents = ["op://devcell-test/secrets"]
 //   - the host listener+consumer renders them
 //
 // If this test fails, the most common causes (rank-ordered) are:
-//  1. Thin image was built before CELL-263 — rebuild with `cell build --thin`
+//  1. Thin image was built before CELL-263 — rebuild with `cell build`
 //  2. socat missing in nixhome/modules/base.nix (silent notify() no-op)
 //  3. NOTIFY_SOCKET env not reaching the container (BuildArgv bug)
 //  4. Fragment didn't source 00-notify.sh first (alphabetical sort issue)
 func TestCellShell_ContainerRowsArriveAfterCellReady(t *testing.T) {
 	if testing.Short() {
 		t.Skip("long: drives `cell shell` against a real container image — " +
-			"set DEVCELL_TEST_THIN_IMAGE or run `cell build --thin`")
+			"set DEVCELL_TEST_THIN_IMAGE or run `cell build`")
 	}
 
 	cellBin, err := ensureCellBinary()
@@ -307,7 +307,7 @@ func TestCellShell_ContainerRowsArriveAfterCellReady(t *testing.T) {
 		t.Errorf(
 			"no container-side notify rows appeared between Cell ready and prompt — "+
 				"sd_notify wiring is broken end-to-end.\n"+
-				"Most likely: (1) image predates CELL-263 — rebuild with `cell build --thin`; "+
+				"Most likely: (1) image predates CELL-263 — rebuild with `cell build`; "+
 				"(2) socat missing from nixhome/modules/base.nix; "+
 				"(3) NOTIFY_SOCKET not reaching container.\n"+
 				"Looked for any of: %v\n"+

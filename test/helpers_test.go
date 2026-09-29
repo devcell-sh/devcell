@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DimmKirr/devcell/internal/runner"
 	"github.com/DimmKirr/devcell/internal/testutil"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/testcontainers/testcontainers-go"
@@ -62,13 +63,8 @@ var (
 	runDirOnce sync.Once
 )
 
-// minFreeDiskGB is the minimum free Docker VM disk needed for integration tests.
-// Thin images are ~1.5GB + volume; pure/impure need ~30GB for image builds.
 func minFreeDiskGB() int {
-	if isThinVariant() {
-		return 5
-	}
-	return 35
+	return 5
 }
 
 // checkDiskSpace probes the Docker VM filesystem via `docker run alpine df`
@@ -161,6 +157,7 @@ func checkDiskSpace() error {
 // This keeps the convention: short tests never trigger a build; long tests opt
 // in via env var or `testing.Short()` gates.
 func TestMain(m *testing.M) {
+	ensureDockerHost()
 	if err := checkDiskSpace(); err != nil {
 		log.Fatalf("disk space check failed: %v", err)
 	}
@@ -226,11 +223,6 @@ func buildLocalImage(target, tagPrefix string) (string, error) {
 	return tag, nil
 }
 
-// buildThinImage invokes `cell build --thin --stack <stack> --image <tag>` to
-// produce a thin image (nix store on /nix volume). Builds `bin/cell-test` on
-// demand if not present. Returns the tag handed to --image. Honest E2E of the
-// user-facing thin-build path; reuses the shared `devcell-nix-store` volume
-// for incremental builds (~minutes when the store already has overlap).
 func buildThinImage(stack string) (string, error) {
 	cellBin, err := ensureCellBinary()
 	if err != nil {
@@ -238,12 +230,12 @@ func buildThinImage(stack string) (string, error) {
 	}
 	tag := fmt.Sprintf("devcell-user:%s-thin-%s", stack, shortSHA())
 	log.Printf("Building thin image: stack=%s, tag=%s", stack, tag)
-	cmd := osexec.Command(cellBin, "build", "--thin", "--stack", stack, "--image", tag, "--debug")
+	cmd := osexec.Command(cellBin, "build", "--stack", stack, "--image", tag, "--debug")
 	cmd.Dir = ".."
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("cell build --thin --stack %s --image %s: %w", stack, tag, err)
+		return "", fmt.Errorf("cell build --stack %s --image %s: %w", stack, tag, err)
 	}
 	return tag, nil
 }
@@ -329,7 +321,7 @@ func imageTagForVariant(variant, pureEnv, impureEnv string, exists func(string) 
 		if exists(localThinUltimateTag) {
 			return localThinUltimateTag, ""
 		}
-		return "", "thin variant requested but local `" + localThinUltimateTag + "` is not available; run `cell build --thin` to enable"
+		return "", "thin variant requested but local `" + localThinUltimateTag + "` is not available; run `cell build` to enable"
 	case "pure":
 		if pureEnv != "" {
 			return pureEnv, ""
@@ -585,6 +577,7 @@ func electronicsImage() string {
 // startElectronicsContainer starts a container from the electronics image.
 func startElectronicsContainer(t *testing.T, env map[string]string) testcontainers.Container {
 	t.Helper()
+	requireDockerSocket(t)
 	ctx := context.Background()
 	req := testcontainers.ContainerRequest{
 		Image: electronicsImage(),
@@ -719,8 +712,42 @@ func isThinVariant() bool {
 	return os.Getenv("DEVCELL_TEST_VARIANT") == "thin"
 }
 
+// ensureDockerHost bridges testcontainers-go and non-default Docker runtimes
+// (Colima, etc.). testcontainers doesn't use `docker context`: it searches
+// hardcoded socket paths and panics when none match. We reuse
+// runner.CollectDockerDebugInfo (which already does context inspection and
+// runtime classification) to set the env vars testcontainers needs.
+var ensureDockerHostOnce sync.Once
+
+func ensureDockerHost() {
+	ensureDockerHostOnce.Do(func() {
+		info, err := runner.CollectDockerDebugInfo(context.Background())
+		if err != nil {
+			return
+		}
+		if os.Getenv("DOCKER_HOST") == "" && info.Endpoint != "" {
+			os.Setenv("DOCKER_HOST", info.Endpoint)
+		}
+		// Colima's host-side socket path doesn't exist inside the VM.
+		// The socket inside the VM is /var/run/docker.sock.
+		if os.Getenv("TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE") == "" && info.Runtime == "colima" {
+			os.Setenv("TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE", "/var/run/docker.sock")
+		}
+	})
+}
+
+// requireDockerSocket skips the test when no Docker socket is reachable.
+func requireDockerSocket(t *testing.T) {
+	t.Helper()
+	ensureDockerHost()
+	if err := osexec.Command("docker", "info").Run(); err != nil {
+		t.Skipf("docker not reachable: %v", err)
+	}
+}
+
 func startContainer(t *testing.T, env map[string]string) testcontainers.Container {
 	t.Helper()
+	requireDockerSocket(t)
 	ctx := context.Background()
 
 	req := testcontainers.ContainerRequest{

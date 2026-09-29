@@ -197,7 +197,7 @@ func resolveStackOverride(flagValue string, getenv func(string) string) (string,
 func runBuildThin(c config.Config, stackOverride, imageOverride string, forceRecreateVolume bool) error {
 	// Daemon preflight — surface the actionable error when docker is down
 	// before any pull/build attempt (CELL-44). The thin auto-build gate in
-	// cmd/root.go probes first; this guards direct `cell build --thin` callers.
+	// cmd/root.go probes first; this guards direct `cell build` callers.
 	if err := runner.DockerDaemonReachable(context.Background()); err != nil {
 		return err
 	}

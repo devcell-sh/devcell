@@ -114,7 +114,7 @@ func TestModules2_EnabledModulesShipBinariesAndClaudeEntries(t *testing.T) {
 // Image acquisition (in priority order):
 //  1. DEVCELL_TEST_DEV_IMAGE — explicit override (e.g. CI passes a pre-pulled tag)
 //  2. Local `devcell-user:dev-thin` if present
-//  3. Auto-build via `buildThinImage("dev")` — `cell build --thin --stack dev
+//  3. Auto-build via `buildThinImage("dev")` — `cell build --stack dev
 //     --image devcell-user:dev-thin-<sha>`, ~minutes against a warm nix store.
 //
 // Gated on `testing.Short()` because path (3) builds an image. Run via
@@ -126,7 +126,7 @@ func TestModules2_DevStackHasOnlySeedBinaries(t *testing.T) {
 			devImage = "devcell-user:dev-thin"
 		} else {
 			if testing.Short() {
-				t.Skip("long: would build dev-thin via `cell build --thin --stack dev`; run without -short or pre-set DEVCELL_TEST_DEV_IMAGE")
+				t.Skip("long: would build dev-thin via `cell build --stack dev`; run without -short or pre-set DEVCELL_TEST_DEV_IMAGE")
 			}
 			tag, err := buildThinImage("dev")
 			if err != nil {
@@ -479,7 +479,7 @@ func TestModules2_CellModulesListEndToEnd(t *testing.T) {
 //   1. Empty /nix volume (fresh, never-populated docker volume).
 //   2. Global ~/.config/devcell/devcell.toml sets stack=base + one module ("news").
 //   3. Project .devcell.toml adds a second module ("qa-tools").
-//   4. `cell build --thin` runs from the project dir with HOME overridden.
+//   4. `cell build` runs from the project dir with HOME overridden.
 //      Auto-build path of `cell shell` is the same code; gating semantics
 //      (image-missing, volume-unhydrated) are unit-tested separately.
 //   5. Assert both modules' binaries are installed in the resulting image:
@@ -492,7 +492,7 @@ func TestModules2_CellModulesListEndToEnd(t *testing.T) {
 // Long test (testing.Short() gate). Cleans up its volume.
 func TestModules2_LongE2E_CleanVolume_TwoModulesFromGlobalAndProject(t *testing.T) {
 	if testing.Short() {
-		t.Skip("long: runs `cell build --thin` against a fresh volume (~minutes); drop -short to enable")
+		t.Skip("long: runs `cell build` against a fresh volume (~minutes); drop -short to enable")
 	}
 
 	const (
@@ -550,11 +550,10 @@ modules = ["`+innerModule+`"]
 		t.Fatalf("ensure cell binary: %v", err)
 	}
 
-	// ── Run `cell build --thin --image <test-tag>` from project, HOME=fake ──
 	imageTag := "devcell-user:test-cleanvol-" + shortSHA()
 	t.Cleanup(func() { _ = osexec.Command("docker", "rmi", imageTag).Run() })
 
-	cmd := osexec.Command(cellBin, "build", "--thin", "--image", imageTag, "--debug")
+	cmd := osexec.Command(cellBin, "build", "--image", imageTag, "--debug")
 	cmd.Dir = projectDir
 	cmd.Env = append(os.Environ(),
 		"HOME="+fakeHome,
@@ -572,7 +571,7 @@ modules = ["`+innerModule+`"]
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	if err := cmd.Run(); err != nil {
-		t.Fatalf("cell build --thin failed: %v (see %s)", err, logPath)
+		t.Fatalf("cell build failed: %v (see %s)", err, logPath)
 	}
 	t.Logf("build log: %s", logPath)
 
@@ -628,7 +627,7 @@ modules = ["`+innerModule+`"]
 // nix download. Skipped in -short.
 func TestModules2_LongE2E_UpstreamGithub_TwoModulesFromGlobalAndProject(t *testing.T) {
 	if testing.Short() {
-		t.Skip("long: clones upstream github, runs `cell build --thin` against a fresh volume (~minutes); drop -short to enable")
+		t.Skip("long: clones upstream github, runs `cell build` against a fresh volume (~minutes); drop -short to enable")
 	}
 
 	const (
@@ -680,7 +679,7 @@ modules = ["`+innerModule+`"]
 	imageTag := "devcell-user:test-upstream-" + shortSHA()
 	t.Cleanup(func() { _ = osexec.Command("docker", "rmi", imageTag).Run() })
 
-	cmd := osexec.Command(cellBin, "build", "--thin", "--image", imageTag, "--debug")
+	cmd := osexec.Command(cellBin, "build", "--image", imageTag, "--debug")
 	cmd.Dir = projectDir
 	cmd.Env = append(os.Environ(),
 		"HOME="+fakeHome,
@@ -695,7 +694,7 @@ modules = ["`+innerModule+`"]
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	if err := cmd.Run(); err != nil {
-		t.Fatalf("cell build --thin (upstream) failed: %v (see %s)", err, logPath)
+		t.Fatalf("cell build (upstream) failed: %v (see %s)", err, logPath)
 	}
 
 	// Sanity: verify the synced nixhome's origin is the upstream github ref,

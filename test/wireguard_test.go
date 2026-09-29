@@ -144,7 +144,7 @@ func requireWgQuick(t *testing.T, img string) {
 	args = append(args, img, "bash", "-lc", "command -v wg-quick")
 	out, err := osexec.Command("docker", args...).CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "wg-quick") {
-		t.Skip("wg-quick not installed in image: rebuild with wireguard module enabled (`cell build --thin`)")
+		t.Skip("wg-quick not installed in image: rebuild with wireguard module enabled (`cell build`)")
 	}
 }
 
