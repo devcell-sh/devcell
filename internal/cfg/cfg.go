@@ -67,6 +67,7 @@ type CellSection struct {
 	QemuProjectSync string            `toml:"qemu_project_sync"` // project sync for qemu/libvirt engines: "push" (default), "two-way", "off"; env: DEVCELL_QEMU_PROJECT_SYNC (CELL-383)
 	DefaultCommand  string            `toml:"default_command"`   // subcommand to run when `cell` is invoked with no args; env: DEVCELL_DEFAULT_COMMAND
 	Flake           *bool             `toml:"flake"`             // enable project-level flake.nix install; default: false (opt-in); env: DEVCELL_FLAKE
+	Packages        []string          `toml:"packages"`          // shorthand for [packages.nix] stable: nix packages baked into the image at build time
 	Volumes         []string          `toml:"volumes"`           // shorthand volume list: "/path", "/host:/container", "/host:/container:ro"
 }
 
@@ -890,6 +891,18 @@ func unionDedupStrings(a, b []string) []string {
 	return out
 }
 
+// mergeShorthandIntoNixStable unions [cell] packages into [packages.nix] stable,
+// preserving nil (unset) vs empty-slice (escape hatch) semantics.
+func mergeShorthandIntoNixStable(nixStable, cellPkgs []string) []string {
+	if len(cellPkgs) == 0 {
+		return nixStable
+	}
+	if nixStable == nil {
+		return unionDedupStrings(nil, cellPkgs)
+	}
+	return unionDedupStrings(nixStable, cellPkgs)
+}
+
 // mergeNixPkgTier merges one [packages.nix] tier with the same semantics as
 // [cell].modules: union-dedup, sorted; explicit empty slice clears global.
 func mergeNixPkgTier(global, project []string) []string {
@@ -1211,7 +1224,10 @@ func Merge(global, project CellConfig) CellConfig {
 
 	// Packages.Nix: union-dedup per tier, same semantics as [cell].modules.
 	// Explicit empty slice in project clears global (escape hatch).
-	out.Packages.Nix.Stable = mergeNixPkgTier(global.Packages.Nix.Stable, project.Packages.Nix.Stable)
+	// [cell] packages is a shorthand that merges into [packages.nix] stable.
+	globalStable := unionDedupStrings(global.Packages.Nix.Stable, global.Cell.Packages)
+	projectStable := mergeShorthandIntoNixStable(project.Packages.Nix.Stable, project.Cell.Packages)
+	out.Packages.Nix.Stable = mergeNixPkgTier(globalStable, projectStable)
 	out.Packages.Nix.Unstable = mergeNixPkgTier(global.Packages.Nix.Unstable, project.Packages.Nix.Unstable)
 	out.Packages.Nix.Edge = mergeNixPkgTier(global.Packages.Nix.Edge, project.Packages.Nix.Edge)
 

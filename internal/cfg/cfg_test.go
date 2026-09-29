@@ -2850,6 +2850,73 @@ func TestMerge_NixPackagesGlobalSurvivesNilProject(t *testing.T) {
 	}
 }
 
+// --- [cell] packages shorthand ---
+
+func TestLoadFile_CellPackagesShorthand(t *testing.T) {
+	dir := t.TempDir()
+	writeTOML(t, dir, "devcell.toml", `
+[cell]
+packages = ["jq", "ripgrep"]
+`)
+	c, err := cfg.LoadFile(filepath.Join(dir, "devcell.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Cell.Packages) != 2 || c.Cell.Packages[0] != "jq" || c.Cell.Packages[1] != "ripgrep" {
+		t.Errorf("cell.packages = %v, want [jq ripgrep]", c.Cell.Packages)
+	}
+}
+
+func TestMerge_CellPackagesMergesIntoNixStable(t *testing.T) {
+	global := cfg.CellConfig{
+		Cell: cfg.CellSection{Packages: []string{"jq"}},
+	}
+	project := cfg.CellConfig{
+		Cell: cfg.CellSection{Packages: []string{"ripgrep"}},
+	}
+	merged := cfg.Merge(global, project)
+	stable := merged.Packages.Nix.Stable
+	want := map[string]bool{"jq": true, "ripgrep": true}
+	if len(stable) != 2 {
+		t.Fatalf("stable = %v, want 2 packages", stable)
+	}
+	for _, p := range stable {
+		if !want[p] {
+			t.Errorf("unexpected package %q in stable", p)
+		}
+	}
+}
+
+func TestMerge_CellPackagesDedupsWithNixStable(t *testing.T) {
+	global := cfg.CellConfig{
+		Cell:     cfg.CellSection{Packages: []string{"jq", "htop"}},
+		Packages: cfg.PackagesSection{Nix: cfg.NixPackages{Stable: []string{"jq", "tmux"}}},
+	}
+	merged := cfg.Merge(global, cfg.CellConfig{})
+	stable := merged.Packages.Nix.Stable
+	want := []string{"htop", "jq", "tmux"}
+	if strings.Join(stable, ",") != strings.Join(want, ",") {
+		t.Errorf("stable = %v, want %v (deduped+sorted)", stable, want)
+	}
+}
+
+func TestMerge_CellPackagesBothSourcesCombine(t *testing.T) {
+	global := cfg.CellConfig{
+		Cell:     cfg.CellSection{Packages: []string{"jq"}},
+		Packages: cfg.PackagesSection{Nix: cfg.NixPackages{Stable: []string{"tmux"}}},
+	}
+	project := cfg.CellConfig{
+		Cell:     cfg.CellSection{Packages: []string{"ripgrep"}},
+		Packages: cfg.PackagesSection{Nix: cfg.NixPackages{Stable: []string{"htop"}}},
+	}
+	merged := cfg.Merge(global, project)
+	stable := merged.Packages.Nix.Stable
+	want := []string{"htop", "jq", "ripgrep", "tmux"}
+	if strings.Join(stable, ",") != strings.Join(want, ",") {
+		t.Errorf("stable = %v, want %v", stable, want)
+	}
+}
+
 // --- Wireguard ---
 
 func TestLoadFile_WireguardSection(t *testing.T) {

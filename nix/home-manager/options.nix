@@ -47,6 +47,7 @@ in
     qemu_project_sync = opt types.str;
     default_command = opt types.str;
     flake = opt types.bool;
+    packages = opt (types.listOf types.str);
     volumes = opt (types.listOf types.str);
   };
   docker = {
