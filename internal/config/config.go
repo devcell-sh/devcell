@@ -247,6 +247,50 @@ func ClampPort(s string) string {
 	return strconv.Itoa(p)
 }
 
+// ResolveForwardEntry normalises a [ports].forward entry into "host:container".
+//
+// Supported forms:
+//
+//	"3000"       → "3000:3000"         (same port, both sides)
+//	"8080:3000"  → "8080:3000"         (explicit, unchanged)
+//	"8080:"      → "<free>:8080"       (auto-resolve host port near 8080)
+//	"8080:/udp"  → "<free>:8080/udp"   (protocol preserved on container side)
+//
+// The trailing-colon form uses ResolveAvailablePort to find a bindable host
+// port starting from the preferred value, skipping docker-allocated ports in
+// taken. A nil taken set skips the docker check.
+func ResolveForwardEntry(entry string, taken map[int]struct{}) string {
+	if taken == nil {
+		taken = map[int]struct{}{}
+	}
+
+	colonIdx := strings.IndexByte(entry, ':')
+	if colonIdx < 0 {
+		// "3000" or "3000/udp" → host=number, container=entry
+		num := entry
+		if slashIdx := strings.IndexByte(num, '/'); slashIdx != -1 {
+			num = num[:slashIdx]
+		}
+		return num + ":" + entry
+	}
+
+	hostPart := entry[:colonIdx]
+	containerPart := entry[colonIdx+1:]
+
+	// "8080:3000" → explicit, no resolution needed
+	if containerPart != "" && !strings.HasPrefix(containerPart, "/") {
+		return entry
+	}
+
+	// "8080:" or "8080:/udp" → auto-resolve host, container = hostPart + protocol
+	protocol := ""
+	if strings.HasPrefix(containerPart, "/") {
+		protocol = containerPart // e.g. "/udp"
+	}
+	resolved := ResolveAvailablePort(hostPart, taken)
+	return resolved + ":" + hostPart + protocol
+}
+
 // isPortAvailable reports whether a TCP port can be bound on all interfaces.
 func isPortAvailable(port int) bool {
 	ln, err := net.Listen("tcp", ":"+strconv.Itoa(port))

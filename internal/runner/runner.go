@@ -530,17 +530,11 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 		// from other hosts on the LAN regardless of dockerd bind defaults.
 		publishPrefix := spec.CellCfg.Ports.ResolvedPublishIP() + ":"
 
-		// cfg [ports] entries
+		// cfg [ports] entries — resolve "8080:" auto-port syntax
+		taken := config.DockerAllocatedPorts()
 		for _, port := range spec.CellCfg.Ports.Forward {
-			if !strings.Contains(port, ":") {
-				// "54321/udp" → host=54321, container=54321/udp
-				num := port
-				if idx := strings.IndexByte(num, '/'); idx != -1 {
-					num = num[:idx]
-				}
-				port = num + ":" + port
-			}
-			argv = append(argv, "-p", publishPrefix+port)
+			resolved := config.ResolveForwardEntry(port, taken)
+			argv = append(argv, "-p", publishPrefix+resolved)
 		}
 
 		// GUI port mapping
