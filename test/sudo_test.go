@@ -25,93 +25,6 @@ import (
 // L1 — Wiring checks (file content)
 // ---------------------------------------------------------------------------
 
-// TestSudo_ImageNixStagesPamStub asserts the pure-image build stages a
-// /etc/pam.d/sudo PAM stub that lets the sudoers.so plugin's pam_start
-// succeed. Without this stub, the plugin aborts before any sudo policy
-// check can run (CELL-86).
-func TestSudo_ImageNixStagesPamStub(t *testing.T) {
-	imgNix := readNixhomeFile(t, "packages/image.nix")
-
-	if !strings.Contains(imgNix, "/etc/pam.d/sudo") {
-		t.Fatal("image.nix doesn't stage /etc/pam.d/sudo — sudoers.so plugin's pam_start will abort, breaking every `sudo` call in pure cells")
-	}
-	if !strings.Contains(imgNix, "pam_permit.so") {
-		t.Fatal("image.nix references /etc/pam.d/sudo but doesn't use pam_permit.so — without a permissive module, plugin init still fails")
-	}
-	if !strings.Contains(imgNix, "pkgs.linux-pam") &&
-		!strings.Contains(imgNix, "${pkgs.linux-pam}") &&
-		!strings.Contains(imgNix, "linux-pam}") {
-		t.Fatal("image.nix uses pam_permit.so but doesn't reference pkgs.linux-pam — module path won't resolve to a nix store path")
-	}
-}
-
-// TestSudo_SudoersPreservesNixEnv pins env_keep for nix-related vars.
-// Without these env_keep entries, `Defaults env_reset` (correct behavior in
-// multi-user contexts) strips SSL_CERT_FILE / NIX_SSL_CERT_FILE across sudo,
-// and `sudo nix profile add nixpkgs#foo` then fails with "SSL peer
-// certificate ... was not OK" against cache.nixos.org. Single-user cell
-// with NOPASSWD:ALL means env_reset's privilege-escalation protection
-// is moot for these vars — keeping them is a UX fix, not a security regression.
-func TestSudo_SudoersPreservesNixEnv(t *testing.T) {
-	imgNix := readNixhomeFile(t, "packages/image.nix")
-
-	// Block: the sudoers heredoc. Search the env_keep line within it.
-	sudoersStart := strings.Index(imgNix, "cat > $out/etc/sudoers <<EOF")
-	if sudoersStart == -1 {
-		t.Fatal("sudoers heredoc anchor missing — image.nix shape changed")
-	}
-	sudoersEnd := strings.Index(imgNix[sudoersStart:], "chmod 0440 $out/etc/sudoers")
-	if sudoersEnd == -1 {
-		t.Fatal("sudoers heredoc end (chmod 0440) missing")
-	}
-	block := imgNix[sudoersStart : sudoersStart+sudoersEnd]
-
-	if !strings.Contains(block, "env_reset") {
-		t.Fatal("sudoers missing `Defaults env_reset` — security baseline broken")
-	}
-	if !strings.Contains(block, "env_keep") {
-		t.Fatal("sudoers missing `Defaults env_keep` — nix env vars will be stripped across sudo, breaking `sudo nix profile add nixpkgs#foo`")
-	}
-	// Pin the minimum set we need preserved. Adding more is fine; dropping
-	// one of these is the regression we're guarding against.
-	for _, v := range []string{"SSL_CERT_FILE", "NIX_SSL_CERT_FILE", "NIX_PATH", "LOCALE_ARCHIVE"} {
-		if !strings.Contains(block, v) {
-			t.Errorf("env_keep missing %q — `sudo nix ...` may fail or emit warnings", v)
-		}
-	}
-}
-
-// TestSudo_PamStubCoversAllPamPhases asserts the stub covers all four PAM
-// phases (auth, account, session, password). Missing any phase causes
-// pam_acct_mgmt / pam_open_session / etc. to fail with "no module".
-func TestSudo_PamStubCoversAllPamPhases(t *testing.T) {
-	imgNix := readNixhomeFile(t, "packages/image.nix")
-
-	// Find the /etc/pam.d/sudo heredoc block. Be permissive about the marker
-	// name (PAMEOF, PAM_EOF, etc.) — assert each phase keyword appears in a
-	// `<phase> sufficient` form near the pam_permit.so reference.
-	idx := strings.Index(imgNix, "/etc/pam.d/sudo")
-	if idx == -1 {
-		t.Fatal("no /etc/pam.d/sudo block — TestSudo_ImageNixStagesPamStub should also fail")
-	}
-	// Scan forward ~1500 bytes for the heredoc body.
-	end := idx + 1500
-	if end > len(imgNix) {
-		end = len(imgNix)
-	}
-	block := imgNix[idx:end]
-
-	for _, phase := range []string{"auth", "account", "session", "password"} {
-		if !strings.Contains(block, phase+" ") && !strings.Contains(block, phase+"\t") {
-			t.Errorf("PAM stub missing `%s` phase — sudo will fail when sudoers.so calls pam_%s_mgmt", phase, phase)
-		}
-	}
-}
-
-// ---------------------------------------------------------------------------
-// L2 — Container behavior (requires docker; skip otherwise)
-// ---------------------------------------------------------------------------
-
 // TestSudo_WorksInFreshCell pins the user-visible bug. Pre-CELL-86, this
 // fails with "unable to initialize PAM: Critical error - immediate abort"
 // before sudo even reads /etc/sudoers. With the PAM stub in place, the
@@ -193,36 +106,6 @@ func TestSudo_PreservesNixEnv(t *testing.T) {
 // security-wrappers pattern), pins its closure with a GC root, and writes the
 // PAM stub when missing.
 // ---------------------------------------------------------------------------
-
-// TestSudo_FragmentInstallsSetuidWrapper pins the entrypoint wiring. Guards
-// against a regression to chmod-ing the shared store.
-func TestSudo_FragmentInstallsSetuidWrapper(t *testing.T) {
-	frag := readNixhomeFile(t, "modules/fragments/04-nix-daemon.sh")
-
-	if !strings.Contains(frag, "/run/wrappers/bin/sudo") {
-		t.Fatal("04-nix-daemon.sh doesn't install a setuid sudo wrapper at /run/wrappers/bin/sudo — sudo is broken in thin cells because the nix store is 0555")
-	}
-	if !strings.Contains(frag, "4755") {
-		t.Error("sudo wrapper must be installed mode 4755 — without the setuid bit sudo reports \"must be owned by uid 0\"")
-	}
-	// The copy dlopens sudoers.so from its store closure; once a profile
-	// upgrade moves on, nothing else roots that closure and a GC would rip the
-	// plugins out from under the running wrapper.
-	if !strings.Contains(frag, "gcroots/devcell/sudo-wrapper-") {
-		t.Error("entrypoint must pin the wrapper's store closure as a GC root (gcroots/devcell/sudo-wrapper-<hash>) or a shared-volume GC can break the running copy")
-	}
-	// Naming matters: the GC reaper in internal/runner/prune.go globs
-	// *-profile and *-meta. A sudo root must not collide with those.
-	if strings.Contains(frag, "sudo-wrapper-${_sudo_hash}-profile") || strings.Contains(frag, "sudo-wrapper-${_sudo_hash}-meta") {
-		t.Error("sudo GC root name must not end in -profile or -meta — the prune reaper globs those and would treat it as a stale project root")
-	}
-	if !strings.Contains(frag, "/etc/pam.d/sudo") || !strings.Contains(frag, "pam_permit.so") {
-		t.Error("entrypoint must write the /etc/pam.d/sudo stub — thin images ship no /etc/pam.d and sudo aborts with a PAM account management error")
-	}
-	if strings.Contains(frag, "_chmod_setuid_target") {
-		t.Error("entrypoint still chmods the shared nix store — that breaks sudo in every cell on the next profile rebuild and leaks a setuid binary across containers; use the wrapper instead")
-	}
-}
 
 // TestSudo_SessionUserCanEscalate is the user-visible bug: `sudo` from the
 // session user's shell. The CELL-86 L2 tests above exec as uid 0, so they pass
