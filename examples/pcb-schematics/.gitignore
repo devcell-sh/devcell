@@ -1,0 +1,13 @@
+# KiCad generated files
+*-backups/
+*.kicad_prl
+fp-info-cache
+*.bak
+
+# Gerber/fabrication output
+gerbers/
+*.gbr
+*.drl
+
+# devcell build state
+.devcell/

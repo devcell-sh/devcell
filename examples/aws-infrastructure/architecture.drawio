@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="devcell">
+  <diagram name="AWS Architecture" id="arch-1">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- Internet -->
+        <mxCell id="2" value="Internet" style="shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.internet;fillColor=#232F3E;fontColor=#FFFFFF;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="340" y="20" width="60" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- VPC -->
+        <mxCell id="3" value="VPC 10.0.0.0/16" style="points=[];shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_vpc;strokeColor=#248814;fillColor=none;verticalAlign=top;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="100" y="120" width="540" height="380" as="geometry"/>
+        </mxCell>
+
+        <!-- ALB -->
+        <mxCell id="4" value="Application&#xa;Load Balancer" style="outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#8C4FFF;strokeColor=none;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.elasticloadbalancing;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="340" y="160" width="60" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- Subnet A -->
+        <mxCell id="5" value="Public Subnet A&#xa;10.0.1.0/24" style="points=[];shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_subnet;strokeColor=#7AA116;fillColor=none;verticalAlign=top;fontStyle=0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="130" y="280" width="220" height="180" as="geometry"/>
+        </mxCell>
+
+        <!-- Subnet B -->
+        <mxCell id="6" value="Public Subnet B&#xa;10.0.2.0/24" style="points=[];shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_subnet;strokeColor=#7AA116;fillColor=none;verticalAlign=top;fontStyle=0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="390" y="280" width="220" height="180" as="geometry"/>
+        </mxCell>
+
+        <!-- EC2 Instance -->
+        <mxCell id="7" value="EC2&#xa;t3.micro" style="outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#ED7100;strokeColor=none;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.ec2;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="210" y="350" width="60" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- Arrows -->
+        <mxCell id="8" edge="1" source="2" target="4" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="9" edge="1" source="4" target="7" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

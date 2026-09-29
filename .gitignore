@@ -35,6 +35,7 @@ test/results
 test/results_archive
 .devcell
 .devcell.toml
+!examples/*/.devcell.toml
 .gocache
 .gomodcache
 docs/

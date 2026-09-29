@@ -1,0 +1,6 @@
+# Build artifacts
+go-api
+*.exe
+
+# devcell build state
+.devcell/

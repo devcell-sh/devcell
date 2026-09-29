@@ -1,0 +1,41 @@
+# .devcell.toml — Go REST API
+
+[cell]
+stack = "base"
+modules = ["go"]
+packages = ["curl", "jq"]
+# volumes = ["~/data:/data:ro"]
+ports = ["8080"]
+# mcps = ["playwright"]
+# timezone = "America/New_York"
+
+# [llm]
+# use_ollama = false
+# system_prompt = """
+# This is a Go REST API using net/http.
+# """
+
+# [git]
+# author_name = "Your Name"
+# author_email = "you@example.com"
+
+# [secrets.onepassword]
+# documents = ["prod-api-keys"]
+
+# [aws]
+# read_only = true
+
+# [gui]
+# enabled = true
+
+# [env]
+# GITHUB_TOKEN = "ghp_xxx"
+
+# [mise]
+# trusted_config_paths = "/"
+
+# [packages.npm]
+# "some-tool" = "^1.0.0"
+
+# [packages.python]
+# "pre-commit" = "*"
