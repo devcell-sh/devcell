@@ -128,7 +128,7 @@ func generatePyprojectTOML(pkgs map[string]string) []byte {
 // and modules from the upstream devcell nixhome flake.
 // stack is a stack name (e.g. "go"), modules is a list of module names,
 // ver is the version tag, nixhomePath overrides the input URL to path:./nixhome.
-// nixPkgs adds arbitrary nixpkgs packages with lib.hiPri (user override semantics).
+// nixPkgs adds arbitrary nixpkgs packages with lib.hiPrio (user override semantics).
 // mcpEnabled lists MCP server names to enable (from [mcp] enabled in .devcell.toml);
 // each emits devcell.managedMcp.servers."<name>".enabled = true; in the flake.
 func GenerateFlakeNix(stack string, modules []string, ver string, withNixhome bool, nixPkgs ...cfg.NixPackages) string {
@@ -169,23 +169,28 @@ func generateFlakeNixFull(stack string, modules []string, ver string, withNixhom
 		moduleExpr += fmt.Sprintf(" ++ [ { %s } ]", strings.Join(enableLines, " "))
 	}
 
-	// CELL-445: [packages.nix] — arbitrary user packages with lib.hiPri override.
+	// CELL-445: [packages.nix] — arbitrary user packages with lib.hiPrio override.
+	// Emitted as a NixOS-style module function ({ lib, pkgs, ... }: { ... })
+	// so lib/pkgs are in scope when the module system evaluates.
 	var np cfg.NixPackages
 	if len(nixPkgs) > 0 {
 		np = nixPkgs[0]
 	}
 	if len(np.Stable) > 0 || len(np.Unstable) > 0 || len(np.Edge) > 0 {
 		var parts []string
+		args := "lib, pkgs"
 		if len(np.Stable) > 0 {
-			parts = append(parts, fmt.Sprintf("(map lib.hiPri (with pkgs; [ %s ]))", strings.Join(np.Stable, " ")))
+			parts = append(parts, fmt.Sprintf("(map lib.hiPrio (with pkgs; [ %s ]))", strings.Join(np.Stable, " ")))
 		}
 		if len(np.Unstable) > 0 {
-			parts = append(parts, fmt.Sprintf("(map lib.hiPri (with pkgsUnstable; [ %s ]))", strings.Join(np.Unstable, " ")))
+			args += ", pkgsUnstable"
+			parts = append(parts, fmt.Sprintf("(map lib.hiPrio (with pkgsUnstable; [ %s ]))", strings.Join(np.Unstable, " ")))
 		}
 		if len(np.Edge) > 0 {
-			parts = append(parts, fmt.Sprintf("(map lib.hiPri (with pkgsEdge; [ %s ]))", strings.Join(np.Edge, " ")))
+			args += ", pkgsEdge"
+			parts = append(parts, fmt.Sprintf("(map lib.hiPrio (with pkgsEdge; [ %s ]))", strings.Join(np.Edge, " ")))
 		}
-		moduleExpr += fmt.Sprintf(" ++ [ { home.packages = %s; } ]", strings.Join(parts, " ++ "))
+		moduleExpr += fmt.Sprintf(" ++ [ ({ %s, ... }: { home.packages = %s; }) ]", args, strings.Join(parts, " ++ "))
 	}
 
 	// [mcp] enabled is now resolved at container start via DEVCELL_MCP_ENABLED

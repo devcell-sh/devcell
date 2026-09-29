@@ -719,8 +719,8 @@ func TestGenerateFlakeNix_AllStacks(t *testing.T) {
 func TestGenerateFlakeNix_NixPackagesStable(t *testing.T) {
 	pkgs := cfg.NixPackages{Stable: []string{"tmux", "htop"}}
 	content := scaffold.GenerateFlakeNix("go", nil, "v1.0.0", false, pkgs)
-	if !strings.Contains(content, "map lib.hiPri (with pkgs; [ tmux htop ])") {
-		t.Errorf("expected hiPri stable packages:\n%s", content)
+	if !strings.Contains(content, "({ lib, pkgs, ... }: { home.packages = (map lib.hiPrio (with pkgs; [ tmux htop ])); })") {
+		t.Errorf("expected module-function wrapper with hiPri stable packages:\n%s", content)
 	}
 }
 
@@ -731,20 +731,20 @@ func TestGenerateFlakeNix_NixPackagesAllTiers(t *testing.T) {
 		Edge:     []string{"edge-pkg"},
 	}
 	content := scaffold.GenerateFlakeNix("base", nil, "v1.0.0", false, pkgs)
-	if !strings.Contains(content, "map lib.hiPri (with pkgs; [ tmux ])") {
+	if !strings.Contains(content, "map lib.hiPrio (with pkgs; [ tmux ])") {
 		t.Errorf("expected hiPri stable:\n%s", content)
 	}
-	if !strings.Contains(content, "map lib.hiPri (with pkgsUnstable; [ tool-a ])") {
+	if !strings.Contains(content, "map lib.hiPrio (with pkgsUnstable; [ tool-a ])") {
 		t.Errorf("expected hiPri unstable:\n%s", content)
 	}
-	if !strings.Contains(content, "map lib.hiPri (with pkgsEdge; [ edge-pkg ])") {
+	if !strings.Contains(content, "map lib.hiPrio (with pkgsEdge; [ edge-pkg ])") {
 		t.Errorf("expected hiPri edge:\n%s", content)
 	}
 }
 
 func TestGenerateFlakeNix_NixPackagesEmpty(t *testing.T) {
 	content := scaffold.GenerateFlakeNix("go", nil, "v1.0.0", false, cfg.NixPackages{})
-	if strings.Contains(content, "lib.hiPri") {
+	if strings.Contains(content, "lib.hiPrio") {
 		t.Errorf("no hiPri expected when all tiers empty:\n%s", content)
 	}
 }
@@ -755,7 +755,7 @@ func TestGenerateFlakeNix_NixPackagesWithModules(t *testing.T) {
 	if !strings.Contains(content, "devcell.modules.electronics") {
 		t.Errorf("expected modules still present:\n%s", content)
 	}
-	if !strings.Contains(content, "map lib.hiPri (with pkgs; [ cowsay ])") {
+	if !strings.Contains(content, "map lib.hiPrio (with pkgs; [ cowsay ])") {
 		t.Errorf("expected hiPri stable packages alongside modules:\n%s", content)
 	}
 }
@@ -785,7 +785,7 @@ func TestGenerateFlakeNixWithMcp_WithModulesAndNixPkgs(t *testing.T) {
 	if !strings.Contains(content, "devcell.modules.electronics") {
 		t.Errorf("expected modules still present:\n%s", content)
 	}
-	if !strings.Contains(content, "map lib.hiPri") {
+	if !strings.Contains(content, "map lib.hiPrio") {
 		t.Errorf("expected nix packages still present:\n%s", content)
 	}
 	if !strings.Contains(content, `devcell.managedMcp.servers."aws-api".enabled = true;`) {
