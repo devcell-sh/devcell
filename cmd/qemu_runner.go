@@ -6,11 +6,14 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
 	"time"
+
+	winkit "github.com/devcell-sh/go-winkit"
+	"github.com/devcell-sh/go-winkit/gosshd"
+	vmapi "github.com/devcell-sh/go-winkit/vm"
 
 	"github.com/DimmKirr/devcell/internal/cfg"
 	"github.com/DimmKirr/devcell/internal/config"
@@ -18,12 +21,17 @@ import (
 	"github.com/DimmKirr/devcell/internal/vm/qemu"
 )
 
-// runQemuAgent is the qemu-engine equivalent of runTartAgent.
+// winkitStartFunc is the function used to start PE VMs. Defaults to
+// winkit.Start; tests replace it to avoid booting a real VM.
+var winkitStartFunc = winkit.Start
+
+// runQemuAgent boots a PE+WSL1+Nix VM via go-winkit and connects to it
+// through gosshd for command execution.
 //
-// Lifecycle (managed Windows VM via QEMU):
-//  1. Acquire VM (clone template or auto-build if missing)
-//  2. Boot VM, wait for SSH
-//  3. Exec into VM via SSH (PowerShell)
+// Lifecycle:
+//  1. Acquire VM (auto-build template if missing)
+//  2. Boot VM via winkit.Start, wait for gosshd SSH
+//  3. Execute user command inside WSL1 via gosshd
 //
 // On non-darwin with --debug: mock/simulate every step with [MOCK] prefix.
 // On darwin with --debug: real execution with ux.Debugf logging.
@@ -51,7 +59,7 @@ func runQemuAgent(
 	}
 
 	if mock {
-		logf("runtime.GOOS=%s (not darwin) — entering mock mode", runtime.GOOS)
+		logf("runtime.GOOS=%s (not darwin): entering mock mode", runtime.GOOS)
 	}
 	logf("binary=%q  defaultFlags=%v  userArgs=%v", binary, defaultFlags, userArgs)
 	logf("cellName=%q  baseDir=%q  hostHome=%q", cellName, baseDir, hostHome)
@@ -87,15 +95,7 @@ func runQemuAgent(
 		stack = stackOverride
 	}
 
-	// --- resolve paths ---
-	instanceDir := qemu.InstanceDir(hostHome, cellName)
-	templateDir := qemu.TemplateDir(hostHome, stack, cellCfg.Cell.Modules)
-	templateDisk := filepath.Join(templateDir, qemu.ImageName(stack, cellCfg.Cell.Modules))
-	instanceDisk := filepath.Join(instanceDir, "disk.qcow2")
-	varsPath := filepath.Join(instanceDir, "vars.fd")
-	sshKeyPath := filepath.Join(qemuKeyDir(hostHome, cellName), "id_ed25519")
-
-	// Port allocation — same bunk-based scheme as Docker runner (CELL-352)
+	// --- port allocation ---
 	c := config.Load(baseDir, os.Getenv)
 	taken := config.DockerAllocatedPorts()
 	ports := qemu.AllocatePorts(c.PortPrefix, taken)
@@ -104,223 +104,134 @@ func runQemuAgent(
 	if cellCfg.Cell.QemuSSHPort > 0 || os.Getenv("DEVCELL_QEMU_SSH_PORT") != "" {
 		sshPort = uint16(cellCfg.Cell.ResolvedQemuSSHPort())
 	}
+	rdpPort := ports.RDPPortUint16()
 
-	spec := qemu.Spec{
-		VMName:       qemu.InstanceVMName(cellName),
-		CPUs:         uint(cellCfg.Cell.ResolvedQemuCPUs()),
-		MemoryGB:     uint64(cellCfg.Cell.ResolvedQemuMemoryGB()),
-		DiskPath:     instanceDisk,
-		FirmwarePath: qemu.FirmwarePath(),
-		VarsPath:     varsPath,
-		SSHPort:      sshPort,
-		VNCPort:      ports.VNCPortUint16(),
-		RDPPort:      ports.RDPPortUint16(),
-		SSHHost:      cellCfg.Cell.ResolvedQemuSSHHost(),
-		SSHUser:      "devcell",
-		SSHKeyPath:   sshKeyPath,
-		MACAddr:      qemu.DeterministicMAC(cellName),
-		Binary:       binary,
-		DefaultFlags: defaultFlags,
-		UserArgs:     userArgs,
-		EnvVars:      envVars,
-		ProjectDir:   baseDir,
-		DisplayType:  cellCfg.Cell.ResolvedQemuDisplay(),
-		QMPSocketDir: instanceDir,
-		KVM:          cellCfg.Cell.ResolvedKVM(),
+	logf("ports: ssh=%d rdp=%d vnc=%s", sshPort, rdpPort, ports.VNCPort)
+
+	// --- resolve PE image path ---
+	imagePath := peImagePath(hostHome, stack, cellCfg.Cell.Modules)
+	logf("PE image path: %s", imagePath)
+
+	// --- dry-run: print what would happen and exit ---
+	if dryRun {
+		cmd := peGuestCommand(userArgs)
+		fmt.Printf("PE+WSL1 runner (dry-run)\n")
+		fmt.Printf("  image:   %s\n", imagePath)
+		fmt.Printf("  ssh:     127.0.0.1:%d\n", sshPort)
+		fmt.Printf("  command: %s\n", cmd)
+		return nil
 	}
-	spec.ApplyDefaults()
-
-	logf("templateDir=%s instanceDir=%s", templateDir, instanceDir)
-	logf("templateDisk=%s instanceDisk=%s", templateDisk, instanceDisk)
-	logf("spec: cpus=%d mem=%dGB ssh=%s:%d vnc=%d rdp=%d display=%s", spec.CPUs, spec.MemoryGB, spec.SSHHost, spec.SSHPort, spec.VNCPort, spec.RDPPort, spec.DisplayType)
-	logf("accel: %s — %s", spec.Accel, spec.AccelReason)
 
 	// --- lifecycle: acquire VM (real or mock) ---
-	if !dryRun && !mock {
-		if force {
-			logf("--force: removing existing instance disk and vars")
-			os.Remove(instanceDisk)
-			os.Remove(varsPath)
-		}
-
-		// Detect managed VM: PID file + QMP state query
-		qemu.CleanStalePIDFile(instanceDir)
-		vmRunning := false
-		if pid, err := qemu.ReadPIDFile(instanceDir); err == nil {
-			qmpSock := qemu.QMPSocketPath(spec)
-			if state, err := qemu.QueryVMState(qmpSock); err == nil && state == qemu.StateRunning {
-				logf("detected running VM (PID %d, QMP=%s)", pid, state)
-				vmRunning = true
+	if !mock {
+		// Auto-build if PE image is missing
+		if _, err := os.Stat(imagePath); err != nil {
+			if !force {
+				fmt.Printf("PE+WSL1 image not found at %s: a build is required.\n", imagePath)
+				ok, promptErr := ux.GetConfirmation("Build now?")
+				if promptErr != nil {
+					return fmt.Errorf("prompt: %w", promptErr)
+				}
+				if !ok {
+					return fmt.Errorf("build declined: run `cell build --engine=qemu` manually")
+				}
+			}
+			logf("auto-build: PE image missing, building with stack=%q", stack)
+			if err := runBuildQemu(cellName, hostHome, baseDir, stack, false, false, false, cellCfg.Cell); err != nil {
+				return fmt.Errorf("auto-build failed: %w", err)
 			}
 		}
 
-		diskInfo, diskErr := os.Stat(instanceDisk)
-		tplInfo, tplErr := os.Stat(templateDisk)
-		var diskSize, tplSize int64
-		if diskErr == nil {
-			diskSize = diskInfo.Size()
+		// Boot PE VM via winkit
+		startOpts := peStartOpts(cellName, hostHome, stack, cellCfg.Cell, sshPort, rdpPort)
+		startOpts.Accel = os.Getenv("DEVCELL_QEMU_ACCEL")
+		logf("starting PE VM: image=%s cpus=%d mem=%dGB ssh=%d rdp=%d", startOpts.Image, startOpts.CPUs, startOpts.MemoryGB, startOpts.SSHPort, startOpts.RDPPort)
+
+		machine, err := winkitStartFunc(ctx, startOpts)
+		if err != nil {
+			return fmt.Errorf("starting PE VM: %w", err)
 		}
-		if tplErr == nil {
-			tplSize = tplInfo.Size()
-		}
-		marker := qemu.ProvisionedMarker(hostHome, stack, cellCfg.Cell.Modules)
-		_, markerErr := os.Stat(marker)
-		actions := qemu.DecideLaunchActions(qemu.LaunchInputs{
-			ExplicitBuild:     force,
-			DiskExists:        diskErr == nil,
-			DiskSizeBytes:     diskSize,
-			TemplateExists:    tplErr == nil,
-			TemplateSizeBytes: tplSize,
-			VMRunning:         vmRunning,
-			Provisioned:       markerErr == nil,
-		})
-		logf("launch actions: %v", actions)
+		defer func() {
+			logf("stopping PE VM")
+			if stopErr := machine.Stop(); stopErr != nil {
+				logf("stop failed: %v", stopErr)
+			}
+		}()
 
-		attachMode := false
-		for _, action := range actions {
-			switch action {
-			case qemu.ActionAttach:
-				logf("attaching to running VM (skipping boot)")
-				attachMode = true
-
-			case qemu.ActionBuild:
-				logf("auto-build: template missing or corrupt — running build with stack=%q", stack)
-				if !force {
-					fmt.Printf("VM template is missing or corrupt — a full rebuild is required (stack %q).\n", stack)
-					ok, err := ux.GetConfirmation("Rebuild now?")
-					if err != nil {
-						return fmt.Errorf("prompt: %w", err)
-					}
-					if !ok {
-						return fmt.Errorf("rebuild declined — run `cell build --engine=qemu` manually")
-					}
-				}
-				os.Remove(templateDisk)
-				os.Remove(instanceDisk)
-				if err := runBuildQemu(cellName, hostHome, baseDir, stack, false, false, false, cellCfg.Cell); err != nil {
-					return fmt.Errorf("auto-build failed: %w", err)
-				}
-				if err := os.MkdirAll(instanceDir, 0755); err != nil {
-					return fmt.Errorf("creating instance dir: %w", err)
-				}
-				if err := qemu.CloneDisk(templateDisk, instanceDisk); err != nil {
-					return fmt.Errorf("cloning template disk: %w", err)
-				}
-				if err := qemu.PrepareVarsFile(spec.FirmwarePath, varsPath); err != nil {
-					return fmt.Errorf("preparing UEFI vars: %w", err)
-				}
-				logf("instance disk cloned from template")
-
-			case qemu.ActionClone:
-				logf("cloning template to instance")
-				if err := os.MkdirAll(instanceDir, 0755); err != nil {
-					return fmt.Errorf("creating instance dir: %w", err)
-				}
-				if err := qemu.CloneDisk(templateDisk, instanceDisk); err != nil {
-					return fmt.Errorf("cloning template disk: %w", err)
-				}
-				if err := qemu.PrepareVarsFile(spec.FirmwarePath, varsPath); err != nil {
-					return fmt.Errorf("preparing UEFI vars: %w", err)
-				}
-				logf("instance disk cloned from template")
-
-			case qemu.ActionUseLocal:
-				logf("using existing instance disk: %s", instanceDisk)
-				if _, err := os.Stat(varsPath); err != nil {
-					logf("vars file missing — preparing from firmware")
-					if err := qemu.PrepareVarsFile(spec.FirmwarePath, varsPath); err != nil {
-						return fmt.Errorf("preparing UEFI vars: %w", err)
-					}
-				}
+		// Write port metadata for cell vnc/rdp discovery
+		instanceDir := qemu.InstanceDir(hostHome, cellName)
+		if mkErr := os.MkdirAll(instanceDir, 0o755); mkErr == nil {
+			if writeErr := qemu.WritePortMeta(instanceDir, qemu.PortMeta{
+				SSHPort: sshPort,
+				VNCPort: ports.VNCPortUint16(),
+				RDPPort: rdpPort,
+			}); writeErr != nil {
+				logf("warning: failed to write port metadata: %v", writeErr)
 			}
 		}
 
-		if !attachMode {
-			logf("provisioned marker verified: %s", marker)
-
-			// Boot VM
-			vm := qemu.NewVM(spec, qemu.NopObserver{}, instanceDir)
-			logf("starting QEMU VM: %s", spec.VMName)
-			if err := vm.Start(ctx); err != nil {
-				return fmt.Errorf("starting QEMU: %w", err)
-			}
-			defer func() {
-				logf("shutting down QEMU VM")
-				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-				defer cancel()
-				if err := vm.Shutdown(ctx); err != nil {
-					logf("graceful shutdown failed: %v — force stopping", err)
-					vm.ForceStop()
-				}
-			}()
+		// Wait for gosshd
+		logf("waiting for gosshd on 127.0.0.1:%d", sshPort)
+		if err := waitForGosshd(ctx, sshPort, 10*time.Minute); err != nil {
+			return fmt.Errorf("waiting for gosshd: %w", err)
 		}
+		logf("gosshd ready")
 
-		// Write port metadata for discovery by cell vnc/rdp (CELL-352)
-		if err := qemu.WritePortMeta(instanceDir, qemu.PortMeta{
-			SSHPort: spec.SSHPort,
-			VNCPort: spec.VNCPort,
-			RDPPort: spec.RDPPort,
-		}); err != nil {
-			logf("warning: failed to write port metadata: %v", err)
-		}
-
-		// Wait for SSH (both attach and fresh boot need this)
-		logf("waiting for SSH on %s:%d", spec.SSHHost, spec.SSHPort)
-		if err := qemu.WaitForSSH(spec.SSHHost, spec.SSHPort, 5*time.Minute, 3*time.Second, qemu.NopObserver{}); err != nil {
-			return fmt.Errorf("waiting for SSH: %w", err)
-		}
-		logf("SSH ready")
+		// Execute command via gosshd
+		return execViaGosshd(ctx, sshPort, userArgs, machine, logf)
 	}
 
 	// --- mock mode ---
-	if mock {
-		logf("[qemu] preflight: GOOS=%s GOARCH=%s", runtime.GOOS, runtime.GOARCH)
-		logf("[qemu] would boot QEMU VM and connect via SSH")
-		logf("[qemu] guest SSH ready (simulated)")
-	}
+	logf("[qemu] would boot PE VM and connect via gosshd")
+	logf("[qemu] guest gosshd ready (simulated)")
+	cmd := peGuestCommand(userArgs)
+	logf("[qemu] would run: %s", cmd)
+	return nil
+}
 
-	// --- build SSH command ---
-	sshArgv := qemu.BuildSSHArgv(spec)
-	logf("ssh command: %s", strings.Join(sshArgv, " "))
-
-	if dryRun {
-		fmt.Printf("%s\n", strings.Join(sshArgv, " "))
-		return nil
-	}
-
-	if mock {
-		logf("would exec: %s", strings.Join(sshArgv, " "))
-		logf("skipping exec (mock mode)")
-		return nil
-	}
-
-	// --- project sync (CELL-383) ---
-	syncMode := cellCfg.Cell.ResolvedQemuProjectSync()
-	if syncMode != "off" {
-		if err := runProjectSync(qemu.BuildProjectPushArgv(spec), "pushing project into guest"); err != nil {
-			return err
+// waitForGosshd polls the gosshd SSH port until it answers or the deadline expires.
+func waitForGosshd(ctx context.Context, port uint16, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		dialCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		client, err := gosshd.Dial(dialCtx, addr)
+		cancel()
+		if err == nil {
+			client.Close()
+			return nil
+		}
+		lastErr = err
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(5 * time.Second):
 		}
 	}
+	return fmt.Errorf("gosshd at %s did not answer within %s: %w", addr, timeout, lastErr)
+}
 
-	// --- exec SSH into VM ---
-	logf("connecting via SSH...")
-	cmd := exec.Command(sshArgv[0], sshArgv[1:]...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	runErr := cmd.Run()
-
-	if syncMode == "two-way" {
-		if err := runProjectSync(qemu.BuildProjectPullArgv(spec), "pulling project back from guest"); err != nil {
-			logf("%v", err)
-		}
+// execViaGosshd connects to the PE guest's gosshd and runs the user command
+// inside WSL1. For interactive sessions (no args), it opens an interactive
+// WSL shell.
+func execViaGosshd(ctx context.Context, port uint16, userArgs []string, machine vmapi.VM, logf func(string, ...any)) error {
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	client, err := gosshd.Dial(ctx, addr)
+	if err != nil {
+		return fmt.Errorf("connecting to gosshd: %w", err)
 	}
+	defer client.Close()
 
-	if runErr != nil {
-		if exitErr, ok := runErr.(*exec.ExitError); ok {
-			os.Exit(exitErr.ExitCode())
-		}
-		return runErr
+	cmd := peGuestCommand(userArgs)
+	logf("running via gosshd: %s", cmd)
+
+	exitCode, err := client.RunStream(ctx, cmd, os.Stdout, os.Stderr)
+	if err != nil {
+		return fmt.Errorf("gosshd command failed: %w", err)
+	}
+	if exitCode != 0 {
+		os.Exit(exitCode)
 	}
 	return nil
 }

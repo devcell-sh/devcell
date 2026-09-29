@@ -3,17 +3,27 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"strings"
+	"syscall"
 
 	winkit "github.com/devcell-sh/go-winkit"
 	"github.com/devcell-sh/go-winkit/build"
 	"github.com/devcell-sh/go-winkit/build/buildopts"
 
 	"github.com/DimmKirr/devcell/internal/cfg"
+	"github.com/DimmKirr/devcell/internal/ux"
 	"github.com/DimmKirr/devcell/internal/vm/qemu"
 )
+
+// winkitBuildFunc is the function used to build PE images. Defaults to
+// winkit.Build; tests replace it to capture the config without running
+// a real build.
+var winkitBuildFunc = winkit.Build
 
 // peBuildConfig assembles a go-winkit build.Config for a PE+WSL1+Nix image
 // from devcell's cell config. windowsISO and virtioISO are resolved paths
@@ -60,7 +70,52 @@ func peStartOpts(cellName, hostHome, stack string, cellCfg cfg.CellSection, sshP
 	}
 }
 
+// peGuestCommand assembles the PowerShell command that runs inside the PE
+// guest. User args are forwarded into WSL1 via `wsl -d winkit -- <args>`.
+// With no args, an interactive WSL shell is opened.
+func peGuestCommand(userArgs []string) string {
+	if len(userArgs) == 0 {
+		return "wsl -d winkit"
+	}
+	return "wsl -d winkit -- " + strings.Join(userArgs, " ")
+}
+
 // runBuildQemu builds a Windows VM image using WinPE + WSL1 + Nix via go-winkit.
 func runBuildQemu(cellName, hostHome, baseDir, stack string, force, noCache, dryRun bool, cellCfg cfg.CellSection) error {
-	return fmt.Errorf("PE+WSL1 build path not yet implemented")
+	if dryRun {
+		dest := peImagePath(hostHome, stack, cellCfg.Modules)
+		fmt.Printf("PE+WSL1 build (dry-run)\n")
+		fmt.Printf("  dest:       %s\n", dest)
+		fmt.Printf("  cache:      %s\n", qemu.CacheDir(hostHome))
+		fmt.Printf("  windowsISO: %s\n", cellCfg.ResolvedQemuWindowsISO())
+		fmt.Printf("  virtioISO:  %s\n", qemu.VirtioISOPath(hostHome))
+		return nil
+	}
+
+	windowsISO, err := qemu.ResolveWindowsISO(
+		os.Getenv("DEVCELL_QEMU_WINDOWS_ISO"),
+		cellCfg.ResolvedQemuWindowsISO(),
+		hostHome,
+	)
+	if err != nil {
+		return fmt.Errorf("resolving Windows ISO: %w", err)
+	}
+
+	virtioISO := qemu.VirtioISOPath(hostHome)
+	if _, statErr := os.Stat(virtioISO); statErr != nil {
+		return fmt.Errorf("VirtIO drivers not found at %s: run `cell init --engine=qemu` first", virtioISO)
+	}
+
+	buildCfg := peBuildConfig(cellName, hostHome, stack, cellCfg, windowsISO, virtioISO)
+
+	if err := os.MkdirAll(filepath.Dir(buildCfg.Dest), 0o755); err != nil {
+		return fmt.Errorf("creating template dir: %w", err)
+	}
+
+	ux.Debugf("PE+WSL1 build: dest=%s windowsISO=%s virtioISO=%s", buildCfg.Dest, buildCfg.WindowsISO, buildCfg.VirtIOISO)
+
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	return winkitBuildFunc(ctx, buildCfg)
 }
