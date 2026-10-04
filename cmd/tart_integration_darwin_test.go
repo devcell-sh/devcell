@@ -31,14 +31,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/runner"
+	"github.com/DimmKirr/devcell/internal/engine/tart"
+	"github.com/DimmKirr/devcell/internal/nixhome"
 	"github.com/DimmKirr/devcell/internal/testutil"
 	"github.com/DimmKirr/devcell/internal/version"
-	"github.com/DimmKirr/devcell/internal/vm/tart"
 )
 
 func TestTartDarwinIntegration(t *testing.T) {
-	flakeRef := runner.ResolveNixhomeRef(version.Version)
+	flakeRef := nixhome.ResolveNixhomeRef(version.Version)
 
 	t.Run("environment", func(t *testing.T) {
 		resultsDir := testutil.TestResultsDir(t, nil)
@@ -72,7 +72,7 @@ func TestTartDarwinIntegration(t *testing.T) {
 	})
 
 	// Reproduces the first phase of the tart auto-build
-	// (build_tart_darwin.go "Platform compatibility check"), which fails
+	// (internal/engine/tart/engine_darwin.go "Platform compatibility check"), which fails
 	// when a nixhome module pulls in a Linux-only package (e.g. CELL: the
 	// vm module's virtiofsd broke `cell claude --os macos`).
 	t.Run("platform-preflight", func(t *testing.T) {
@@ -87,7 +87,7 @@ func TestTartDarwinIntegration(t *testing.T) {
 
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 		defer cancel()
-		preflightErr := runner.PreflightPlatformCheck(ctx, flakeRef, "aarch64-darwin")
+		preflightErr := nixhome.PreflightPlatformCheck(ctx, flakeRef, "aarch64-darwin")
 
 		writeJSON(t, filepath.Join(resultsDir, "run.json"), map[string]any{
 			"flake_ref":       flakeRef,
@@ -109,7 +109,7 @@ func TestTartDarwinIntegration(t *testing.T) {
 		isStore := tart.IsNixStore("/nix")
 
 		result := map[string]any{
-			"detected":    hostNix,
+			"detected":     hostNix,
 			"is_nix_store": isStore,
 		}
 

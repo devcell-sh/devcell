@@ -17,7 +17,7 @@ func fakeLookup(m map[string]string) func(string) (string, bool) {
 
 func TestExpandEnv_Plain_PassesThrough(t *testing.T) {
 	env := map[string]string{"FOO": "literal"}
-	if err := ExpandEnv(env, fakeLookup(nil)); err != nil {
+	if err := ExpandEnv(env, fakeLookup(nil), nil); err != nil {
 		t.Fatalf("plain value should not error, got %v", err)
 	}
 	if env["FOO"] != "literal" {
@@ -27,7 +27,7 @@ func TestExpandEnv_Plain_PassesThrough(t *testing.T) {
 
 func TestExpandEnv_BracedVar_Resolves(t *testing.T) {
 	env := map[string]string{"KC": "${KUBECONFIG}"}
-	if err := ExpandEnv(env, fakeLookup(map[string]string{"KUBECONFIG": "/path"})); err != nil {
+	if err := ExpandEnv(env, fakeLookup(map[string]string{"KUBECONFIG": "/path"}), nil); err != nil {
 		t.Fatalf("err = %v", err)
 	}
 	if env["KC"] != "/path" {
@@ -37,7 +37,7 @@ func TestExpandEnv_BracedVar_Resolves(t *testing.T) {
 
 func TestExpandEnv_ShortVar_Resolves(t *testing.T) {
 	env := map[string]string{"KC": "$KUBECONFIG"}
-	if err := ExpandEnv(env, fakeLookup(map[string]string{"KUBECONFIG": "/path"})); err != nil {
+	if err := ExpandEnv(env, fakeLookup(map[string]string{"KUBECONFIG": "/path"}), nil); err != nil {
 		t.Fatalf("err = %v", err)
 	}
 	if env["KC"] != "/path" {
@@ -47,7 +47,7 @@ func TestExpandEnv_ShortVar_Resolves(t *testing.T) {
 
 func TestExpandEnv_Missing_ReturnsErrorWithPath(t *testing.T) {
 	env := map[string]string{"KC": "${KUBECONFIG}"}
-	err := ExpandEnv(env, fakeLookup(nil))
+	err := ExpandEnv(env, fakeLookup(nil), nil)
 	if err == nil {
 		t.Fatal("expected error for missing var")
 	}
@@ -62,7 +62,7 @@ func TestExpandEnv_Missing_ReturnsErrorWithPath(t *testing.T) {
 
 func TestExpandEnv_SetButEmpty_IsMiss(t *testing.T) {
 	env := map[string]string{"KC": "${KUBECONFIG}"}
-	err := ExpandEnv(env, fakeLookup(map[string]string{"KUBECONFIG": ""}))
+	err := ExpandEnv(env, fakeLookup(map[string]string{"KUBECONFIG": ""}), nil)
 	if err == nil {
 		t.Fatal("set-but-empty should be treated as miss")
 	}
@@ -73,7 +73,7 @@ func TestExpandEnv_SetButEmpty_IsMiss(t *testing.T) {
 
 func TestExpandEnv_MultipleMisses_AllReported(t *testing.T) {
 	env := map[string]string{"A": "${X}", "B": "${Y}"}
-	err := ExpandEnv(env, fakeLookup(nil))
+	err := ExpandEnv(env, fakeLookup(nil), nil)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -87,7 +87,7 @@ func TestExpandEnv_MultipleMisses_AllReported(t *testing.T) {
 
 func TestExpandEnv_SameVar_ManyPaths_AllRecorded(t *testing.T) {
 	env := map[string]string{"A": "${X}", "B": "${X}"}
-	err := ExpandEnv(env, fakeLookup(nil))
+	err := ExpandEnv(env, fakeLookup(nil), nil)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -99,7 +99,7 @@ func TestExpandEnv_SameVar_ManyPaths_AllRecorded(t *testing.T) {
 
 func TestExpandEnv_ErrorMessage_SortedAndFormatted(t *testing.T) {
 	env := map[string]string{"A": "${ZED}", "B": "${ALPHA}"}
-	err := ExpandEnv(env, fakeLookup(nil))
+	err := ExpandEnv(env, fakeLookup(nil), nil)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -113,15 +113,66 @@ func TestExpandEnv_ErrorMessage_SortedAndFormatted(t *testing.T) {
 	}
 }
 
+func TestExpandEnv_SecretRef_Resolves(t *testing.T) {
+	secrets := map[string]string{"API_TOKEN": "tok_123"}
+	env := map[string]string{"MY_KEY": "${secret:API_TOKEN}"}
+	if err := ExpandEnv(env, fakeLookup(nil), secrets); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if env["MY_KEY"] != "tok_123" {
+		t.Errorf("MY_KEY = %q, want tok_123", env["MY_KEY"])
+	}
+}
+
+func TestExpandEnv_SecretRef_MissingReportsError(t *testing.T) {
+	env := map[string]string{"MY_KEY": "${secret:MISSING_TOKEN}"}
+	err := ExpandEnv(env, fakeLookup(nil), nil)
+	if err == nil {
+		t.Fatal("expected error for missing secret")
+	}
+	paths, ok := err.Refs["secret:MISSING_TOKEN"]
+	if !ok {
+		t.Fatalf("Refs missing secret:MISSING_TOKEN: %v", err.Refs)
+	}
+	if len(paths) != 1 || paths[0] != "[env].MY_KEY" {
+		t.Errorf("path = %v, want [[env].MY_KEY]", paths)
+	}
+}
+
+func TestExpandEnv_SecretRef_MixedWithHostVar(t *testing.T) {
+	secrets := map[string]string{"DB_PASS": "p4ss"}
+	lookup := fakeLookup(map[string]string{"DB_HOST": "localhost"})
+	env := map[string]string{"DSN": "postgres://${DB_HOST}:${secret:DB_PASS}@db/app"}
+	if err := ExpandEnv(env, lookup, secrets); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "postgres://localhost:p4ss@db/app"
+	if env["DSN"] != want {
+		t.Errorf("DSN = %q, want %q", env["DSN"], want)
+	}
+}
+
+func TestExpandEnv_SecretRef_EmptyValueIsMiss(t *testing.T) {
+	secrets := map[string]string{"EMPTY": ""}
+	env := map[string]string{"K": "${secret:EMPTY}"}
+	err := ExpandEnv(env, fakeLookup(nil), secrets)
+	if err == nil {
+		t.Fatal("empty secret value should be treated as miss")
+	}
+	if _, ok := err.Refs["secret:EMPTY"]; !ok {
+		t.Errorf("Refs should include secret:EMPTY: %v", err.Refs)
+	}
+}
+
 func TestExpandEnv_NilEnv_NoOp(t *testing.T) {
-	if err := ExpandEnv(nil, fakeLookup(nil)); err != nil {
+	if err := ExpandEnv(nil, fakeLookup(nil), nil); err != nil {
 		t.Errorf("nil env should be a no-op, got %v", err)
 	}
 }
 
 func TestExpandEnv_EmptyEnv_NoOp(t *testing.T) {
 	env := map[string]string{}
-	if err := ExpandEnv(env, fakeLookup(nil)); err != nil {
+	if err := ExpandEnv(env, fakeLookup(nil), nil); err != nil {
 		t.Errorf("empty env should be a no-op, got %v", err)
 	}
 }

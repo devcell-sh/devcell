@@ -14,7 +14,7 @@ import (
 )
 
 // DefaultRegistry is the default container registry for devcell images.
-// Must match runner.DefaultRegistry.
+// Must match docker.DefaultRegistry.
 const DefaultRegistry = "ghcr.io/devcell-sh/devcell"
 
 // DefaultNixImage is the pinned nixos/nix image for thin builds.
@@ -25,57 +25,54 @@ const DefaultNixImage = "nixos/nix:2.34.7"
 // DefaultTartOCIImage is the default macOS base image for tart VMs.
 const DefaultTartOCIImage = "ghcr.io/cirruslabs/macos-sequoia-base:latest"
 
-// DefaultLibvirtURI targets the macOS host's session libvirtd as seen from
-// inside a Docker cell (CELL-372).
-const DefaultLibvirtURI = "qemu+tcp://host.docker.internal/session"
-
 // CellSection holds [cell] config.
 type CellSection struct {
-	ImageTag        string            `toml:"image_tag"`
-	Registry        string            `toml:"registry"`          // container registry; default: DefaultRegistry; env: DEVCELL_REGISTRY
-	GUI             *bool             `toml:"gui"`               // default: true (nil = not set → true)
-	Timezone        string            `toml:"timezone"`          // IANA tz (e.g. "Europe/Prague"); default: host $TZ
-	Locale          string            `toml:"locale"`            // POSIX locale (e.g. "en_US.UTF-8"); default: "en_US.UTF-8"
-	Stack           string            `toml:"stack"`             // nix stack name (e.g. "go", "python"); default: "base" (see ResolvedStack)
-	Modules         []string          `toml:"modules"`           // extra nix modules to compose on top of stack
-	NixhomePath     string            `toml:"nixhome"`           // deprecated: use [nix] nixhome instead
-	OS              string            `toml:"os"`                // guest OS: "linux" (default), "macos", "windows"; derives engine when [cell].engine is unset
-	Engine          string            `toml:"engine"`            // execution engine: "docker" (default) or "vagrant"
-	VagrantProvider string            `toml:"vagrant_provider"`  // vagrant provider: "utm" (default) or "libvirt"
-	VagrantBox      string            `toml:"vagrant_box"`       // vagrant box name override (default: "utm/bookworm")
-	KVM             *bool             `toml:"kvm"`               // pass the daemon host's /dev/kvm into the container so QEMU gets hardware accel instead of TCG; default: false; env: DEVCELL_KVM
-	PerCellImage    *bool             `toml:"per_cell_image"`    // tag user image per cell instead of per stack; default: false
-	Hostname        string            `toml:"hostname"`          // override container hostname; default: computed "cell-<basename>-<bunk>"; env: DEVCELL_HOSTNAME
-	MacAddress      string            `toml:"mac_address"`       // MAC for the container's NIC (XX:XX:XX:XX:XX:XX); pinned across restarts for infra-side identity persistence. Honored on user-defined bridge networks (devcell uses --network devcell-network). Empty → docker auto-assigns a random MAC per launch.
-	Thin            *bool             `toml:"thin"`              // thin image mode; default: true; disable with thin=false or DEVCELL_THIN=0
-	StaleWarning    *bool             `toml:"stale_warning"`     // CELL-391 "cell is behind — parallel reality" nudge at start; default: true; env: DEVCELL_STALE_WARN
-	Background      *bool             `toml:"background"`        // keep VM/container running after shell exit; default: false; env: DEVCELL_BACKGROUND
-	TartSSHPort     int               `toml:"tart_ssh_port"`     // SSH port for tart engine; default: 22; env: DEVCELL_TART_SSH_PORT
-	TartSSHHost     string            `toml:"tart_ssh_host"`     // SSH host for tart engine; default: "localhost"; env: DEVCELL_TART_SSH_HOST
-	TartSSHUser     string            `toml:"tart_ssh_user"`     // SSH user for tart engine; default: "admin"; env: DEVCELL_TART_SSH_USER
-	TartSSHKey      string            `toml:"tart_ssh_key"`      // path to SSH private key for tart; env: DEVCELL_TART_SSH_KEY
-	TartOCIImage    string            `toml:"tart_oci_image"`    // OCI base image for tart VMs; default: DefaultTartOCIImage; env: DEVCELL_TART_OCI_IMAGE
-	QemuSSHPort     int               `toml:"qemu_ssh_port"`     // SSH port for QEMU engine; default: 2222; env: DEVCELL_QEMU_SSH_PORT
-	QemuSSHHost     string            `toml:"qemu_ssh_host"`     // SSH host for QEMU engine; default: "127.0.0.1"; env: DEVCELL_QEMU_SSH_HOST
-	QemuWindowsISO  string            `toml:"qemu_windows_iso"`  // path to Windows ARM64 ISO; env: DEVCELL_QEMU_WINDOWS_ISO
-	QemuCPUs        int               `toml:"qemu_cpus"`         // QEMU vCPUs; default: 4; env: DEVCELL_QEMU_CPUS
-	QemuMemoryGB    int               `toml:"qemu_memory_gb"`    // QEMU RAM in GB; default: 4; env: DEVCELL_QEMU_MEMORY_GB
-	QemuDiskSizeGB  int               `toml:"qemu_disk_size_gb"` // QEMU disk size in GB; default: 64; env: DEVCELL_QEMU_DISK_SIZE_GB
-	QemuDisplay     string            `toml:"qemu_display"`      // QEMU display: "none", "cocoa", "sdl"; default: "none"; env: DEVCELL_QEMU_DISPLAY
-	LibvirtURI      string            `toml:"libvirt_uri"`       // libvirtd connection URI for the libvirt engine; default: DefaultLibvirtURI; env: DEVCELL_LIBVIRT_URI
-	LibvirtPathMap  map[string]string `toml:"libvirt_path_map"`  // container prefix -> host prefix rewrites for domain XML paths (CELL-375); empty = CLI runs on the host
-	QemuProjectSync string            `toml:"qemu_project_sync"` // project sync for qemu/libvirt engines: "push" (default), "two-way", "off"; env: DEVCELL_QEMU_PROJECT_SYNC (CELL-383)
-	DefaultCommand  string            `toml:"default_command"`   // subcommand to run when `cell` is invoked with no args; env: DEVCELL_DEFAULT_COMMAND
-	Flake           *bool             `toml:"flake"`             // enable project-level flake.nix install; default: false (opt-in); env: DEVCELL_FLAKE
-	Packages        []string          `toml:"packages"`          // shorthand for [packages.nix] stable: nix packages baked into the image at build time
-	Volumes         []string          `toml:"volumes"`           // shorthand volume list: "/path", "/host:/container", "/host:/container:ro"
-	Ports           []string          `toml:"ports"`             // shorthand port forwards: "3000", "8080:3000" (merged into [ports] forward)
-	Mcps            []string          `toml:"mcps"`              // shorthand MCP servers to enable: ["playwright", "aws-api"] (merged into [mcp] enabled)
+	ImageTag         string            `toml:"image_tag"`
+	Registry         string            `toml:"registry"`                // container registry; default: DefaultRegistry; env: DEVCELL_REGISTRY
+	GUI              *bool             `toml:"gui"`                     // default: true (nil = not set → true)
+	Timezone         string            `toml:"timezone"`                // IANA tz (e.g. "Europe/Prague"); default: host $TZ
+	Locale           string            `toml:"locale"`                  // POSIX locale (e.g. "en_US.UTF-8"); default: "en_US.UTF-8"
+	Stack            string            `toml:"stack"`                   // nix stack name (e.g. "go", "python"); default: "base" (see ResolvedStack)
+	Modules          []string          `toml:"modules"`                 // extra nix modules to compose on top of stack
+	NixhomePath      string            `toml:"nixhome"`                 // deprecated: use [nix] nixhome instead
+	OS               string            `toml:"os"`                      // guest OS: "linux" (default), "macos", "windows" or "winpe"; derives engine when [cell].engine is unset
+	Engine           string            `toml:"engine"`                  // execution engine: "docker" (default), "tart" or "winkit"
+	VagrantProvider  string            `toml:"vagrant_provider"`        // retired vagrant engine; parsed only so the deprecation warning fires
+	VagrantBox       string            `toml:"vagrant_box"`             // retired vagrant engine; parsed only so the deprecation warning fires
+	KVM              *bool             `toml:"kvm"`                     // pass the daemon host's /dev/kvm into the container so QEMU gets hardware accel instead of TCG; default: false; env: DEVCELL_KVM
+	PerCellImage     *bool             `toml:"per_cell_image"`          // tag user image per cell instead of per stack; default: false
+	Hostname         string            `toml:"hostname"`                // override container hostname; default: computed "cell-<basename>-<bunk>"; env: DEVCELL_HOSTNAME
+	MacAddress       string            `toml:"mac_address"`             // MAC for the container's NIC (XX:XX:XX:XX:XX:XX); pinned across restarts for infra-side identity persistence. Honored on user-defined bridge networks (devcell uses --network devcell-network). Empty → docker auto-assigns a random MAC per launch.
+	Thin             *bool             `toml:"thin"`                    // thin image mode; default: true; disable with thin=false or DEVCELL_THIN=0
+	StaleWarning     *bool             `toml:"stale_warning"`           // CELL-391 "cell is behind — parallel reality" nudge at start; default: true; env: DEVCELL_STALE_WARN
+	Background       *bool             `toml:"background"`              // keep VM/container running after shell exit; default: false; env: DEVCELL_BACKGROUND
+	TartSSHPort      int               `toml:"tart_ssh_port"`           // SSH port for tart engine; default: 22; env: DEVCELL_TART_SSH_PORT
+	TartSSHHost      string            `toml:"tart_ssh_host"`           // SSH host for tart engine; default: "localhost"; env: DEVCELL_TART_SSH_HOST
+	TartSSHUser      string            `toml:"tart_ssh_user"`           // SSH user for tart engine; default: "admin"; env: DEVCELL_TART_SSH_USER
+	TartSSHKey       string            `toml:"tart_ssh_key"`            // path to SSH private key for tart; env: DEVCELL_TART_SSH_KEY
+	TartOCIImage     string            `toml:"tart_oci_image"`          // OCI base image for tart VMs; default: DefaultTartOCIImage; env: DEVCELL_TART_OCI_IMAGE
+	WinkitSSHPort    int               `toml:"winkit_ssh_port"`         // SSH port for winkit engine; default: allocated per bunk; env: DEVCELL_WINKIT_SSH_PORT
+	WinkitWindowsISO string            `toml:"winkit_windows_iso"`      // path to Windows ARM64 ISO for winkit engine; env: DEVCELL_WINKIT_WINDOWS_ISO
+	WinkitCPUs       int               `toml:"winkit_cpus"`             // winkit VM vCPUs; default: 4; env: DEVCELL_WINKIT_CPUS
+	WinkitMemoryGB   int               `toml:"winkit_memory_gb"`        // winkit VM RAM in GB; default: 4; env: DEVCELL_WINKIT_MEMORY_GB
+	QemuSSHPort      int               `toml:"qemu_ssh_port" hm:"-"`    // deprecated spelling of winkit_ssh_port; merged into it by LoadFile
+	QemuSSHHost      string            `toml:"qemu_ssh_host"`           // deprecated, no effect; parsed only so the deprecation warning fires
+	QemuWindowsISO   string            `toml:"qemu_windows_iso" hm:"-"` // deprecated spelling of winkit_windows_iso; merged into it by LoadFile
+	QemuCPUs         int               `toml:"qemu_cpus" hm:"-"`        // deprecated spelling of winkit_cpus; merged into it by LoadFile
+	QemuMemoryGB     int               `toml:"qemu_memory_gb" hm:"-"`   // deprecated spelling of winkit_memory_gb; merged into it by LoadFile
+	QemuDiskSizeGB   int               `toml:"qemu_disk_size_gb"`       // no effect; parsed only so the deprecation warning fires
+	QemuDisplay      string            `toml:"qemu_display"`            // deprecated, no effect; parsed only so the deprecation warning fires
+	LibvirtURI       string            `toml:"libvirt_uri"`             // retired libvirt engine; parsed only so the deprecation warning fires
+	LibvirtPathMap   map[string]string `toml:"libvirt_path_map"`        // container prefix -> host prefix rewrites for domain XML paths (CELL-375); empty = CLI runs on the host
+	QemuProjectSync  string            `toml:"qemu_project_sync"`       // retired with the libvirt engine; parsed only so the deprecation warning fires
+	DefaultCommand   string            `toml:"default_command"`         // subcommand to run when `cell` is invoked with no args; env: DEVCELL_DEFAULT_COMMAND
+	Flake            *bool             `toml:"flake"`                   // enable project-level flake.nix install; default: false (opt-in); env: DEVCELL_FLAKE
+	Packages         []string          `toml:"packages"`                // nix packages from the stable channel, baked into the image at build time
+	Volumes          []string          `toml:"volumes"`                 // shorthand volume list: "/path", "/host:/container", "/host:/container:ro"
+	Ports            []string          `toml:"ports"`                   // shorthand port forwards: "3000", "8080:3000" (merged into [ports] forward)
+	Mcps             []string          `toml:"mcps"`                    // shorthand MCP servers to enable: ["playwright", "aws-api"] (merged into [mcp] enabled)
 }
 
-// ResolvedQemuProjectSync returns the effective project sync mode:
-// env > toml > "push". Anything but off/push/two-way resolves to "push" —
-// the safe default (guest gets files, nothing overwritten on the host).
 // StaleWarningEnabled reports whether the CELL-391 stale-cell nudge should
 // fire at cell start. Default (unset) is enabled — it's a read-only nudge
 // with a proceed-by-default prompt, so opting out is the explicit act.
@@ -83,29 +80,10 @@ func (c CellSection) StaleWarningEnabled() bool {
 	return c.StaleWarning == nil || *c.StaleWarning
 }
 
-func (c CellSection) ResolvedQemuProjectSync() string {
-	v := os.Getenv("DEVCELL_QEMU_PROJECT_SYNC")
-	if v == "" {
-		v = c.QemuProjectSync
-	}
-	switch v {
-	case "off", "push", "two-way":
-		return v
-	}
-	return "push"
-}
-
 var knownDefaultCommands = []string{
 	"claude", "codex", "opencode", "gemini", "shell",
 	"build", "init", "vnc", "rdp", "models", "modules",
 	"serve", "auth", "telemetry",
-}
-
-// KnownDefaultCommands returns the list of valid default_command values.
-func KnownDefaultCommands() []string {
-	out := make([]string, len(knownDefaultCommands))
-	copy(out, knownDefaultCommands)
-	return out
 }
 
 // ResolvedDefaultCommand returns the effective default command: env > toml > "".
@@ -131,17 +109,6 @@ func ValidateDefaultCommand(cmd string) error {
 	copy(sorted, knownDefaultCommands)
 	sort.Strings(sorted)
 	return fmt.Errorf("unknown default_command %q; available commands: %s", cmd, strings.Join(sorted, ", "))
-}
-
-// ResolvedLibvirtURI returns the effective libvirtd URI: env > toml > default.
-func (c CellSection) ResolvedLibvirtURI() string {
-	if v := os.Getenv("DEVCELL_LIBVIRT_URI"); v != "" {
-		return v
-	}
-	if c.LibvirtURI != "" {
-		return c.LibvirtURI
-	}
-	return DefaultLibvirtURI
 }
 
 // ResolvedBackground returns the effective background setting: default OFF, enabled by env/toml.
@@ -226,86 +193,50 @@ func (c CellSection) ResolvedTartOCIImage() string {
 	return DefaultTartOCIImage
 }
 
-// ResolvedQemuSSHPort returns the effective QEMU SSH port: env > toml > default 2222.
-func (c CellSection) ResolvedQemuSSHPort() int {
-	if v := os.Getenv("DEVCELL_QEMU_SSH_PORT"); v != "" {
-		if p := atoiOr(v, 0); p > 0 {
-			return p
-		}
+// ResolvedWinkitSSHPort returns the effective winkit SSH port:
+// DEVCELL_WINKIT_SSH_PORT > toml > default 2222. The winkit engine only
+// uses it when one of them is set; otherwise it allocates a port per bunk.
+func (c CellSection) ResolvedWinkitSSHPort() int {
+	if p := atoiOr(Getenv("DEVCELL_WINKIT_SSH_PORT"), 0); p > 0 {
+		return p
 	}
-	if c.QemuSSHPort > 0 {
-		return c.QemuSSHPort
+	if c.WinkitSSHPort > 0 {
+		return c.WinkitSSHPort
 	}
 	return 2222
 }
 
-// ResolvedQemuSSHHost returns the effective QEMU SSH host: env > toml > default "127.0.0.1".
-func (c CellSection) ResolvedQemuSSHHost() string {
-	if v := os.Getenv("DEVCELL_QEMU_SSH_HOST"); v != "" {
+// ResolvedWinkitWindowsISO returns the Windows ISO path:
+// DEVCELL_WINKIT_WINDOWS_ISO > toml > "".
+func (c CellSection) ResolvedWinkitWindowsISO() string {
+	if v := Getenv("DEVCELL_WINKIT_WINDOWS_ISO"); v != "" {
 		return v
 	}
-	if c.QemuSSHHost != "" {
-		return c.QemuSSHHost
-	}
-	return "127.0.0.1"
+	return c.WinkitWindowsISO
 }
 
-// ResolvedQemuWindowsISO returns the Windows ISO path: env > toml > "".
-func (c CellSection) ResolvedQemuWindowsISO() string {
-	if v := os.Getenv("DEVCELL_QEMU_WINDOWS_ISO"); v != "" {
-		return v
+// ResolvedWinkitCPUs returns the effective winkit vCPU count:
+// DEVCELL_WINKIT_CPUS > toml > default 4.
+func (c CellSection) ResolvedWinkitCPUs() int {
+	if n := atoiOr(Getenv("DEVCELL_WINKIT_CPUS"), 0); n > 0 {
+		return n
 	}
-	return c.QemuWindowsISO
-}
-
-// ResolvedQemuCPUs returns the effective QEMU vCPU count: env > toml > default 4.
-func (c CellSection) ResolvedQemuCPUs() int {
-	if v := os.Getenv("DEVCELL_QEMU_CPUS"); v != "" {
-		if n := atoiOr(v, 0); n > 0 {
-			return n
-		}
-	}
-	if c.QemuCPUs > 0 {
-		return c.QemuCPUs
+	if c.WinkitCPUs > 0 {
+		return c.WinkitCPUs
 	}
 	return 4
 }
 
-// ResolvedQemuMemoryGB returns the effective QEMU memory: env > toml > default 4.
-func (c CellSection) ResolvedQemuMemoryGB() int {
-	if v := os.Getenv("DEVCELL_QEMU_MEMORY_GB"); v != "" {
-		if n := atoiOr(v, 0); n > 0 {
-			return n
-		}
+// ResolvedWinkitMemoryGB returns the effective winkit memory in GB:
+// DEVCELL_WINKIT_MEMORY_GB > toml > default 4.
+func (c CellSection) ResolvedWinkitMemoryGB() int {
+	if n := atoiOr(Getenv("DEVCELL_WINKIT_MEMORY_GB"), 0); n > 0 {
+		return n
 	}
-	if c.QemuMemoryGB > 0 {
-		return c.QemuMemoryGB
+	if c.WinkitMemoryGB > 0 {
+		return c.WinkitMemoryGB
 	}
 	return 4
-}
-
-// ResolvedQemuDiskSizeGB returns the effective QEMU disk size: env > toml > default 64.
-func (c CellSection) ResolvedQemuDiskSizeGB() int {
-	if v := os.Getenv("DEVCELL_QEMU_DISK_SIZE_GB"); v != "" {
-		if n := atoiOr(v, 0); n > 0 {
-			return n
-		}
-	}
-	if c.QemuDiskSizeGB > 0 {
-		return c.QemuDiskSizeGB
-	}
-	return 64
-}
-
-// ResolvedQemuDisplay returns the effective QEMU display: env > toml > default "none".
-func (c CellSection) ResolvedQemuDisplay() string {
-	if v := os.Getenv("DEVCELL_QEMU_DISPLAY"); v != "" {
-		return v
-	}
-	if c.QemuDisplay != "" {
-		return c.QemuDisplay
-	}
-	return "none"
 }
 
 // ResolvedThin returns the effective thin setting: default ON, disabled by env/toml.
@@ -444,6 +375,23 @@ func mergeCellVolumes(c *CellConfig) {
 	}
 }
 
+// mergeWinkitKeys copies the deprecated qemu_* spellings into their winkit_*
+// replacements. A winkit_* key set in the same file wins.
+func mergeWinkitKeys(c *CellSection) {
+	if c.WinkitSSHPort == 0 {
+		c.WinkitSSHPort = c.QemuSSHPort
+	}
+	if c.WinkitWindowsISO == "" {
+		c.WinkitWindowsISO = c.QemuWindowsISO
+	}
+	if c.WinkitCPUs == 0 {
+		c.WinkitCPUs = c.QemuCPUs
+	}
+	if c.WinkitMemoryGB == 0 {
+		c.WinkitMemoryGB = c.QemuMemoryGB
+	}
+}
+
 // mergeCellPorts appends [cell] ports entries into [ports] forward,
 // deduplicating by value. Existing [ports] forward entries take precedence.
 func mergeCellPorts(c *CellConfig) {
@@ -522,22 +470,102 @@ type NixPackages struct {
 }
 
 // PackagesSection holds [packages] config for npm, python, and nix tools.
+// Nix packages are built into the image; npm and python tools are installed
+// by mise at container start (see MiseTools).
 type PackagesSection struct {
-	Npm    map[string]string `toml:"npm"`
-	Python map[string]string `toml:"python"`
+	Node   map[string]string `toml:"node"`   // name → npm version or range; "*" = latest
+	Python map[string]string `toml:"python"` // name → mise version: "latest", "0.6", "0.6.9"; "*" = latest
 	Nix    NixPackages       `toml:"nix"`
+
+	// Deprecated [packages.npm], merged into Node by mergePackagesNode.
+	Npm map[string]string `toml:"npm" hm:"-"`
 }
 
-// LLMProvider holds a single provider entry under [llm.models.providers.<name>].
+// MiseTools renders [packages.python] and [packages.node] as a mise [tools]
+// table (pipx:<name>, one venv per tool; npm:<name>), sorted by key. The
+// container writes it to a mise conf.d file and installs it at start.
+// Returns "" when both tables are empty.
+func (p PackagesSection) MiseTools() string {
+	var lines []string
+	add := func(backend string, pkgs map[string]string) {
+		for name, ver := range pkgs {
+			if ver == "" || ver == "*" {
+				ver = "latest"
+			}
+			lines = append(lines, fmt.Sprintf("%q = %q", backend+":"+name, ver))
+		}
+	}
+	add("pipx", p.Python)
+	add("npm", p.Node)
+	if len(lines) == 0 {
+		return ""
+	}
+	sort.Strings(lines)
+	return "[tools]\n" + strings.Join(lines, "\n") + "\n"
+}
+
+// mergePackagesNode folds the deprecated [packages.npm] into
+// [packages.node]; [packages.node] wins on a key conflict.
+func mergePackagesNode(p *PackagesSection) {
+	for name, ver := range p.Npm {
+		if _, ok := p.Node[name]; ok {
+			continue
+		}
+		if p.Node == nil {
+			p.Node = make(map[string]string, len(p.Npm))
+		}
+		p.Node[name] = ver
+	}
+	p.Npm = nil
+}
+
+// validatePythonVersions rejects PEP 440 ranges: mise pins pipx tools with
+// ==, so ">=0.6" would only fail later, at container start.
+func validatePythonVersions(pkgs map[string]string) error {
+	for name, ver := range pkgs {
+		if strings.ContainsAny(ver, "<>=!~^,") {
+			return fmt.Errorf(`[packages.python] %q = %q: version ranges are not supported; use "latest", a prefix like "0.6", or an exact version like "0.6.9"`, name, ver)
+		}
+	}
+	return nil
+}
+
+// LLMProvider holds a single provider entry under [llm.providers.<name>].
 type LLMProvider struct {
 	BaseURL string   `toml:"base_url"`
 	Models  []string `toml:"models"`
 }
 
-// LLMModelsSection holds [llm.models] config — provider/model declarations.
+// LLMModelsSection pairs the default model with the provider catalog. It is
+// also the shape of the deprecated [llm.models] table.
 type LLMModelsSection struct {
 	Default   string                 `toml:"default"`
 	Providers map[string]LLMProvider `toml:"providers"`
+}
+
+// LLM providers that route agent traffic; empty means LLMProviderDefault.
+const (
+	// LLMProviderDefault means no rerouting: each agent uses its own vendor's
+	// backend and login (Claude Code → Anthropic, Codex → OpenAI).
+	LLMProviderDefault    = "default"
+	LLMProviderOllama     = "ollama"
+	LLMProviderOpenRouter = "openrouter"
+	LLMProviderLMStudio   = "lmstudio"
+)
+
+// llmBuiltinProviders have a built-in base_url, so [llm.providers.<name>]
+// may omit it. Any other name is a custom provider and must set base_url.
+var llmBuiltinProviders = map[string]bool{
+	LLMProviderOllama: true, LLMProviderOpenRouter: true, LLMProviderLMStudio: true,
+}
+
+// llmModelPrefixDeprecation is value-based (a "provider/" prefix inside
+// [llm] model), so it is not in the key-based Deprecations table.
+var llmModelPrefixDeprecation = Deprecation{
+	Path:        []string{"llm", "model"},
+	Name:        `[llm] model = "<provider>/<model>"`,
+	Replacement: "[llm] provider + model",
+	Message:     `set the provider separately: [llm] provider = "ollama" and model = "qwen3:8b"`,
 }
 
 // LLMSection holds [llm] config — all AI agent settings in one place.
@@ -552,18 +580,106 @@ type LLMModelsSection struct {
 //     container context devcell always contributes.
 //
 // Within a layer the inline and file forms are mutually exclusive — set one
-// or neither. The resolver in internal/runner.ResolveSystemPrompt validates
+// or neither. The resolver in internal/cell.ResolveSystemPrompt validates
 // this and returns an error when both are set, so we don't fail config
 // load for projects where the conflict is harmless (e.g. callers that
 // don't read system prompts).
 type LLMSection struct {
-	SystemPrompt           string           `toml:"system_prompt"`
-	SystemPromptFile       string           `toml:"system_prompt_file"`
-	AppendSystemPrompt     string           `toml:"append_system_prompt"`
-	AppendSystemPromptFile string           `toml:"append_system_prompt_file"`
-	UseOllama              bool             `toml:"use_ollama"`
-	UseOpenRouter          bool             `toml:"use_openrouter"`
-	Models                 LLMModelsSection `toml:"models"`
+	SystemPrompt           string `toml:"system_prompt"`
+	SystemPromptFile       string `toml:"system_prompt_file"`
+	AppendSystemPrompt     string `toml:"append_system_prompt"`
+	AppendSystemPromptFile string `toml:"append_system_prompt_file"`
+
+	Provider  string                 `toml:"provider"`  // default | ollama | openrouter
+	Model     string                 `toml:"model"`     // the provider's own model ID, no prefix
+	Providers map[string]LLMProvider `toml:"providers"` // per-provider base_url + models
+
+	// Deprecated keys, migrated into the fields above by migrateLLM.
+	UseOllama     bool             `toml:"use_ollama" hm:"-"`
+	UseOpenRouter bool             `toml:"use_openrouter" hm:"-"`
+	Models        LLMModelsSection `toml:"models" hm:"-"`
+}
+
+// ActiveProvider returns Provider, defaulting to "default".
+func (l LLMSection) ActiveProvider() string {
+	if l.Provider == "" {
+		return LLMProviderDefault
+	}
+	return l.Provider
+}
+
+// ModelFor returns [llm] model when provider is the configured one, else "".
+// The model ID belongs to its provider; a flag switching providers for one
+// run must not carry it over.
+func (l LLMSection) ModelFor(provider string) string {
+	if l.ActiveProvider() != provider {
+		return ""
+	}
+	return l.Model
+}
+
+// migrateLLM folds the deprecated use_ollama / use_openrouter / [llm.models]
+// keys into provider / model / providers (new keys win on conflict), splits a
+// legacy "ollama/" or "openrouter/" model prefix into provider, and validates
+// the result. prefixed reports whether a model prefix was split off.
+func migrateLLM(l *LLMSection) (prefixed bool, err error) {
+	legacy := ""
+	switch {
+	case l.UseOllama && l.UseOpenRouter:
+		return false, fmt.Errorf("[llm] use_ollama and use_openrouter are both set; use [llm] provider = \"ollama\" or \"openrouter\"")
+	case l.UseOllama:
+		legacy = LLMProviderOllama
+	case l.UseOpenRouter:
+		legacy = LLMProviderOpenRouter
+	}
+	if legacy != "" {
+		if l.Provider != "" && l.Provider != legacy {
+			return false, fmt.Errorf("[llm] provider = %q conflicts with deprecated use_%s = true", l.Provider, legacy)
+		}
+		l.Provider = legacy
+	}
+	switch l.Provider {
+	case "", LLMProviderDefault, LLMProviderOllama, LLMProviderOpenRouter:
+	case "anthropic":
+		return false, fmt.Errorf(`[llm] provider = "anthropic": use "default" (each agent's own backend; Claude Code uses Anthropic)`)
+	default:
+		return false, fmt.Errorf("[llm] provider = %q: must be %q, %q or %q", l.Provider, LLMProviderDefault, LLMProviderOllama, LLMProviderOpenRouter)
+	}
+	if l.Model == "" {
+		l.Model = l.Models.Default
+	}
+	for name, p := range l.Models.Providers {
+		if _, ok := l.Providers[name]; ok {
+			continue
+		}
+		if l.Providers == nil {
+			l.Providers = make(map[string]LLMProvider)
+		}
+		l.Providers[name] = p
+	}
+	l.UseOllama, l.UseOpenRouter, l.Models = false, false, LLMModelsSection{}
+
+	// Only ollama/ and openrouter/ were ever used as prefixes. Other vendor
+	// prefixes ("anthropic/", "deepseek/") are OpenRouter model IDs.
+	if pfx, rest, ok := strings.Cut(l.Model, "/"); ok && (pfx == LLMProviderOllama || pfx == LLMProviderOpenRouter) {
+		switch l.Provider {
+		case "":
+			// Prefix identifies the model's home provider but does not
+			// activate it. Use [llm] provider = "ollama" for that.
+		case pfx:
+		default:
+			return false, fmt.Errorf("[llm] model = %q is an %s model, but provider = %q; use a %s model ID without a provider/ prefix", l.Model, pfx, l.Provider, l.Provider)
+		}
+		l.Model = rest
+		prefixed = true
+	}
+
+	for name, p := range l.Providers {
+		if !llmBuiltinProviders[name] && p.BaseURL == "" {
+			return false, fmt.Errorf("[llm.providers.%s] base_url is required for a custom provider", name)
+		}
+	}
+	return prefixed, nil
 }
 
 // GitSection holds [git] config for git identity inside the container.
@@ -786,7 +902,7 @@ func (n NixSection) ResolvedImage() string {
 
 // AwsSection holds [aws] config for AWS credential scoping.
 type AwsSection struct {
-	ReadOnly *bool `toml:"read_only"` // default: true (nil = not set → true)
+	ReadOnly *bool `toml:"read_only"` // default: false (nil = not set → full access)
 }
 
 // ResolvedReadOnly returns false unless explicitly set to true.
@@ -910,19 +1026,63 @@ func LoadFile(path string) (CellConfig, error) {
 		}
 		return CellConfig{}, err
 	}
+	return loadBytes(data, path)
+}
+
+// loadBytes is LoadFile on already-read content. path only labels
+// deprecation warnings. MigrateTOML uses it to prove a rewritten config
+// loads before anything is written.
+func loadBytes(data []byte, path string) (CellConfig, error) {
 	var c CellConfig
 	md, err := toml.Decode(string(data), &c)
 	if err != nil {
 		return CellConfig{}, err
 	}
+	if err := checkUnknownKeys(md); err != nil {
+		return CellConfig{}, err
+	}
 	c.DeprecatedUses = detectDeprecations(md, path)
 	migrateGUIField(&c)
+	if c.Nix.NixhomePath == "" {
+		c.Nix.NixhomePath = c.Cell.NixhomePath
+	}
+	mergeWinkitKeys(&c.Cell)
 	mergeCellVolumes(&c)
 	mergeCellPorts(&c)
 	mergeCellMcps(&c)
 	mergeSecrets(&c)
+	mergePackagesNode(&c.Packages)
+	if err := validatePythonVersions(c.Packages.Python); err != nil {
+		return CellConfig{}, err
+	}
+	prefixed, err := migrateLLM(&c.LLM)
+	if err != nil {
+		return CellConfig{}, err
+	}
+	if prefixed && md.IsDefined("llm", "model") {
+		c.DeprecatedUses = append(c.DeprecatedUses, DeprecatedUse{Deprecation: llmModelPrefixDeprecation, File: path})
+	}
 	sort.Strings(c.Cell.Modules)
 	return c, nil
+}
+
+// checkUnknownKeys rejects keys that match no config field, so a typo or a
+// key devcell no longer reads fails loudly instead of being ignored.
+func checkUnknownKeys(md toml.MetaData) error {
+	undecoded := md.Undecoded()
+	if len(undecoded) == 0 {
+		return nil
+	}
+	// Report an unknown table once, not every key inside it.
+	var keys []string
+	for _, k := range undecoded {
+		name := k.String()
+		if n := len(keys); n > 0 && strings.HasPrefix(name, keys[n-1]+".") {
+			continue
+		}
+		keys = append(keys, name)
+	}
+	return fmt.Errorf("unknown config keys: %s (check spelling; `cell init` writes every supported option)", strings.Join(keys, ", "))
 }
 
 // migrateGUIField copies legacy [cell] gui into [gui] enabled when the new
@@ -961,6 +1121,10 @@ func unionDedupStrings(a, b []string) []string {
 // preserving nil (unset) vs empty-slice (escape hatch) semantics.
 func mergeShorthandIntoNixStable(nixStable, cellPkgs []string) []string {
 	if len(cellPkgs) == 0 {
+		// [cell] packages = [] clears the global list, like stable = [] did.
+		if nixStable == nil && cellPkgs != nil {
+			return []string{}
+		}
 		return nixStable
 	}
 	if nixStable == nil {
@@ -1063,20 +1227,21 @@ func Merge(global, project CellConfig) CellConfig {
 	if project.Cell.TartOCIImage != "" {
 		out.Cell.TartOCIImage = project.Cell.TartOCIImage
 	}
-	if project.Cell.QemuSSHPort > 0 {
-		out.Cell.QemuSSHPort = project.Cell.QemuSSHPort
+	// The qemu_* spellings were merged into these by LoadFile.
+	if project.Cell.WinkitSSHPort > 0 {
+		out.Cell.WinkitSSHPort = project.Cell.WinkitSSHPort
+	}
+	if project.Cell.WinkitWindowsISO != "" {
+		out.Cell.WinkitWindowsISO = project.Cell.WinkitWindowsISO
+	}
+	if project.Cell.WinkitCPUs > 0 {
+		out.Cell.WinkitCPUs = project.Cell.WinkitCPUs
+	}
+	if project.Cell.WinkitMemoryGB > 0 {
+		out.Cell.WinkitMemoryGB = project.Cell.WinkitMemoryGB
 	}
 	if project.Cell.QemuSSHHost != "" {
 		out.Cell.QemuSSHHost = project.Cell.QemuSSHHost
-	}
-	if project.Cell.QemuWindowsISO != "" {
-		out.Cell.QemuWindowsISO = project.Cell.QemuWindowsISO
-	}
-	if project.Cell.QemuCPUs > 0 {
-		out.Cell.QemuCPUs = project.Cell.QemuCPUs
-	}
-	if project.Cell.QemuMemoryGB > 0 {
-		out.Cell.QemuMemoryGB = project.Cell.QemuMemoryGB
 	}
 	if project.Cell.QemuDiskSizeGB > 0 {
 		out.Cell.QemuDiskSizeGB = project.Cell.QemuDiskSizeGB
@@ -1123,11 +1288,16 @@ func Merge(global, project CellConfig) CellConfig {
 	if project.LLM.AppendSystemPromptFile != "" {
 		out.LLM.AppendSystemPromptFile = project.LLM.AppendSystemPromptFile
 	}
-	if project.LLM.UseOllama {
-		out.LLM.UseOllama = true
+	if project.LLM.Provider != "" {
+		// The global model is an ID for the global provider; drop it when
+		// the project switches providers without naming its own model.
+		if project.LLM.Provider != global.LLM.ActiveProvider() {
+			out.LLM.Model = ""
+		}
+		out.LLM.Provider = project.LLM.Provider
 	}
-	if project.LLM.UseOpenRouter {
-		out.LLM.UseOpenRouter = true
+	if project.LLM.Model != "" {
+		out.LLM.Model = project.LLM.Model
 	}
 
 	// Git: project wins when non-zero
@@ -1275,37 +1445,34 @@ func Merge(global, project CellConfig) CellConfig {
 		}
 	}
 
-	// LLM models: project default wins, providers accumulate (project wins on key conflict)
-	if project.LLM.Models.Default != "" {
-		out.LLM.Models.Default = project.LLM.Models.Default
-	}
-	if len(global.LLM.Models.Providers) > 0 || len(project.LLM.Models.Providers) > 0 {
-		out.LLM.Models.Providers = make(map[string]LLMProvider)
-		for k, v := range global.LLM.Models.Providers {
-			out.LLM.Models.Providers[k] = v
+	// LLM providers accumulate (project wins on key conflict)
+	if len(global.LLM.Providers) > 0 || len(project.LLM.Providers) > 0 {
+		out.LLM.Providers = make(map[string]LLMProvider)
+		for k, v := range global.LLM.Providers {
+			out.LLM.Providers[k] = v
 		}
-		for k, v := range project.LLM.Models.Providers {
-			out.LLM.Models.Providers[k] = v
+		for k, v := range project.LLM.Providers {
+			out.LLM.Providers[k] = v
 		}
 	}
 
 	// Packages.Nix: union-dedup per tier, same semantics as [cell].modules.
 	// Explicit empty slice in project clears global (escape hatch).
-	// [cell] packages is a shorthand that merges into [packages.nix] stable.
+	// [cell] packages is the stable channel; the deprecated [packages.nix] stable merges into it.
 	globalStable := unionDedupStrings(global.Packages.Nix.Stable, global.Cell.Packages)
 	projectStable := mergeShorthandIntoNixStable(project.Packages.Nix.Stable, project.Cell.Packages)
 	out.Packages.Nix.Stable = mergeNixPkgTier(globalStable, projectStable)
 	out.Packages.Nix.Unstable = mergeNixPkgTier(global.Packages.Nix.Unstable, project.Packages.Nix.Unstable)
 	out.Packages.Nix.Edge = mergeNixPkgTier(global.Packages.Nix.Edge, project.Packages.Nix.Edge)
 
-	// Packages.Npm/Python: maps accumulate (same semantics as Env — project wins on key conflict).
-	if len(global.Packages.Npm) > 0 || len(project.Packages.Npm) > 0 {
-		out.Packages.Npm = make(map[string]string, len(global.Packages.Npm)+len(project.Packages.Npm))
-		for k, v := range global.Packages.Npm {
-			out.Packages.Npm[k] = v
+	// Packages.Node/Python: maps accumulate (same semantics as Env — project wins on key conflict).
+	if len(global.Packages.Node) > 0 || len(project.Packages.Node) > 0 {
+		out.Packages.Node = make(map[string]string, len(global.Packages.Node)+len(project.Packages.Node))
+		for k, v := range global.Packages.Node {
+			out.Packages.Node[k] = v
 		}
-		for k, v := range project.Packages.Npm {
-			out.Packages.Npm[k] = v
+		for k, v := range project.Packages.Node {
+			out.Packages.Node[k] = v
 		}
 	}
 	if len(global.Packages.Python) > 0 || len(project.Packages.Python) > 0 {
@@ -1350,13 +1517,27 @@ func ApplyEnv(c *CellConfig, getenv func(string) string) {
 	if v := getenv("DEVCELL_NIX_IMAGE"); v != "" {
 		c.Nix.Image = v
 	}
-	if v := getenv("DEVCELL_PER_SESSION_IMAGE"); v == "true" || v == "1" {
+	perCellImage := getenv("DEVCELL_PER_CELL_IMAGE")
+	if perCellImage == "" {
+		if legacy := getenv("DEVCELL_PER_SESSION_IMAGE"); legacy != "" {
+			perCellImage = legacy
+			c.DeprecatedUses = append(c.DeprecatedUses, DeprecatedUse{
+				Deprecation: Deprecation{
+					Name:        "DEVCELL_PER_SESSION_IMAGE",
+					Replacement: "DEVCELL_PER_CELL_IMAGE",
+					Message:     "use DEVCELL_PER_CELL_IMAGE instead",
+				},
+			})
+		}
+	}
+	if perCellImage == "true" || perCellImage == "1" {
 		b := true
 		c.Cell.PerCellImage = &b
 	}
 	if v := getenv("DEVCELL_DEFAULT_COMMAND"); v != "" {
 		c.Cell.DefaultCommand = v
 	}
+	c.DeprecatedUses = append(c.DeprecatedUses, renamedEnvUses(getenv)...)
 }
 
 // LoadLayered loads global + project files, merges them, then applies env overrides.
@@ -1401,35 +1582,7 @@ func LoadFromOS(configDir, cwd string) CellConfig {
 // is what the cache-roundtrip test fixture builds against to validate the
 // nix-store cache pipeline without the runtime cost of `base`.
 // `dev` is the Modules 2.0 seed (CELL-63): base + scraping + infra (~3 GB).
-var knownStacks = []string{"core", "base", "dev", "go", "node", "python", "fullstack", "electronics", "ultimate"}
-
-// stackSizes maps stack names to approximate compressed download sizes.
-// Measured from GHCR manifests (base, ultimate) and estimated for others
-// using nix download × 2.6 ratio. Updated 2026-06-18.
-var stackSizes = map[string]string{
-	"core":        "~0.1 GB",
-	"base":        "~0.5 GB",
-	"dev":         "~3 GB",
-	"go":          "~3.6 GB",
-	"node":        "~2.3 GB",
-	"python":      "~2.3 GB",
-	"fullstack":   "~4.2 GB",
-	"electronics": "~4.9 GB",
-	"ultimate":    "~15 GB",
-}
-
-// KnownStacks returns the list of valid stack names.
-func KnownStacks() []string {
-	out := make([]string, len(knownStacks))
-	copy(out, knownStacks)
-	return out
-}
-
-// StackSize returns the approximate download size for the given stack.
-func StackSize(stack string) (string, bool) {
-	sz, ok := stackSizes[stack]
-	return sz, ok
-}
+var knownStacks = []string{"core", "base", "dev", "go", "node", "python", "fullstack", "electronics", "ultimate", "bbb"}
 
 // ValidateStack checks that stack is a known stack name. Empty is valid (defaults to ultimate).
 func ValidateStack(stack string) error {
@@ -1449,7 +1602,9 @@ func ValidateStack(stack string) error {
 
 // ValidateWireguard checks that every enabled [[wireguard]] entry has a
 // non-empty name, config, valid WireGuard syntax, at least one peer with a
-// valid PublicKey, and an interface Address.
+// valid PublicKey, and an interface Address. An inline PresharedKey, when
+// present, must be a valid 32-byte base64 key, and all peers must share the
+// same one: at runtime a single WG_PRESHARED_KEY is applied to every peer.
 func ValidateWireguard(c CellConfig) error {
 	for i, entry := range c.Wireguard {
 		if !entry.Enabled {
@@ -1471,6 +1626,7 @@ func ValidateWireguard(c CellConfig) error {
 		if len(parsed.Peers) == 0 {
 			return fmt.Errorf("wireguard[%d] %q: at least one [Peer] is required", i, entry.Name)
 		}
+		inlinePSK := ""
 		for j, peer := range parsed.Peers {
 			if peer.PublicKey == "" {
 				return fmt.Errorf("wireguard[%d] %q: peer[%d] PublicKey is required", i, entry.Name, j)
@@ -1478,6 +1634,16 @@ func ValidateWireguard(c CellConfig) error {
 			keyBytes, err := base64.StdEncoding.DecodeString(peer.PublicKey)
 			if err != nil || len(keyBytes) != 32 {
 				return fmt.Errorf("wireguard[%d] %q: peer[%d] PublicKey is not a valid 32-byte base64 key", i, entry.Name, j)
+			}
+			if peer.PresharedKey != "" {
+				pskBytes, err := base64.StdEncoding.DecodeString(peer.PresharedKey)
+				if err != nil || len(pskBytes) != 32 {
+					return fmt.Errorf("wireguard[%d] %q: peer[%d] PresharedKey is not a valid 32-byte base64 key", i, entry.Name, j)
+				}
+				if inlinePSK != "" && inlinePSK != peer.PresharedKey {
+					return fmt.Errorf("wireguard[%d] %q: peers carry different PresharedKey values; WG_PRESHARED_KEY is a single secret applied to every peer, so all peers must share one PSK", i, entry.Name)
+				}
+				inlinePSK = peer.PresharedKey
 			}
 		}
 	}

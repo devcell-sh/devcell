@@ -22,7 +22,7 @@ import (
 // other fields are decoded for compatibility and silently ignored — devcell
 // shells out to a CLI agent and cannot honor them.
 type ResponsesRequest struct {
-	// Model selects the agent. Use "claude", "anthropic", or "opencode" as a prefix.
+	// Model selects the agent. Use "claude", "default", "anthropic", or "opencode" as a prefix.
 	// Append a sub-model with a slash: "anthropic/sonnet" or "anthropic/claude-sonnet-4-5".
 	Model string `json:"model" example:"anthropic/sonnet"`
 
@@ -438,7 +438,7 @@ func NewResponsesHandler(exec Executor, store *JobStore, logPrompts bool, system
 		if !ok {
 			writeAPIError(w, http.StatusBadRequest,
 				"invalid_request_error", "unknown_model",
-				fmt.Sprintf("unknown model %q; valid prefixes: anthropic, claude, opencode", prefix))
+				fmt.Sprintf("unknown model %q; valid prefixes: %s", prefix, validModelPrefixes))
 			return
 		}
 

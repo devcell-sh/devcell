@@ -10,75 +10,70 @@ import (
 // underscores, dots (for nested attrs like python3Packages.requests).
 var validNixAttr = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
-// ValidateNixPackageNames checks that every package name in every tier is a
-// syntactically valid nix attribute name. Returns nil if all names are valid.
+// nixChannels lists the channels oldest first, with the key users write.
+// Stable is read from [cell] packages (the deprecated [packages.nix] stable
+// is merged into it).
+func nixChannels(np NixPackages) []struct {
+	name, key string
+	pkgs      []string
+} {
+	return []struct {
+		name, key string
+		pkgs      []string
+	}{
+		{"stable", "[cell] packages", np.Stable},
+		{"unstable", "[packages.nix] unstable", np.Unstable},
+		{"edge", "[packages.nix] edge", np.Edge},
+	}
+}
+
+// ValidateNixPackageNames checks that every package name in every channel is
+// a syntactically valid nix attribute name. Returns nil if all names are valid.
 func ValidateNixPackageNames(np NixPackages) error {
-	for _, tier := range []struct {
-		name string
-		pkgs []string
-	}{
-		{"stable", np.Stable},
-		{"unstable", np.Unstable},
-		{"edge", np.Edge},
-	} {
-		for _, pkg := range tier.pkgs {
+	for _, ch := range nixChannels(np) {
+		for _, pkg := range ch.pkgs {
 			if pkg == "" || !validNixAttr.MatchString(pkg) {
-				return fmt.Errorf(
-					"invalid package name %q in [packages.nix].%s: must match %s",
-					pkg, tier.name, validNixAttr.String(),
-				)
+				return fmt.Errorf("invalid package name %q in %s: must match %s", pkg, ch.key, validNixAttr.String())
 			}
 		}
 	}
 	return nil
 }
 
-// ValidateNixPackageDups checks that no package appears in more than one tier.
-// Two tiers providing the same package would both get lib.hiPri, causing a
-// home-manager collision.
-func ValidateNixPackageDups(np NixPackages) error {
-	type entry struct {
-		tier string
-	}
-	seen := make(map[string]entry)
-	for _, tier := range []struct {
-		name string
-		pkgs []string
-	}{
-		{"stable", np.Stable},
-		{"unstable", np.Unstable},
-		{"edge", np.Edge},
-	} {
-		for _, pkg := range tier.pkgs {
-			if prev, ok := seen[pkg]; ok {
-				return fmt.Errorf(
-					"package %q appears in both [packages.nix].%s and [packages.nix].%s; "+
-						"pick one tier to avoid a home-manager collision",
-					pkg, prev.tier, tier.name,
-				)
-			}
-			seen[pkg] = entry{tier: tier.name}
-		}
-	}
-	return nil
-}
-
-// ValidateNixPackages runs all [packages.nix] validations: name syntax and
-// cross-tier duplicates.
+// ValidateNixPackages runs all nix package validations.
 func ValidateNixPackages(np NixPackages) error {
-	if err := ValidateNixPackageNames(np); err != nil {
-		return err
-	}
-	return ValidateNixPackageDups(np)
+	return ValidateNixPackageNames(np)
 }
 
-// FormatNixCollisionHint returns a user-friendly hint when home-manager reports
-// a package collision during build. Callers match the home-manager error output
-// and call this to augment the message.
-func FormatNixCollisionHint(pkg string, tiers []string) string {
-	return fmt.Sprintf(
-		"Package collision: %q is provided by both %s. "+
-			"Remove it from one [packages.nix] tier, or let the module's version win by removing it from [packages.nix] entirely.",
-		pkg, strings.Join(tiers, " and "),
-	)
+// ResolveNixChannels drops a package from older channels when a newer one
+// also lists it: listing a package in unstable or edge is a request for the
+// newer version. overrides describes each such case, e.g.
+// "uv from unstable (overrides stable)".
+func ResolveNixChannels(np NixPackages) (resolved NixPackages, overrides []string) {
+	chans := nixChannels(np)
+	newest := map[string]int{}
+	for i, ch := range chans {
+		for _, pkg := range ch.pkgs {
+			newest[pkg] = i
+		}
+	}
+	out := make([][]string, len(chans))
+	var order []string
+	dropped := map[string][]string{}
+	for i, ch := range chans {
+		for _, pkg := range ch.pkgs {
+			if newest[pkg] == i {
+				out[i] = append(out[i], pkg)
+				continue
+			}
+			if len(dropped[pkg]) == 0 {
+				order = append(order, pkg)
+			}
+			dropped[pkg] = append(dropped[pkg], ch.name)
+		}
+	}
+	for _, pkg := range order {
+		overrides = append(overrides, fmt.Sprintf("%s from %s (overrides %s)", pkg, chans[newest[pkg]].name, strings.Join(dropped[pkg], ", ")))
+	}
+	return NixPackages{Stable: out[0], Unstable: out[1], Edge: out[2]}, overrides
 }

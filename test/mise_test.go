@@ -1,17 +1,14 @@
-// mise_test.go — TDD tests for CELL-85: bake mise installs + shims into image,
-// two-level shim PATH for reliable runtime tooling.
+// mise_test.go: mise runtimes inside the container. Baked installs and shims
+// (CELL-85), shared-install layering (CELL-75), the host user's mise env
+// vars, and thin-variant runtime checks.
 //
-// L1: file-content / wiring validation (no Docker, no nix runtime needed)
-//     - Verifies the Dockerfile and nixhome modules contain the design hooks.
-//     - Failing L1 = the wiring is missing; impl needs to land first.
-//
-// L2: container exec — declared mise tools are on PATH and runnable.
-//     - Uses the existing testcontainers harness (image() + startContainer + exec).
-//     - Run via `task test:integration -- -run TestMise`.
+// All container tests here are L2 (container exec against an existing
+// image). Run via `task test:integration -- -run 'TestMise|TestThinRuntime'`.
 
 package container_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -19,13 +16,9 @@ import (
 	"testing"
 )
 
-// ---------------------------------------------------------------------------
-// L1 — Wiring checks (file content)
-// ---------------------------------------------------------------------------
-
 // TestMise_DeclaredToolsOnPATH asserts every declared mise tool resolves on
-// PATH in the session user's login shell inside a fresh container. This is
-// the user-visible bug being fixed — the session user is the product
+// PATH in the host user's login shell inside a fresh container. This is
+// the user-visible bug being fixed: the host user is the product
 // surface (root login shells go through the base image's /etc/profile and
 // are not provisioned by the entrypoint).
 func TestMise_DeclaredToolsOnPATH(t *testing.T) {
@@ -181,6 +174,285 @@ func TestMise_SharedInstalls_NoUserCopies(t *testing.T) {
 		`find "$HOME/.local/share/mise/installs" -maxdepth 2 -type l -lname '/*' 2>/dev/null; true`})
 	if links := strings.TrimSpace(out); links != "" {
 		t.Errorf("user mise installs dir contains absolute-target symlinks (legacy cross-bind still active):\n%s", links)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Host-user mise environment and thin-variant runtime
+// ---------------------------------------------------------------------------
+
+// TestMise_DataDir -- the host user's MISE_DATA_DIR must be ~/.local/share/mise, not /opt/mise.
+func TestMise_DataDir(t *testing.T) {
+	c := startEnvContainer(t)
+
+	out, code := asUser(t, c, "echo $MISE_DATA_DIR")
+	if code != 0 {
+		t.Fatalf("FAIL: could not read MISE_DATA_DIR (exit %d): %s", code, out)
+	}
+
+	expected := fmt.Sprintf("/home/%s/.local/share/mise", hostUser)
+	if out != expected {
+		t.Errorf("FAIL: MISE_DATA_DIR=%q, want %q", out, expected)
+	} else {
+		t.Logf("PASS: MISE_DATA_DIR=%q", out)
+	}
+}
+
+// TestMise_NodeViaUserShims -- node must be reachable through ~/.local/share/mise/shims.
+func TestMise_NodeViaUserShims(t *testing.T) {
+	c := startEnvContainer(t)
+
+	// Shim must live in ~/.local/share/mise/shims, not /opt/mise/shims.
+	shimPath, code := asUser(t, c, "which node")
+	if code != 0 {
+		t.Fatalf("FAIL: node not found on PATH (exit %d): %s", code, shimPath)
+	}
+
+	expected := fmt.Sprintf("/home/%s/.local/share/mise/shims/node", hostUser)
+	if shimPath != expected {
+		t.Errorf("FAIL: node shim at %q, want %q", shimPath, expected)
+	} else {
+		t.Logf("PASS: node shim at %q", shimPath)
+	}
+
+	// Confirm it actually runs.
+	out, code := asUser(t, c, "node --version")
+	if code != 0 {
+		t.Errorf("FAIL: node --version failed (exit %d): %s", code, out)
+	} else {
+		t.Logf("PASS: node --version: %s", out)
+	}
+}
+
+// TestMise_UserInstallPreserved -- setup_mise_home must not overwrite a real dir
+// with a symlink (user-installed version must be preserved).
+func TestMise_UserInstallPreserved(t *testing.T) {
+	c := startEnvContainer(t)
+
+	// Create a fake "user-installed" real directory for a non-existent version.
+	_, code := exec(t, c, []string{"bash", "-c",
+		"mkdir -p /home/" + hostUser + "/.local/share/mise/installs/node/99.99.99/bin && " +
+			"printf '#!/bin/sh\\necho v99.99.99\\n' > /home/" + hostUser + "/.local/share/mise/installs/node/99.99.99/bin/node && " +
+			"chmod +x /home/" + hostUser + "/.local/share/mise/installs/node/99.99.99/bin/node",
+	})
+	if code != 0 {
+		t.Fatalf("FAIL: could not create fake user install")
+	}
+
+	// Re-run the symlink setup logic (simulates what entrypoint does on restart).
+	_, code = exec(t, c, []string{"bash", "-c", `
+		baked="/opt/mise"
+		user_mise="/home/` + hostUser + `/.local/share/mise"
+		for tool_dir in "$baked/installs"/*/; do
+			[ -d "$tool_dir" ] || continue
+			tool_name=$(basename "$tool_dir")
+			mkdir -p "$user_mise/installs/$tool_name"
+			for ver_dir in "$tool_dir"*/; do
+				[ -d "$ver_dir" ] || continue
+				ver_name=$(basename "$ver_dir")
+				dest="$user_mise/installs/$tool_name/$ver_name"
+				[ -d "$dest" ] && [ ! -L "$dest" ] && continue
+				ln -sfT "$ver_dir" "$dest"
+			done
+		done
+	`})
+	if code != 0 {
+		t.Fatalf("FAIL: re-run of symlink setup failed")
+	}
+
+	// The real directory must NOT have been replaced by a symlink.
+	out, code := exec(t, c, []string{"bash", "-c",
+		"test -L /home/" + hostUser + "/.local/share/mise/installs/node/99.99.99 && echo SYMLINK || echo REAL"})
+	if code != 0 || strings.TrimSpace(out) != "REAL" {
+		t.Errorf("FAIL: user install was converted to symlink: %s", out)
+	} else {
+		t.Logf("PASS: user install preserved as real dir")
+	}
+}
+
+// TestMise_DanglingSymlinkCleaned -- dangling symlinks in ~/.local/share/mise/installs/
+// must be removed by setup_mise_home.
+func TestMise_DanglingSymlinkCleaned(t *testing.T) {
+	c := startEnvContainer(t)
+
+	// Inject a dangling symlink pointing to a non-existent /opt/mise path.
+	_, code := exec(t, c, []string{"bash", "-c",
+		"mkdir -p /home/" + hostUser + "/.local/share/mise/installs/node && " +
+			"ln -s /opt/mise/installs/node/0.0.0-nonexistent " +
+			"/home/" + hostUser + "/.local/share/mise/installs/node/0.0.0-nonexistent",
+	})
+	if code != 0 {
+		t.Fatalf("FAIL: could not inject dangling symlink")
+	}
+
+	// Re-run the dangling-symlink cleanup logic from setup_mise_home.
+	_, code = exec(t, c, []string{"bash", "-c", `
+		user_mise="/home/` + hostUser + `/.local/share/mise"
+		for tool in "$user_mise/installs"/*/; do
+			for link in "${tool%/}"/*; do
+				if [ -L "$link" ] && [ ! -e "$link" ]; then rm -f "$link"; fi
+			done
+		done
+	`})
+	if code != 0 {
+		t.Fatalf("FAIL: cleanup logic failed (exit %d)", code)
+	}
+
+	// The dangling symlink must be gone.
+	out, _ := exec(t, c, []string{"bash", "-c",
+		"test -L /home/" + hostUser + "/.local/share/mise/installs/node/0.0.0-nonexistent && echo EXISTS || echo CLEANED",
+	})
+	if strings.TrimSpace(out) != "CLEANED" {
+		t.Errorf("FAIL: dangling symlink still present after cleanup")
+	} else {
+		t.Logf("PASS: dangling symlink cleaned up")
+	}
+}
+
+// TestThinRuntime_NodeIsMiseShim verifies node resolves to a mise shim path,
+// not a nix profile binary. Thin mode bakes shims at /opt/devcell/.local/share/mise/shims/.
+func TestThinRuntime_NodeIsMiseShim(t *testing.T) {
+	if !isThinVariant() {
+		t.Skip("thin variant only")
+	}
+	c := startContainer(t, map[string]string{
+		"APP_NAME":  "test",
+		"HOST_USER": hostUser,
+	})
+
+	shimPath, code := exec(t, c, []string{"sh", "-c", "which node"})
+	if code != 0 {
+		t.Fatalf("node not found on PATH: %s", shimPath)
+	}
+	shimPath = strings.TrimSpace(shimPath)
+	if !strings.Contains(shimPath, "mise/shims") {
+		t.Errorf("node should be a mise shim, got: %s", shimPath)
+	}
+	t.Logf("node shim at: %s", shimPath)
+}
+
+// TestThinRuntime_NodeVersion verifies node --version matches the declared
+// mise config version (24.13.1 from nixhome/modules/node.nix).
+func TestThinRuntime_NodeVersion(t *testing.T) {
+	if !isThinVariant() {
+		t.Skip("thin variant only")
+	}
+	c := startContainer(t, map[string]string{
+		"APP_NAME":  "test",
+		"HOST_USER": hostUser,
+	})
+
+	out, code := exec(t, c, []string{"sh", "-c", "node --version"})
+	if code != 0 {
+		t.Fatalf("node --version failed (exit %d): %s", code, out)
+	}
+	version := strings.TrimSpace(out)
+	if !strings.HasPrefix(version, "v24.") {
+		t.Errorf("node version should be v24.x (from mise config), got: %s", version)
+	}
+	t.Logf("node version: %s", version)
+}
+
+// TestThinRuntime_AllDeclaredTools verifies all mise-declared tools are installed
+// (no "(missing)" in mise ls output).
+func TestThinRuntime_AllDeclaredTools(t *testing.T) {
+	if !isThinVariant() {
+		t.Skip("thin variant only")
+	}
+	c := startContainer(t, map[string]string{
+		"APP_NAME":  "test",
+		"HOST_USER": hostUser,
+	})
+
+	out, code := exec(t, c, []string{"sh", "-c", "mise ls 2>&1"})
+	if code != 0 {
+		t.Fatalf("mise ls failed (exit %d): %s", code, out)
+	}
+	if strings.Contains(out, "(missing)") {
+		t.Errorf("some mise tools are missing:\n%s", out)
+	} else {
+		t.Logf("all mise tools installed:\n%s", out)
+	}
+}
+
+// TestMise_NoAsdfEnvVarsLeaked -- no ASDF_* environment variables should be
+// present in the container after migration to mise.
+func TestMise_NoAsdfEnvVarsLeaked(t *testing.T) {
+	c := startEnvContainer(t)
+
+	out, code := asUser(t, c, "env | grep ^ASDF_ || true")
+	if code != 0 {
+		t.Fatalf("FAIL: env command failed (exit %d): %s", code, out)
+	}
+
+	if strings.TrimSpace(out) != "" {
+		t.Errorf("FAIL: ASDF_* env vars leaked:\n%s", out)
+	} else {
+		t.Logf("PASS: no ASDF_* env vars")
+	}
+}
+
+// TestMise_GlobalConfigEnvVar -- MISE_GLOBAL_CONFIG_FILE must point to a valid
+// nix store path, not a file in $HOME.
+func TestMise_GlobalConfigEnvVar(t *testing.T) {
+	c := startEnvContainer(t)
+
+	out, code := asUser(t, c, "echo $MISE_GLOBAL_CONFIG_FILE")
+	if code != 0 || strings.TrimSpace(out) == "" {
+		t.Fatalf("FAIL: MISE_GLOBAL_CONFIG_FILE not set (exit %d): %s", code, out)
+	}
+	if !strings.HasPrefix(out, "/nix/store/") {
+		t.Errorf("FAIL: MISE_GLOBAL_CONFIG_FILE=%q, want /nix/store/... path", out)
+	}
+
+	// The file must actually exist and be readable.
+	_, code = asUser(t, c, fmt.Sprintf("test -f %q", out))
+	if code != 0 {
+		t.Errorf("FAIL: MISE_GLOBAL_CONFIG_FILE=%q does not exist or is not readable", out)
+	} else {
+		t.Logf("PASS: MISE_GLOBAL_CONFIG_FILE=%q (valid nix store path)", out)
+	}
+}
+
+// TestMise_DefaultNpmPackagesEnvVar -- MISE_NODE_DEFAULT_PACKAGES_FILE must point
+// to a valid nix store path.
+func TestMise_DefaultNpmPackagesEnvVar(t *testing.T) {
+	c := startEnvContainer(t)
+
+	out, code := asUser(t, c, "echo $MISE_NODE_DEFAULT_PACKAGES_FILE")
+	if code != 0 || strings.TrimSpace(out) == "" {
+		t.Fatalf("FAIL: MISE_NODE_DEFAULT_PACKAGES_FILE not set (exit %d): %s", code, out)
+	}
+	if !strings.HasPrefix(out, "/nix/store/") {
+		t.Errorf("FAIL: MISE_NODE_DEFAULT_PACKAGES_FILE=%q, want /nix/store/... path", out)
+	}
+
+	// The file must actually exist and be readable.
+	_, code = asUser(t, c, fmt.Sprintf("test -f %q", out))
+	if code != 0 {
+		t.Errorf("FAIL: MISE_NODE_DEFAULT_PACKAGES_FILE=%q does not exist or is not readable", out)
+	} else {
+		t.Logf("PASS: MISE_NODE_DEFAULT_PACKAGES_FILE=%q (valid nix store path)", out)
+	}
+}
+
+// TestMise_NpmToolsAvailable -- npm-installed tools from /opt/npm-tools must work.
+func TestMise_NpmToolsAvailable(t *testing.T) {
+	c := startEnvContainer(t)
+
+	// npm itself must be available
+	out, code := asUser(t, c, "npm --version")
+	if code != 0 {
+		t.Fatalf("FAIL: npm not available (exit %d): %s", code, out)
+	}
+	t.Logf("PASS: npm version: %s", out)
+
+	// A tool from /opt/npm-tools should be accessible
+	out, code = asUser(t, c, "which mcp-server-patchright 2>/dev/null || which npx 2>/dev/null")
+	if code != 0 {
+		t.Errorf("FAIL: no npm tools found on PATH (exit %d): %s", code, out)
+	} else {
+		t.Logf("PASS: npm tool found at: %s", out)
 	}
 }
 

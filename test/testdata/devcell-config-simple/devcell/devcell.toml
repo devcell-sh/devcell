@@ -2,60 +2,44 @@
 # DevCell project configuration. Optional global defaults at ~/.config/devcell/devcell.toml
 
 [cell]
+# Nix packages from the stable channel: the default place for tools.
+packages = ["pre-commit"]
 # Override the default image tag.
-# Available tags: v0.0.0-base, v0.0.0-go, v0.0.0-node, v0.0.0-python,
-#   v0.0.0-electronics, v0.0.0-fullstack, v0.0.0-ultimate (default)
 # image_tag = "v0.0.0-go"
-# Enable GUI (Xvfb + VNC + browser). Injects DEVCELL_GUI_ENABLED=true.
-gui = true
 # Timezone (IANA format). If omitted, inherits host $TZ.
 # timezone = "Europe/Prague"
+# Extra volume mounts: /path, /host:/container, /host:/container:ro.
+# volumes = ["~/work/secrets:/run/secrets:ro", "~/.ssh:/home/user/.ssh:ro"]
 
-[claude]
-# Route Claude Code through a local ollama instance (Anthropic API compat).
-# Equivalent to: cell claude --ollama
-# use_ollama = false
+# Desktop GUI (Xvfb + VNC + browser). Injects DEVCELL_GUI_ENABLED=true.
+[gui]
+enabled = true
+
+[llm]
+# Where agents send requests: default, ollama, openrouter.
+provider = "ollama"
+model = "qwen3-coder-next:latest"
+
+[llm.providers.ollama]
+models = ["qwen3-coder-next:latest", "qwen3-coder-next:latest-128k", "qwen3-coder:30b", "qwen3-coder:30b-128k", "glm-4.7-flash:latest", "deepseek-r1:32b", "qwen2.5-coder:32b", "qwen3:8b", "qwen3:8b-128k", "qwen3:0.6b"]
 
 # [git]
 # Git identity forwarded into the container.
 # If omitted and no GIT_AUTHOR_* env vars are set, ~/.config/git/config is mounted read-only instead.
 # author_name = "Your Name"
 # author_email = "you@example.com"
-# committer_name = "Your Name"   # defaults to author_name if omitted
-# committer_email = "you@example.com"  # defaults to author_email if omitted
 
 [env]
 # Extra environment variables forwarded into the container.
 # GITHUB_TOKEN = "ghp_xxx"
-# ANTHROPIC_API_KEY = "sk-ant-xxx"
 
 [mise]
 # mise runtime settings forwarded as MISE_<UPPER_KEY> env vars.
 # See: https://mise.jdx.dev/configuration.html
 # trusted_config_paths = "/"
-# idiomatic_version_file = "true"
 
-# [[volumes]]
-# Extra volume mounts appended to docker run.
-# mount = "~/work/secrets:/run/secrets:ro"
-#
-# [[volumes]]
-# mount = "~/.ssh:/home/user/.ssh:ro"
+# [packages.node]
+# npm tools not in nixpkgs, installed by mise at container start.
 
-[models]
-default = "ollama/qwen3-coder-next:latest"
-
-[models.providers.ollama]
-models = ["qwen3-coder-next:latest", "qwen3-coder-next:latest-128k", "qwen3-coder:30b", "qwen3-coder:30b-128k", "glm-4.7-flash:latest", "deepseek-r1:32b", "qwen2.5-coder:32b", "qwen3:8b", "qwen3:8b-128k", "qwen3:0.6b"]
-
-
-# [packages.npm]
-# npm packages installed in the container. Edit and run 'cell build'.
-# All core tools are managed via nix modules. Only add packages here
-# that are NOT in nixhome.
-
-[packages.python]
-# Python packages installed in the container. Edit and run 'cell build'.
-"pre-commit" = "*"
-# "httpie" = "*"
-# "pipx" = "*"
+# [packages.python]
+# PyPI tools not in nixpkgs, installed by mise at container start.

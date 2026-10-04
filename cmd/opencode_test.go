@@ -110,17 +110,18 @@ func TestOpencode_ConfigContentEnvInjected(t *testing.T) {
 	}
 }
 
-// TestOpencode_ConfigContentWithOllama verifies [llm.models] from devcell.toml
+// TestOpencode_ConfigContentWithOllama verifies [llm.providers] from devcell.toml
 // is denormalized into OPENCODE_CONFIG_CONTENT.
 func TestOpencode_ConfigContentWithOllama(t *testing.T) {
 	home := scaffoldedHome(t)
 
-	// Write devcell.toml with [llm.models] section
+	// Write devcell.toml with [llm.providers] section
 	cfgDir := filepath.Join(home, ".config", "devcell")
 	tomlContent := `[cell]
-[llm.models]
-default = "ollama/deepseek-r1:32b"
-[llm.models.providers.ollama]
+[llm]
+provider = "ollama"
+model = "deepseek-r1:32b"
+[llm.providers.ollama]
 models = ["deepseek-r1:32b", "qwen3:8b"]
 `
 	if err := os.WriteFile(filepath.Join(cfgDir, "devcell.toml"), []byte(tomlContent), 0644); err != nil {
@@ -173,7 +174,7 @@ models = ["deepseek-r1:32b", "qwen3:8b"]
 	}
 }
 
-// TestOpencode_ConfigContentNoModels verifies minimal config when no [llm.models].
+// TestOpencode_ConfigContentNoModels verifies minimal config when no [llm.providers].
 func TestOpencode_ConfigContentNoModels(t *testing.T) {
 	home := scaffoldedHome(t)
 
@@ -217,12 +218,13 @@ func TestOpencode_ExistingConfigMergesModels(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Write devcell.toml with [llm.models] so models get injected.
+	// Write devcell.toml with [llm.providers] so models get injected.
 	cfgDir := filepath.Join(home, ".config", "devcell")
 	tomlContent := `[cell]
-[llm.models]
-default = "ollama/qwen3:8b"
-[llm.models.providers.ollama]
+[llm]
+provider = "ollama"
+model = "qwen3:8b"
+[llm.providers.ollama]
 models = ["qwen3:8b"]
 `
 	if err := os.WriteFile(filepath.Join(cfgDir, "devcell.toml"), []byte(tomlContent), 0644); err != nil {
@@ -272,12 +274,13 @@ models = ["qwen3:8b"]
 func TestOpencode_WritesConfigToDisk(t *testing.T) {
 	home := scaffoldedHome(t)
 
-	// Write devcell.toml with [llm.models] section
+	// Write devcell.toml with [llm.providers] section
 	cfgDir := filepath.Join(home, ".config", "devcell")
 	tomlContent := `[cell]
-[llm.models]
-default = "ollama/deepseek-r1:32b"
-[llm.models.providers.ollama]
+[llm]
+provider = "ollama"
+model = "deepseek-r1:32b"
+[llm.providers.ollama]
 models = ["deepseek-r1:32b"]
 `
 	if err := os.WriteFile(filepath.Join(cfgDir, "devcell.toml"), []byte(tomlContent), 0644); err != nil {
@@ -347,9 +350,9 @@ func TestOpencode_OpenRouterFlag_InjectsEnv(t *testing.T) {
 
 	cfgDir := filepath.Join(home, ".config", "devcell")
 	tomlContent := `[cell]
-[llm.models]
-default = "openrouter/moonshotai/kimi-k3"
-[llm.models.providers.openrouter]
+[llm]
+model = "openrouter/moonshotai/kimi-k3"
+[llm.providers.openrouter]
 models = ["moonshotai/kimi-k3", "deepseek/deepseek-v4-pro"]
 `
 	if err := os.WriteFile(filepath.Join(cfgDir, "devcell.toml"), []byte(tomlContent), 0644); err != nil {
@@ -407,15 +410,15 @@ models = ["moonshotai/kimi-k3", "deepseek/deepseek-v4-pro"]
 	}
 }
 
-// TestOpencode_ConfigUseOpenRouter_InjectsEnv verifies [llm] use_openrouter=true
+// TestOpencode_ConfigProviderOpenRouter_InjectsEnv verifies [llm] provider = "openrouter"
 // activates openrouter mode without the flag.
-func TestOpencode_ConfigUseOpenRouter_InjectsEnv(t *testing.T) {
+func TestOpencode_ConfigProviderOpenRouter_InjectsEnv(t *testing.T) {
 	home := scaffoldedHome(t)
 
 	cfgDir := filepath.Join(home, ".config", "devcell")
 	tomlContent := `[cell]
 [llm]
-use_openrouter = true
+provider = "openrouter"
 `
 	if err := os.WriteFile(filepath.Join(cfgDir, "devcell.toml"), []byte(tomlContent), 0644); err != nil {
 		t.Fatal(err)

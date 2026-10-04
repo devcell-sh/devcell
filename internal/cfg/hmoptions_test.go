@@ -77,13 +77,19 @@ func TestHMOptionsNix_MapsGoTypesToNixTypes(t *testing.T) {
 		"string":            "image_tag = opt types.str;",
 		"*bool":             "thin = opt types.bool;",
 		"bool":              "privileged = opt types.bool;",
-		"int":               "qemu_cpus = opt types.int;",
+		"int":               "winkit_cpus = opt types.int;",
 		"[]string":          "modules = opt (types.listOf types.str);",
 		"map[string]string": "libvirt_path_map = opt (types.attrsOf types.str);",
 	}
 	for goType, want := range cases {
 		if !strings.Contains(out, want) {
 			t.Errorf("%s mapping: missing %q", goType, want)
+		}
+	}
+	// Renamed keys: options.nix exposes only the winkit_* spelling.
+	for _, old := range []string{"qemu_ssh_port", "qemu_windows_iso", "qemu_cpus", "qemu_memory_gb"} {
+		if strings.Contains(out, old+" = ") {
+			t.Errorf("deprecated key %s must not be a home-manager option", old)
 		}
 	}
 }
@@ -104,9 +110,14 @@ func TestHMOptionsNix_NestedStructsBecomeSubmodules(t *testing.T) {
 	if !strings.Contains(out, "mount = opt types.str;") {
 		t.Error("VolumeMount.mount leaf missing")
 	}
-	// LLMSection.Models is a plain nested section, not a submodule
-	if !strings.Contains(out, "models = {") {
-		t.Error("llm.models should be a plain nested section")
+	// llm.providers is a map of provider submodules; deprecated llm keys are hidden
+	if !strings.Contains(out, "providers = opt (types.attrsOf (types.submodule") {
+		t.Error("llm.providers should be attrsOf submodule")
+	}
+	for _, hidden := range []string{"use_ollama", "use_openrouter", "default = opt"} {
+		if strings.Contains(out, hidden) {
+			t.Errorf("deprecated llm key %q must not be a nix option", hidden)
+		}
 	}
 }
 

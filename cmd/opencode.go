@@ -14,13 +14,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// knownProviderDefaults maps provider names to their default base URLs
-// inside docker (host.docker.internal).
-var knownProviderDefaults = map[string]string{
-	"ollama":   "http://host.docker.internal:11434/v1",
-	"lmstudio": "http://host.docker.internal:1234/v1",
-}
-
 var opencodeCmd = &cobra.Command{
 	Use:   "opencode [args...]",
 	Short: "Run OpenCode in a devcell container",
@@ -31,7 +24,7 @@ All additional args are forwarded to the opencode binary unchanged.
 
 On first run, if no opencode config exists at $CELL_HOME/.config/opencode/,
 locally available ollama models are auto-detected and written there.
-When [llm.models] is configured in devcell.toml, those models are used instead.
+When [llm.providers] is configured in devcell.toml, those models are used instead.
 
 Examples:
 
@@ -104,31 +97,40 @@ func opencodeEnv() map[string]string {
 		return env
 	}
 
-	// Resolve models: devcell.toml [llm.models] > auto-detect ollama > empty.
-	cellCfg := cfg.LoadFromOS(c.ConfigDir, c.BaseDir)
-	if !useOpenRouter {
-		useOpenRouter = cellCfg.LLM.UseOpenRouter
+	// Resolve models: devcell.toml [llm.providers] > auto-detect ollama > empty.
+	llm := cfg.LoadFromOS(c.ConfigDir, c.BaseDir).LLM
+	provider := llm.ActiveProvider()
+	switch {
+	case useOpenRouter:
+		provider = cfg.LLMProviderOpenRouter
+	case scanFlag("--ollama"):
+		provider = cfg.LLMProviderOllama
 	}
-	models := cellCfg.LLM.Models
+	useOpenRouter = provider == cfg.LLMProviderOpenRouter
+	models := cfg.LLMModelsSection{Providers: llm.Providers}
 	if len(models.Providers) > 0 {
 		if dbg {
-			fmt.Fprintf(os.Stderr, " opencode: using models from devcell.toml [llm.models]\n")
+			fmt.Fprintf(os.Stderr, " opencode: using models from devcell.toml [llm.providers]\n")
 		}
 	} else if !useOpenRouter {
 		if dbg {
-			fmt.Fprintf(os.Stderr, " opencode: no [llm.models] in devcell.toml, probing ollama...\n")
+			fmt.Fprintf(os.Stderr, " opencode: no [llm.providers] in devcell.toml, probing ollama...\n")
 		}
 		models = autoDetectOllamaModels()
 	}
 
-	// OpenRouter mode: opencode has a built-in openrouter provider keyed off
-	// OPENROUTER_API_KEY, so only the default model needs the provider prefix.
+	// opencode names models "provider/model"; compose it from the two keys.
+	// Under default there is no rerouting, so model is already opencode's own ID.
+	model := llm.ModelFor(provider)
 	if useOpenRouter {
-		if m := resolveOpenRouterModel(models.Default, models, dbg); m != "" {
-			models.Default = "openrouter/" + m
-		} else {
-			models.Default = ""
-		}
+		model = resolveOpenRouterModel(llm, dbg)
+	}
+	switch {
+	case model == "":
+	case provider == cfg.LLMProviderDefault:
+		models.Default = model
+	default:
+		models.Default = provider + "/" + model
 	}
 
 	if dbg {
@@ -162,7 +164,7 @@ func opencodeEnv() map[string]string {
 		"OPENCODE_CONFIG_CONTENT": string(merged),
 	}
 	if useOpenRouter {
-		// Empty placeholder — filled after 1Password by FillOpenRouterKey.
+		// Empty placeholder, filled after 1Password by cell.FillOpenRouterKey.
 		env["OPENROUTER_API_KEY"] = ""
 	}
 	return env
@@ -247,7 +249,7 @@ func autoDetectOllamaModels() cfg.LLMModelsSection {
 	}
 
 	// Only provide the model list — don't auto-select a default.
-	// The user picks in opencode's UI, or sets [models] default in devcell.toml.
+	// The user picks in opencode's UI, or sets [llm] provider + model in devcell.toml.
 	return cfg.LLMModelsSection{
 		Providers: map[string]cfg.LLMProvider{
 			"ollama": {Models: names},
@@ -296,7 +298,9 @@ type opencodeModelJSON struct {
 	Name string `json:"name"`
 }
 
-// buildOpencodeJSON generates opencode config JSON from the [llm.models] section.
+// buildOpencodeJSON generates opencode config JSON from the composed default
+// model and [llm.providers]. Built-in providers get a /v1 OpenAI-compat
+// endpoint derived from their API root; custom ones use base_url verbatim.
 // Always includes permission:"allow" for sandbox auto-approval.
 func buildOpencodeJSON(ms cfg.LLMModelsSection) []byte {
 	doc := opencodeJSON{
@@ -324,14 +328,18 @@ func buildOpencodeJSON(ms cfg.LLMModelsSection) []byte {
 		// openrouter is a built-in opencode provider — it ships its own SDK
 		// and base URL, keyed off OPENROUTER_API_KEY. Overriding npm here
 		// would detach it from that auth path.
-		if name == "openrouter" {
-			doc.Provider[name] = opencodeProviderJSON{Models: models}
+		if name == cfg.LLMProviderOpenRouter {
+			p := opencodeProviderJSON{Models: models}
+			if prov.BaseURL != "" {
+				p.Options = map[string]string{"baseURL": llmBaseURL(cfg.LLMSection{Providers: ms.Providers}, name) + "/v1"}
+			}
+			doc.Provider[name] = p
 			continue
 		}
 
 		baseURL := prov.BaseURL
-		if baseURL == "" {
-			baseURL = knownProviderDefaults[name]
+		if _, builtin := llmDefaultBaseURLs[name]; builtin {
+			baseURL = llmBaseURL(cfg.LLMSection{Providers: ms.Providers}, name) + "/v1"
 		}
 
 		doc.Provider[name] = opencodeProviderJSON{

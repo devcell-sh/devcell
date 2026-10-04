@@ -310,7 +310,6 @@ func TestMcp_PlaywrightE2EFormSecrets(t *testing.T) {
 
 // ── Patchright stealth detection ──────────────────────────────────────────────
 
-
 // TestMcp_PatchrightUndetected — verifies patchright + stealth init-script make the browser
 // undetectable as automated. Launches patchright-mcp-cell with --init-script (same args
 // Claude Code uses in production via nix-mcp-servers.json), navigates to a page, and asserts:
@@ -319,6 +318,7 @@ func TestMcp_PlaywrightE2EFormSecrets(t *testing.T) {
 //   - navigator.plugins.length >= 3 (mock)
 //   - navigator.languages includes "en-US"
 //   - WebGL vendor = "Intel Inc." (if available)
+//
 // TestMcp_PatchrightUndetected is a smoke check that the stealth pipeline
 // is wired correctly in this container variant. It verifies MCP can launch
 // the browser and that basic stealth spoofs (WebDriver, plugins, WebGL)
@@ -365,7 +365,6 @@ func TestMcp_PatchrightUndetected(t *testing.T) {
 	t.Log("PASS: config.json has expected Chrome flags")
 }
 
-
 // ── Detection Suite ──────────────────────────────────────────────────────────
 //
 // Comprehensive stealth detection is handled by the JS test suite:
@@ -381,7 +380,6 @@ func TestMcp_PatchrightUndetected(t *testing.T) {
 // This Go test is a smoke check only — verifies the MCP stealth pipeline
 // is wired correctly in the container. Full detection assertions are in JS.
 // Runs across all 3 variants (DEVCELL_TEST_VARIANT=thin/pure/impure).
-
 
 // TestThinEntrypoint_MiseFound verifies the entrypoint's 10-mise.sh fragment can find
 // the mise binary regardless of which profile path it's at. In thin mode, mise is at

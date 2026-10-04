@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
 	"github.com/DimmKirr/devcell/internal/cfg"
 	"github.com/DimmKirr/devcell/internal/config"
+	"github.com/DimmKirr/devcell/internal/engine"
 	"github.com/DimmKirr/devcell/internal/telemetry"
 	"github.com/DimmKirr/devcell/internal/ux"
 	"github.com/spf13/cobra"
@@ -20,16 +22,27 @@ var initCmd = &cobra.Command{
 
 func init() {
 	initCmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompts and proceed with defaults")
-	initCmd.Flags().Bool("macos", false, "Set up a macOS VM box via UTM + Vagrant")
 	initCmd.Flags().Bool("force", false, "Overwrite existing files and update flake inputs (implies --update)")
 	initCmd.Flags().Bool("update", false, "update nix flake inputs (pull latest) instead of just resolving")
+	initCmd.Flags().Bool("upgrade", false, "rewrite deprecated keys in devcell.toml and .devcell.toml to the current syntax, then exit (same as `cell config migrate`)")
 	initCmd.Flags().Bool("no-cache", false, "Force re-download of cached IPSW restore image (tart only)")
-	initCmd.Flags().String("stack", "", "stack name (base, dev [seed, ~3 GB], ultimate [~15 GB]; legacy: go, node, python, fullstack, electronics)")
+	initCmd.Flags().String("stack", "", "stack name (base, dev [seed], ultimate [general development], bbb [specialist tools]; legacy: go, node, python, fullstack, electronics)")
 	initCmd.Flags().StringSlice("modules", nil, "explicit module list (comma-separated, e.g. go,infra,electronics)")
 }
 
 func runInit(cmd *cobra.Command, _ []string) error {
 	applyOutputFlagsWithLog("init")
+
+	// --upgrade is a config rewrite, not a re-scaffold: migrate the files
+	// and stop before any engine or flake work.
+	if upgrade, _ := cmd.Flags().GetBool("upgrade"); upgrade {
+		telemetry.Track("init_upgrade", nil)
+		c, err := config.LoadFromOS()
+		if err != nil {
+			return fmt.Errorf("load config: %w", err)
+		}
+		return migrateConfigFiles(c, false)
+	}
 
 	// Engine resolution uses the same priority as build/run:
 	// CLI flag > TOML [cell].engine > "docker" default.
@@ -39,34 +52,12 @@ func runInit(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
-	cellCfgForEngine := cfg.LoadFromOS(c.ConfigDir, c.BaseDir)
-	engine, err := resolveEngine(scanStringFlag("--engine"), scanStringFlag("--os"), cellCfgForEngine.Cell.Engine, cellCfgForEngine.Cell.OS, scanFlag("--macos"))
+	cellCfg := cfg.LoadFromOS(c.ConfigDir, c.BaseDir)
+	engineName, err := resolveEngine(os.Stderr, cellCfg)
 	if err != nil {
 		return err
 	}
-	telemetry.Track("init", map[string]any{"engine": engine, "stack": cmd.Flags().Lookup("stack").Value.String()})
-
-	if engine == "tart" {
-		stack, _ := cmd.Flags().GetString("stack")
-		force, _ := cmd.Flags().GetBool("force")
-		noCache, _ := cmd.Flags().GetBool("no-cache")
-		return runInitTart(c.CellName, c.HostHome, c.BaseDir, stack, force, noCache)
-	}
-
-	if engine == "qemu" || engine == "libvirt" {
-		// libvirt reuses the qemu scaffold: init only creates directories,
-		// an SSH keypair, and VirtIO drivers on the shared mount (CELL-372).
-		stack, _ := cmd.Flags().GetString("stack")
-		force, _ := cmd.Flags().GetBool("force")
-		return runInitQemu(c.CellName, c.HostHome, stack, force)
-	}
-
-	if engine == "vagrant" {
-		return runInitMacOS()
-	}
-	yes, _ := cmd.Flags().GetBool("yes")
-	force, _ := cmd.Flags().GetBool("force")
-	update, _ := cmd.Flags().GetBool("update")
+	telemetry.Track("init", map[string]any{"engine": string(engineName), "stack": cmd.Flags().Lookup("stack").Value.String()})
 
 	if bi, _ := cmd.Flags().GetString("base-image"); bi != "" {
 		os.Setenv("DEVCELL_BASE_IMAGE", bi)
@@ -75,46 +66,28 @@ func runInit(cmd *cobra.Command, _ []string) error {
 		ux.Debugf("DEVCELL_BASE_IMAGE: %s (env)", bi)
 	}
 
-	ux.Debugf("BaseDir: %s, ConfigDir: %s", c.BaseDir, c.ConfigDir)
-
-	stack, _ := cmd.Flags().GetString("stack")
-	if stack != "" {
-		ux.Debugf("stack: %s (--stack flag)", stack)
-	}
-
-	modules, _ := cmd.Flags().GetStringSlice("modules")
-
-	result, err := RunInitFlow(InitFlowOptions{
-		BaseDir:    c.BaseDir,
-		ConfigDir:  c.ConfigDir,
-		NixhomeSrc: cellCfgForEngine.Nix.NixhomePath,
-		Stack:      stack,
-		Modules:    modules,
-		Yes:        yes,
-		Force:      force,
-	})
+	e, err := engine.For(engineName)
 	if err != nil {
 		return err
 	}
+	return e.Init(context.Background(), initOpts(cmd, engineCell(c, cellCfg)))
+}
 
-	// Update BuildDir now that .devcell.toml exists.
-	c.BuildDir = config.ResolveBuildDir(c.BaseDir, c.ConfigDir, true)
-	fmt.Printf(" Created .devcell.toml + .devcell/ in %s\n", c.BaseDir)
-	_ = result
-
-	// Resolve flake inputs.
-	if force {
-		update = true
+// initOpts is the engine.InitOpts for `cell init` on cell c: every init
+// flag, whichever engines read it.
+func initOpts(cmd *cobra.Command, c engine.Cell) engine.InitOpts {
+	flags := cmd.Flags()
+	stack, _ := flags.GetString("stack")
+	modules, _ := flags.GetStringSlice("modules")
+	yes, _ := flags.GetBool("yes")
+	force, _ := flags.GetBool("force")
+	update, _ := flags.GetBool("update")
+	return engine.InitOpts{
+		Cell:    c,
+		Stack:   stack,
+		Force:   force,
+		Modules: modules,
+		Yes:     yes,
+		Update:  update,
 	}
-	lockOnly := !update
-	label := "Resolving nix flake inputs"
-	if !lockOnly {
-		label = "Updating nix flake inputs"
-	}
-	if err := updateFlakeLockWithSpinner(c.BuildDir, lockOnly, label); err != nil {
-		return err
-	}
-
-	fmt.Println(" Run 'cell build' to build the image, or 'cell claude' to build and start.")
-	return nil
 }

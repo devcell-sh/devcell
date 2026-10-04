@@ -1,9 +1,6 @@
 package ux
 
-import (
-	"fmt"
-	"strings"
-)
+import "strings"
 
 // BuildErrorHint describes a user-facing explanation and fix for a known build failure.
 type BuildErrorHint struct {
@@ -76,7 +73,7 @@ var buildErrorPatterns = []struct {
 			Title: "Dockerfile syntax error",
 			Body:  "The generated Dockerfile contains a syntax error.",
 			Fixes: []string{
-				"cell build                       # retry after checking .devcell/Dockerfile",
+				"cell build --debug               # retry with full build output",
 			},
 		},
 	},
@@ -125,22 +122,4 @@ func ClassifyBuildOutput(output string) *BuildErrorHint {
 		}
 	}
 	return nil
-}
-
-// PrintBuildErrorHint renders a user-facing error panel for a build failure hint.
-func PrintBuildErrorHint(hint *BuildErrorHint) {
-	border := StyleError.Render("─────────────────────────────────────────")
-	fmt.Println()
-	fmt.Printf(" %s\n", border)
-	fmt.Printf(" %s  %s\n", StyleError.Render("✗"), StyleBold.Render(hint.Title))
-	fmt.Printf(" %s\n", StyleMuted.Render(hint.Body))
-	if len(hint.Fixes) > 0 {
-		fmt.Println()
-		fmt.Printf(" %s\n", StyleBold.Render("To fix:"))
-		for _, fix := range hint.Fixes {
-			fmt.Printf("   %s %s\n", StyleAccent.Render("•"), StyleInfo.Render(fix))
-		}
-	}
-	fmt.Printf(" %s\n", border)
-	fmt.Println()
 }

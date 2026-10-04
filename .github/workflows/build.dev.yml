@@ -28,6 +28,37 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  go-unit:
+    name: Go Unit Tests
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Install go-task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # cmd/serve.go imports the gitignored api/swagger/ package, so the
+      # docs must exist before cmd/ compiles (see AGENTS.md).
+      - name: Generate swagger docs
+        run: task swagger:generate
+
+      # Short mode: tests that need a logged-in agent binary, a built image
+      # or the network skip themselves. Docker-backed container tests live
+      # in ./test/... and run in the Docker Test job below.
+      - name: Vet and unit-test cmd/ and internal/
+        run: |
+          go vet ./cmd/... ./internal/...
+          go test -short -timeout 900s ./cmd/... ./internal/...
+
   secrets:
     name: Detect Secrets
     runs-on: blacksmith-4vcpu-ubuntu-2404

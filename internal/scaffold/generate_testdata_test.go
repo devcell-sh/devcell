@@ -101,17 +101,6 @@ func TestGenerateTestdata(t *testing.T) {
 			t.Fatalf("write flake.nix: %v", err)
 		}
 
-		// Generate Dockerfile
-		var dockerfile string
-		if tc.withNixhome {
-			dockerfile = scaffold.GenerateDockerfileWithNixhome(tc.baseImage, true, tc.stack, tc.modules)
-		} else {
-			dockerfile = scaffold.GenerateDockerfileWithNixhome(tc.baseImage, false, tc.stack, tc.modules)
-		}
-		if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte(dockerfile), 0644); err != nil {
-			t.Fatalf("write Dockerfile: %v", err)
-		}
-
 		t.Logf("wrote %s/", tc.name)
 	}
 

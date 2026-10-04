@@ -214,15 +214,6 @@ type SelectOption struct {
 	Value string
 }
 
-// GetSelection shows an interactive selection prompt and returns the chosen option.
-func GetSelection(message string, options []string) (string, error) {
-	opts := make([]SelectOption, len(options))
-	for i, o := range options {
-		opts[i] = SelectOption{Label: o, Value: o}
-	}
-	return GetSelectionKV(message, opts)
-}
-
 // GetSelectionKV shows an interactive selection with separate display labels and values.
 // Returns the Value of the selected option.
 func GetSelectionKV(message string, options []SelectOption) (string, error) {
@@ -251,42 +242,6 @@ func GetSelectionKV(message string, options []SelectOption) (string, error) {
 		Run()
 	if err != nil {
 		return "", err
-	}
-	return selected, nil
-}
-
-// GetMultiSelection shows an interactive multi-select (checkbox) prompt and
-// returns all selected options. defaultOptions are pre-checked.
-// Returns huh.ErrUserAborted if the user presses Esc or Ctrl+C.
-func GetMultiSelection(message string, options []string, defaultOptions []string) ([]string, error) {
-	selected := make([]string, len(defaultOptions))
-	copy(selected, defaultOptions)
-
-	opts := make([]huh.Option[string], len(options))
-	for i, o := range options {
-		opts[i] = huh.NewOption(o, o)
-	}
-	field := huh.NewMultiSelect[string]().
-		Title(message).
-		Options(opts...).
-		Value(&selected).
-		WithHeight(len(options) + 2)
-	if LogPlainText {
-		err := field.RunAccessible(os.Stdout, os.Stdin)
-		if err != nil {
-			return nil, err
-		}
-		return selected, nil
-	}
-	// Build form manually so we can add Esc to the Quit binding.
-	km := huh.NewDefaultKeyMap()
-	km.Quit.SetKeys("ctrl+c", "esc")
-	err := huh.NewForm(huh.NewGroup(field)).
-		WithShowHelp(false).
-		WithKeyMap(km).
-		Run()
-	if err != nil {
-		return nil, err
 	}
 	return selected, nil
 }
@@ -344,15 +299,6 @@ func Debugf(format string, a ...any) {
 	}
 }
 
-// Println prints a styled line (or plain info when LogPlainText is set).
-func Println(message string) {
-	if !LogPlainText {
-		fmt.Printf(" %s\n", message)
-	} else {
-		fmt.Printf(" %s %s\n", prefix(StyleInfo, "→"), message)
-	}
-}
-
 // Info prints an info-styled message.
 //
 // Lines use \r\n rather than \n because cell-open writes rows AFTER
@@ -365,9 +311,21 @@ func Info(message string) {
 	fmt.Printf("\r %s %s\r\n", prefix(StyleInfo, "→"), message)
 }
 
-// Warn prints a warning-styled message.
+// Warn prints a warning row (same ⚠ prefix as ProgressSpinner.Warn).
 func Warn(message string) {
-	fmt.Printf("\r %s %s\r\n", prefix(StyleWarning, "WARN"), message)
+	fmt.Printf("\r %s %s\r\n", prefix(StyleWarning, "⚠"), message)
+}
+
+// SuccessRow prints a permanent `✓ <title> <elapsed>` row without a
+// spinner: the same shape ProgressSpinner.Success lands, for callers that
+// measured the phase themselves (boot events from inside the container).
+func SuccessRow(title string, elapsed time.Duration) {
+	fmt.Printf("\r %s %s %s\r\n", prefix(StyleSuccess, "✓"), title, StyleMuted.Render(elapsed.Round(time.Millisecond).String()))
+}
+
+// FailMsg prints a failure row (standalone, not spinner).
+func FailMsg(message string) {
+	fmt.Printf("\r %s %s\r\n", prefix(StyleError, "✗"), message)
 }
 
 // SuccessMsg prints a success-styled message (standalone, not spinner).

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/DimmKirr/devcell/internal/cfg"
@@ -24,15 +23,19 @@ args are forwarded to the claude binary unchanged.
 Use --ollama to route Claude Code through a local ollama instance
 (Anthropic Messages API compatibility). This sets ANTHROPIC_BASE_URL
 to point at ollama on the host. Can also be enabled permanently via
-use_ollama = true in the [llm] section of devcell.toml.
+provider = "ollama" in the [llm] section of devcell.toml.
 
 Use --openrouter to route Claude Code through OpenRouter. Requires
 OPENROUTER_API_KEY env var. Can also be enabled permanently via
-use_openrouter = true in the [llm] section of devcell.toml.
+provider = "openrouter" in the [llm] section of devcell.toml.
+A flag overrides [llm] provider for that run.
 
 The model is resolved in order:
-  1. [llm.models] default in devcell.toml (e.g. "ollama/qwen3:30b")
-  2. Best-ranked model from the running ollama instance (auto-detect)
+  1. [llm] model in devcell.toml, when [llm] provider is the active one
+  2. ollama: best-ranked model from the running instance (auto-detect)
+     openrouter: first of [llm.providers.openrouter] models
+
+[llm.providers.<name>] base_url overrides the built-in endpoint.
 
 Examples:
 
@@ -47,40 +50,32 @@ Examples:
 }
 
 // claudeEnv returns extra env vars for the claude container.
-// When --ollama flag or [llm] use_ollama=true is set, it injects env vars
+// When --ollama or [llm] provider = "ollama" is set, it injects env vars
 // that redirect Claude Code's API calls to a local ollama instance and
 // sets ANTHROPIC_MODEL to the configured or best-available model.
-// When --openrouter flag or [llm] use_openrouter=true is set, it injects
+// When --openrouter or [llm] provider = "openrouter" is set, it injects
 // env vars that redirect Claude Code's API calls through OpenRouter.
 func claudeEnv() map[string]string {
 	dbg := scanFlag("--debug")
 	useOllama := scanFlag("--ollama")
 	useOpenRouter := scanFlag("--openrouter")
 
-	// Always load config — needed for use_ollama, use_openrouter, and model selection.
-	var configModel string
-	var models cfg.LLMModelsSection
+	// Always load config — needed for [llm] provider and model selection.
+	var llm cfg.LLMSection
 	c, err := config.LoadFromOS()
 	if err == nil {
-		cellCfg := cfg.LoadFromOS(c.ConfigDir, c.BaseDir)
-		if !useOllama {
-			useOllama = cellCfg.LLM.UseOllama
+		llm = cfg.LoadFromOS(c.ConfigDir, c.BaseDir).LLM
+		if !useOllama && !useOpenRouter {
+			useOllama = llm.Provider == cfg.LLMProviderOllama
+			useOpenRouter = llm.Provider == cfg.LLMProviderOpenRouter
 		}
-		if !useOpenRouter {
-			useOpenRouter = cellCfg.LLM.UseOpenRouter
-		}
-		configModel = cellCfg.LLM.Models.Default
-		models = cellCfg.LLM.Models
 	}
 
 	// Base env vars for all claude sessions.
 	env := map[string]string{}
 
 	if useOpenRouter {
-		for k, v := range openrouterEnv(configModel, models, dbg) {
-			env[k] = v
-		}
-		return env
+		return openrouterEnv(llm, dbg)
 	}
 
 	if !useOllama {
@@ -91,11 +86,11 @@ func claudeEnv() map[string]string {
 		fmt.Fprintf(os.Stderr, " claude: ollama mode enabled, redirecting API to host ollama\n")
 	}
 
-	env["ANTHROPIC_BASE_URL"] = "http://host.docker.internal:11434"
+	env["ANTHROPIC_BASE_URL"] = llmBaseURL(llm, cfg.LLMProviderOllama)
 	env["ANTHROPIC_AUTH_TOKEN"] = "ollama"
 	env["CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY"] = "1"
 
-	if model := resolveOllamaModel(configModel, dbg); model != "" {
+	if model := resolveOllamaModel(llm.ModelFor(cfg.LLMProviderOllama), dbg); model != "" {
 		env["ANTHROPIC_MODEL"] = model
 	}
 
@@ -103,26 +98,24 @@ func claudeEnv() map[string]string {
 }
 
 // openrouterEnv returns env vars that redirect Claude Code through OpenRouter.
-// The API key is resolved lazily (after 1Password) via ResolveOpenRouterKey.
-//
-// Model resolution order:
-//  1. [llm.models] default with "openrouter/" prefix (explicit openrouter default)
-//  2. [llm.models] default without provider prefix (provider-neutral default)
-//  3. First model in [llm.models.providers.openrouter] models list
-//  4. No model override (Claude Code uses its own default)
-func openrouterEnv(configModel string, models cfg.LLMModelsSection, dbg bool) map[string]string {
+// The empty OPENROUTER_API_KEY / ANTHROPIC_AUTH_TOKEN placeholders are filled
+// after 1Password resolution (see runAgent).
+func openrouterEnv(llm cfg.LLMSection, dbg bool) map[string]string {
+	baseURL := llmBaseURL(llm, cfg.LLMProviderOpenRouter)
 	if dbg {
-		fmt.Fprintf(os.Stderr, " claude: openrouter mode enabled, redirecting API to openrouter.ai\n")
+		fmt.Fprintf(os.Stderr, " claude: openrouter mode enabled, redirecting API to %s\n", baseURL)
 	}
 
 	env := map[string]string{
-		"ANTHROPIC_BASE_URL":                         openRouterAnthropicBaseURL,
+		"ANTHROPIC_BASE_URL":                         baseURL,
 		"ANTHROPIC_API_KEY":                          "",
+		"ANTHROPIC_AUTH_TOKEN":                       "",
+		"OPENROUTER_API_KEY":                         "",
 		"CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1",
 		"CLAUDE_CODE_SKIP_FAST_MODE_ORG_CHECK":       "1",
 	}
 
-	model := resolveOpenRouterModel(configModel, models, dbg)
+	model := resolveOpenRouterModel(llm, dbg)
 	if model != "" {
 		env["ANTHROPIC_MODEL"] = model
 	}
@@ -130,66 +123,34 @@ func openrouterEnv(configModel string, models cfg.LLMModelsSection, dbg bool) ma
 	return env
 }
 
-// resolveOpenRouterModel picks the model for OpenRouter mode.
-func resolveOpenRouterModel(configModel string, models cfg.LLMModelsSection, dbg bool) string {
-	// Priority 1: global default with openrouter/ prefix.
-	if strings.HasPrefix(configModel, "openrouter/") {
-		model := strings.TrimPrefix(configModel, "openrouter/")
+// resolveOpenRouterModel picks the model for OpenRouter mode: [llm] model
+// when provider = "openrouter", else the first of [llm.providers.openrouter]
+// models, else "" (the agent's own default).
+func resolveOpenRouterModel(llm cfg.LLMSection, dbg bool) string {
+	if model := llm.ModelFor(cfg.LLMProviderOpenRouter); model != "" {
 		if dbg {
-			fmt.Fprintf(os.Stderr, " claude: openrouter model from config default: %s\n", model)
+			fmt.Fprintf(os.Stderr, " claude: openrouter model from config: %s\n", model)
 		}
 		return model
 	}
-
-	// Priority 2: global default without any provider prefix (e.g. "google/gemini-2.5-pro").
-	if configModel != "" && !strings.HasPrefix(configModel, "ollama/") {
+	if p := llm.Providers[cfg.LLMProviderOpenRouter]; len(p.Models) > 0 {
 		if dbg {
-			fmt.Fprintf(os.Stderr, " claude: openrouter model from config default: %s\n", configModel)
+			fmt.Fprintf(os.Stderr, " claude: openrouter model from providers list: %s\n", p.Models[0])
 		}
-		return configModel
-	}
-
-	// Priority 3: first model in [llm.models.providers.openrouter].
-	if p, ok := models.Providers["openrouter"]; ok && len(p.Models) > 0 {
-		model := p.Models[0]
-		if dbg {
-			fmt.Fprintf(os.Stderr, " claude: openrouter model from providers list: %s\n", model)
-		}
-		return model
-	}
-
-	// No model override: skip ollama model, let Claude Code use its default.
-	if configModel != "" && dbg {
-		fmt.Fprintf(os.Stderr, " claude: ignoring ollama model %q in openrouter mode, using Claude Code default\n", configModel)
+		return p.Models[0]
 	}
 	return ""
 }
 
-// ResolveOpenRouterKey fills ANTHROPIC_AUTH_TOKEN and OPENROUTER_API_KEY from
-// the environment. Called after 1Password resolution so the key is available.
-func ResolveOpenRouterKey(env map[string]string) error {
-	if err := FillOpenRouterKey(env); err != nil {
-		return err
-	}
-	env["ANTHROPIC_AUTH_TOKEN"] = env["OPENROUTER_API_KEY"]
-	return nil
-}
-
 // resolveOllamaModel returns the bare ollama model name to use as ANTHROPIC_MODEL.
-// Priority: config [llm.models] default > best-ranked model from running ollama.
+// Priority: config [llm] model > best-ranked model from running ollama.
 // Returns "" if no model can be determined (ollama unreachable, no models).
 func resolveOllamaModel(configModel string, dbg bool) string {
 	if configModel != "" {
-		// Strip "ollama/" prefix produced by FormatActiveTOMLSnippet.
-		model := strings.TrimPrefix(configModel, "ollama/")
 		if dbg {
-			if model != configModel {
-				fmt.Fprintf(os.Stderr, " claude: model from config: %s (stripped ollama/ prefix from %q)\n", model, configModel)
-			} else {
-				fmt.Fprintf(os.Stderr, " claude: model from config: %s\n", model)
-			}
+			fmt.Fprintf(os.Stderr, " claude: model from config: %s\n", configModel)
 		}
-		return model
+		return configModel
 	}
 
 	// Auto-detect: probe local ollama and pick the best-ranked model.
@@ -255,6 +216,6 @@ func resolveOllamaModel(configModel string, dbg bool) string {
 	}
 
 	model := ranked[0].Name
-	fmt.Printf(" → ollama model: %s (set [llm.models] default in devcell.toml to pin)\n", model)
+	fmt.Printf(" → ollama model: %s (pin with [llm] provider = \"ollama\" and model in devcell.toml)\n", model)
 	return model
 }

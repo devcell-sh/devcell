@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DimmKirr/devcell/internal/config"
 	"github.com/DimmKirr/devcell/internal/telemetry"
 )
 
@@ -124,5 +125,18 @@ func TestTelemetryStatus_ShowsDoNotTrack(t *testing.T) {
 
 	if !strings.Contains(out.String(), "DO_NOT_TRACK") {
 		t.Errorf("output %q does not mention DO_NOT_TRACK", out.String())
+	}
+}
+
+// The telemetry config dir must be the one internal/config resolves for
+// every other command, whether or not XDG_CONFIG_HOME is set.
+func TestResolveConfigDir_AgreesWithConfig(t *testing.T) {
+	for _, xdg := range []string{"", t.TempDir()} {
+		t.Setenv("XDG_CONFIG_HOME", xdg)
+		t.Setenv("HOME", "/home/agree")
+		want := config.ResolveConfigDir(os.Getenv)
+		if got := resolveConfigDir(); got != want {
+			t.Errorf("XDG_CONFIG_HOME=%q: resolveConfigDir() = %q, want %q", xdg, got, want)
+		}
 	}
 }

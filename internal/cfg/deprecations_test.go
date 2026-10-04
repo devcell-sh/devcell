@@ -47,6 +47,97 @@ documents = ["prod-api-keys"]
 	}
 }
 
+func TestLoadFile_LegacyCellKeys(t *testing.T) {
+	p := writeTOML(t, t.TempDir(), "test.toml", `
+[cell]
+thin = false
+gui = false
+nixhome = "/src/home"
+`)
+	c, err := cfg.LoadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(deprecatedNames(c), ","); got != "[cell] thin,[cell] gui,[cell] nixhome" {
+		t.Errorf("deprecated = %q", got)
+	}
+	if c.Nix.NixhomePath != "/src/home" {
+		t.Errorf("[cell] nixhome must migrate into [nix] nixhome, got %q", c.Nix.NixhomePath)
+	}
+	if c.GUI.Enabled == nil || *c.GUI.Enabled {
+		t.Errorf("[cell] gui = false must migrate into [gui] enabled")
+	}
+}
+
+// The libvirt engine was retired; its keys and the qemu keys nothing reads
+// keep parsing (old configs still load) but warn with no replacement.
+func TestLoadFile_RetiredQemuAndLibvirtKeys(t *testing.T) {
+	p := writeTOML(t, t.TempDir(), "test.toml", `
+[cell]
+libvirt_uri = "qemu+tcp://host.docker.internal/session"
+qemu_project_sync = "two-way"
+qemu_disk_size_gb = 64
+qemu_display = "cocoa"
+qemu_ssh_host = "10.0.0.5"
+
+[cell.libvirt_path_map]
+"/devcell" = "/Users/me/devcell"
+`)
+	c, err := cfg.LoadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		"[cell] libvirt_uri":       "remove it; the libvirt engine was retired",
+		"[cell] libvirt_path_map":  "remove it; the libvirt engine was retired",
+		"[cell] qemu_project_sync": "remove it; the libvirt engine was retired",
+		"[cell] qemu_disk_size_gb": "remove it; it has no effect",
+		"[cell] qemu_display":      "remove it; it has no effect",
+		"[cell] qemu_ssh_host":     "remove it; it has no effect",
+	}
+	got := map[string]string{}
+	for _, u := range c.DeprecatedUses {
+		got[u.Name] = u.Message
+	}
+	for name, msg := range want {
+		if !strings.HasPrefix(got[name], msg) {
+			t.Errorf("%s: message = %q, want prefix %q", name, got[name], msg)
+		}
+	}
+	if len(got) != len(want) {
+		t.Errorf("deprecated = %v, want exactly %d entries", deprecatedNames(c), len(want))
+	}
+}
+
+// The vagrant engine was removed; its keys keep parsing into their carrier
+// fields (old configs still load) but warn and point at the Tart VM.
+func TestLoadFile_RetiredVagrantKeys(t *testing.T) {
+	p := writeTOML(t, t.TempDir(), "test.toml", `
+[cell]
+vagrant_provider = "libvirt"
+vagrant_box = "utm/bookworm"
+`)
+	c, err := cfg.LoadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(deprecatedNames(c), ","); got != "[cell] vagrant_provider,[cell] vagrant_box" {
+		t.Fatalf("deprecated = %q", got)
+	}
+	const msg = `remove it; the vagrant engine was removed, use [cell] os = "macos" for a Tart VM`
+	for _, u := range c.DeprecatedUses {
+		if u.Message != msg {
+			t.Errorf("%s: message = %q, want %q", u.Name, u.Message, msg)
+		}
+		if u.Replacement != "(none)" {
+			t.Errorf("%s: replacement = %q, want (none)", u.Name, u.Replacement)
+		}
+	}
+	if c.Cell.VagrantProvider != "libvirt" || c.Cell.VagrantBox != "utm/bookworm" {
+		t.Errorf("retired keys must still parse, got provider=%q box=%q", c.Cell.VagrantProvider, c.Cell.VagrantBox)
+	}
+}
+
 func TestLoadFile_ShorthandsAreNotDeprecated(t *testing.T) {
 	dir := t.TempDir()
 	p := writeTOML(t, dir, "test.toml", `

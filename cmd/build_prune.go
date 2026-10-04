@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/DimmKirr/devcell/internal/runner"
+	"github.com/DimmKirr/devcell/internal/engine/docker"
 	"github.com/DimmKirr/devcell/internal/telemetry"
 	"github.com/DimmKirr/devcell/internal/ux"
 	"github.com/mattn/go-isatty"
@@ -67,7 +67,7 @@ func runBuildPrune(cmd *cobra.Command, _ []string) error {
 	telemetry.Track("build_prune", map[string]any{"pure": pure, "force": force})
 
 	homeDir, _ := os.UserHomeDir()
-	opts := runner.PruneOpts{
+	opts := docker.PruneOpts{
 		GOOS:    runtime.GOOS,
 		Force:   force,
 		Pure:    pure,
@@ -85,10 +85,10 @@ func runBuildPrune(cmd *cobra.Command, _ []string) error {
 	// cannot be resolved aborts the prune (named in the error) — proceeding
 	// on "some roots exist" is exactly the gap this closes.
 	if pure && !force {
-		closures, err := runner.CollectLiveClosures(
-			func() ([]string, error) { return runner.DockerRunningDevcellContainers(ctx) },
+		closures, err := docker.CollectLiveClosures(
+			func() ([]string, error) { return docker.DockerRunningDevcellContainers(ctx) },
 			func(container, link string) (string, error) {
-				return runner.DockerResolveContainerLink(ctx, container, link)
+				return docker.DockerResolveContainerLink(ctx, container, link)
 			},
 			ux.Debugf,
 		)
@@ -98,9 +98,9 @@ func runBuildPrune(cmd *cobra.Command, _ []string) error {
 		opts.LiveClosures = closures
 	}
 
-	return runner.RunPrune(runner.RunPruneArgs{
+	return docker.RunPrune(docker.RunPruneArgs{
 		Opts:    opts,
-		Exec:    func(step runner.PruneStep) error { return execStep(ctx, step) },
+		Exec:    func(step docker.PruneStep) error { return execStep(ctx, step) },
 		Out:     os.Stdout,
 		In:      os.Stdin,
 		SkipYes: yes,
@@ -108,7 +108,7 @@ func runBuildPrune(cmd *cobra.Command, _ []string) error {
 	})
 }
 
-func execStep(ctx context.Context, step runner.PruneStep) error {
+func execStep(ctx context.Context, step docker.PruneStep) error {
 	if len(step.Argv) == 0 {
 		return nil
 	}

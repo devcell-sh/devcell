@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"os/exec"
 	"sort"
@@ -58,7 +57,7 @@ func parseContainerNames(output string) []string {
 }
 
 // selectCell shows an interactive picker when multiple cells are running.
-// Labels show "<name>  docker" or "<name>  vagrant". Returns the selected key.
+// Labels show "<name>  docker". Returns the selected key.
 func selectCell(apps map[string]string) (string, error) {
 	var keys []string
 	for key := range apps {
@@ -67,16 +66,8 @@ func selectCell(apps map[string]string) (string, error) {
 	sort.Strings(keys)
 	opts := make([]ux.SelectOption, len(keys))
 	for i, key := range keys {
-		var displayName, cellType string
-		if strings.HasPrefix(key, "vagrant-") {
-			displayName = strings.TrimPrefix(key, "vagrant-")
-			cellType = "vagrant"
-		} else {
-			displayName = key
-			cellType = "docker"
-		}
 		opts[i] = ux.SelectOption{
-			Label: fmt.Sprintf("%-28s %s", displayName, cellType),
+			Label: fmt.Sprintf("%-28s %s", key, "docker"),
 			Value: key,
 		}
 	}
@@ -85,19 +76,5 @@ func selectCell(apps map[string]string) (string, error) {
 
 // completeRunningApps provides shell completion for running cell container names.
 func completeRunningApps(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
-	out, err := exec.Command("docker", "ps",
-		"--filter", "name=cell-",
-		"--format", "{{.Names}}").Output()
-	if err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
-	}
-	var completions []string
-	for _, line := range strings.Split(string(bytes.TrimSpace(out)), "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "cell-") && strings.HasSuffix(line, "-run") {
-			appName := line[len("cell-") : len(line)-len("-run")]
-			completions = append(completions, appName)
-		}
-	}
-	return completions, cobra.ShellCompDirectiveNoFileComp
+	return runningAppNames(), cobra.ShellCompDirectiveNoFileComp
 }

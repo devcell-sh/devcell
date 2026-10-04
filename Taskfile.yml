@@ -35,6 +35,15 @@ vars:
       else
         git describe --tags --always --dirty 2>/dev/null || echo "v0.0.0"
       fi
+  # Schema version published to devcell.sh/schema/<version>/. Only an
+  # explicit release tag (VERSION=vX.Y.Z, set by the release workflow)
+  # publishes under its own directory; everything else is v0.0.0 (main).
+  SCHEMA_VERSION:
+    sh: |
+      case "${VERSION:-}" in
+        v[0-9]*.[0-9]*.[0-9]*) echo "$VERSION" ;;
+        *) echo "v0.0.0" ;;
+      esac
   CELL_LDFLAGS: -s -w -X github.com/DimmKirr/devcell/internal/version.Version={{.CELL_VERSION}} -X github.com/DimmKirr/devcell/internal/version.GitCommit={{.GIT_COMMIT_HASH}} -X github.com/DimmKirr/devcell/internal/version.BuildDate={{.BUILD_DATE}}
   CELL_BUILD_TAGS:
     sh: |
@@ -79,7 +88,7 @@ tasks:
     dir: "{{.TASKFILE_DIR}}"
     silent: true
     cmds:
-      - go run github.com/swaggo/swag/cmd/swag@latest init -g cmd/serve.go -o docs --parseDependency --parseInternal
+      - go run github.com/swaggo/swag/cmd/swag@latest init -g cmd/serve.go -o api/swagger --parseDependency --parseInternal
 
   docs:generate:
     aliases: [web:docs]                         # back-compat
@@ -103,6 +112,22 @@ tasks:
             nix-instantiate --parse "$f" >/dev/null || exit 1
           done
         fi
+
+  schema:generate:
+    desc: Regenerate web/public/schema/<version>/devcell.json (published at https://devcell.sh/schema/<version>/devcell.json) from the Go config schema (internal/cfg.CellConfig); VERSION=vX.Y.Z selects the directory, default v0.0.0
+    dir: "{{.TASKFILE_DIR}}"
+    silent: true
+    cmds:
+      - go run cmd/schemagen.go -version {{.SCHEMA_VERSION}}
+
+  schema:catalog:
+    desc: Publish the home flake's module/stack/package catalog to web/public/schema/<version>/devcell-sh/home/ (needs nix; FLAKE=path:/path/to/home for a local checkout, VERSION=vX.Y.Z for a release)
+    dir: "{{.TASKFILE_DIR}}"
+    silent: true
+    vars:
+      FLAKE: '{{.FLAKE | default ""}}'
+    cmds:
+      - go run cmd/catalogen.go -version {{.SCHEMA_VERSION}} {{if .FLAKE}}-flake "{{.FLAKE}}"{{end}}
 
   nix:sync:
     desc: Sync flake.nix vendorHash with go.mod/go.sum and stage it — the one command to run after changing dependencies
@@ -188,7 +213,7 @@ tasks:
             Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -Repository PSGallery
           }
           $files = @(
-            Get-ChildItem -Recurse -Path "internal/vm/qemu/guest" -Include "*.ps1","*.psm1"
+            Get-ChildItem -Recurse -Path "internal/engine/winkit/guest" -Include "*.ps1","*.psm1"
           )
           if ($files.Count -eq 0) { Write-Output "No .ps1/.psm1 files found"; exit 0 }
           $fail = $false
@@ -247,7 +272,7 @@ tasks:
   cell:build:
     desc: Build cell CLI binary → ./bin/cell
     dir: "{{.TASKFILE_DIR}}"
-    deps: [swagger:generate, hm:generate, cell:deps]
+    deps: [swagger:generate, hm:generate, schema:generate, cell:deps]
     silent: true
     cmds:
       - mkdir -p bin
@@ -362,11 +387,12 @@ tasks:
 
   # ── Tests ──────────────────────────────────────────────────────────────
   test:unit:
-    desc: Run Go unit tests (cmd/, internal/) — no Docker, no nix
+    desc: Run Go unit tests (cmd/, internal/) in short mode, no Docker, no nix
     silent: true
     dir: "{{.TASKFILE_DIR}}"
+    deps: [swagger:generate]                   # cmd/serve.go imports the gitignored docs/ package
     cmds:
-      - go test -timeout 120s ./cmd/... ./internal/... {{.CLI_ARGS}}
+      - go test -short -timeout 600s ./cmd/... ./internal/... {{.CLI_ARGS}}
 
   test:integration:
     aliases: [test]                            # back-compat (cited in README)
@@ -388,15 +414,6 @@ tasks:
     cmds:
       - go test -v -count=1 -timeout 600s -run TestTartDarwinIntegration ./cmd/ {{.CLI_ARGS}}
 
-  test:vagrant:
-    desc: Run E2E install test in a clean Debian VM (QEMU). Requires vagrant + vagrant-qemu plugin.
-    dir: "{{.TASKFILE_DIR}}/test/vagrant"
-    cmds:
-      - vagrant up --provider=qemu
-      - defer: vagrant destroy -f
-    env:
-      CELL_VERSION: '{{.CELL_VERSION | default "0.0.0"}}'
-
   # ── Web site ───────────────────────────────────────────────────────────
   web:start:
     desc: Start Astro dev server for the DevCell landing page
@@ -413,7 +430,7 @@ tasks:
   # build, push, pull, verify, teardown — lives in
   # test/cache_roundtrip_test.go (Go test idiom). This Taskfile entry
   # is just the ergonomic top-level wrapper, matching test:unit /
-  # test:integration / test:vagrant.
+  # test:integration.
   test:cache:
     desc: Round-trip nix-cache pipeline locally (~1 min, requires docker + crane)
     cmds:
@@ -429,7 +446,7 @@ tasks:
   #   task test:windows:build ACCEL=hvf    # runs hvf subtest
   #   task test:windows:build ACCEL=""     # runs all subtests
   test:windows:build:
-    desc: "Run the full unattended Windows install through `cell build --engine=qemu`"
+    desc: "Run the full unattended Windows install through `cell build --engine winkit`"
     platforms: [darwin]
     silent: true
     vars:
@@ -452,7 +469,7 @@ tasks:
           fw="${qemu_prefix}/share/qemu/edk2-aarch64-code.fd"
         fi
 
-        cache_dir="${DEVCELL_QEMU_CACHE_DIR:-$HOME/.devcell/cache/qemu}"
+        cache_dir="${DEVCELL_WINKIT_CACHE_DIR:-$HOME/.devcell/cache/qemu}"
         win_iso="${DEVCELL_TEST_WINDOWS_ISO:-${cache_dir}/windows-arm64-en-us.iso}"
         virtio_iso="${DEVCELL_TEST_VIRTIO_ISO:-${cache_dir}/virtio-win.iso}"
 
@@ -499,7 +516,7 @@ tasks:
         log="{{.DEBUG_DIR}}/TestCellBuildWindows_QEMU.log"
         echo "▸ ${run_filter} → ${log}"
         build_env="DEVCELL_TEST_INSTALL=1 DEVCELL_TEST_REBUILD=1"
-        if env $build_env go test -run "${run_filter}" -timeout 8h -v -count=1 ./internal/vm/qemu/ 2>&1 | tee "${log}"; then
+        if env $build_env go test -run "${run_filter}" -timeout 8h -v -count=1 ./internal/engine/winkit/ 2>&1 | tee "${log}"; then
           echo "  ✓ PASS"
         else
           echo "  ✗ FAIL"
@@ -546,7 +563,7 @@ tasks:
 
   # ── macOS tart VM /nix + s6 diagnostics (read-only) → .scratch/debug/macos-nix.log ─────
   debug:macos:nix:
-    desc: "Probe the tart session VM: /nix mounts, darwin-store daemon, fstab, s6 tree → .scratch/debug/macos-nix.log"
+    desc: "Probe the tart cell VM: /nix mounts, darwin-store daemon, fstab, s6 tree → .scratch/debug/macos-nix.log"
     platforms: [darwin]
     silent: true
     vars:
@@ -622,7 +639,7 @@ tasks:
       #   H3 (any non-reg-add RunSynchronous aborts 0x8007000D): this run IS
       #      the test — the agent launcher is the vetted %l pattern; if the
       #      abort returns, H3 is confirmed and the agent design is dead.
-      DEVCELL_QEMU_WINPE_AGENT: "1"
+      DEVCELL_WINKIT_WINPE_AGENT: "1"
     vars:
       LOG: '{{.TASKFILE_DIR}}/.scratch/debug/autobuild.log'
       CACHE: '{{.HOME}}/.devcell/cache/qemu'
@@ -651,7 +668,7 @@ tasks:
         } > {{.LOG}} 2>&1
       - |
         set -o pipefail
-        cell claude --engine=qemu --debug --force 2>&1 | tee -a {{.LOG}}
+        cell claude --engine winkit --debug --force 2>&1 | tee -a {{.LOG}}
         rc=$?
         {
           echo ""
@@ -676,7 +693,9 @@ tasks:
     deps: [install]
     silent: true
     vars:
-      MARKER: '{{.HOME}}/.devcell/windows/ultimate/.provisioned'
+      CELL_NAME: '{{.CELL_NAME | default "DIMM"}}'
+      TEMPLATE_DIR: '{{.HOME}}/.devcell/windows/ultimate'
+      INSTANCE_DIR: '{{.HOME}}/.devcell/{{.CELL_NAME}}/windows'
       LOG: '{{.TASKFILE_DIR}}/.scratch/debug/windows.log'
     cmds:
       - |
@@ -689,16 +708,14 @@ tasks:
         echo "  cell:     $(cell --version 2>&1 || echo 'not found')"
         echo "  qemu:     $(qemu-system-aarch64 --version 2>/dev/null | head -1 || echo 'not found')"
         echo "  bunk env: DEVCELL_BUNK=${DEVCELL_BUNK:-<unset>}  SESSION_PORT_PREFIX=${SESSION_PORT_PREFIX:-<unset>}"
-        echo "  marker:   {{.MARKER}} — $(test -f '{{.MARKER}}' && echo 'EXISTS' || echo 'MISSING')"
+        TEMPLATE_QCOW2=$(ls {{.TEMPLATE_DIR}}/*.qcow2 2>/dev/null | head -1 || true)
+        echo "  template:   ${TEMPLATE_QCOW2:-MISSING}"
         echo ""
-        echo "  template disk:"
-        ls -lh {{.HOME}}/.devcell/windows/ultimate/disk-ultimate.qcow2 2>/dev/null || echo "    not found"
+        echo "  template disk (winkit build output, {{.TEMPLATE_DIR}}/*.qcow2):"
+        ls -lh {{.TEMPLATE_DIR}}/*.qcow2 2>/dev/null || echo "    not found"
         echo ""
-        echo "  instance disk:"
-        ls -lh {{.HOME}}/.devcell/DIMM/windows/disk.qcow2 2>/dev/null || echo "    not found"
-        echo ""
-        echo "  ports.json:"
-        cat {{.HOME}}/.devcell/DIMM/windows/ports.json 2>/dev/null || echo "    not found"
+        echo "  cell VM state (winkit, {{.INSTANCE_DIR}}/{{.CELL_NAME}}.json — pid/ssh/rdp/vnc ports):"
+        cat {{.INSTANCE_DIR}}/{{.CELL_NAME}}.json 2>/dev/null || echo "    not found"
         echo ""
         echo "  qemu processes:"
         pgrep -lf qemu-system 2>/dev/null || echo "    none"
@@ -708,24 +725,23 @@ tasks:
         echo ""
 
         echo "=== [1/3] Build VM ==="
-        if [ -f "{{.MARKER}}" ]; then
-          echo "Template already provisioned — skipping build."
+        if [ -n "$TEMPLATE_QCOW2" ]; then
+          echo "Template already built ($TEMPLATE_QCOW2) — skipping build."
         else
-          echo "Template not provisioned — building (--force in case stale disk exists)..."
-          cell build --engine=qemu --force --debug 2>&1
+          echo "Template not built — building (--force in case stale disk exists)..."
+          cell build --engine winkit --force --debug 2>&1
         fi
         echo ""
 
         echo "=== [2/3] Post-build diagnostics ==="
-        echo "  marker:   $(test -f '{{.MARKER}}' && echo 'EXISTS' || echo 'MISSING')"
         echo "  template disk:"
-        ls -lh {{.HOME}}/.devcell/windows/ultimate/disk-ultimate.qcow2 2>/dev/null || echo "    not found"
+        ls -lh {{.TEMPLATE_DIR}}/*.qcow2 2>/dev/null || echo "    not found"
         echo "  qemu processes:"
         pgrep -lf qemu-system 2>/dev/null || echo "    none"
         echo ""
 
         echo "=== [3/3] Shell exec: echo hello world ==="
-        cell shell --engine=qemu --debug -- cmd /c echo hello world
+        cell shell --engine winkit --debug -- cmd /c echo hello world
         }
 
         _run 2>&1 | tee "{{.LOG}}"
@@ -881,7 +897,7 @@ tasks:
           fw="${qemu_prefix}/share/qemu/edk2-aarch64-code.fd"
         fi
 
-        cache_dir="${DEVCELL_QEMU_CACHE_DIR:-$HOME/.devcell/cache/qemu}"
+        cache_dir="${DEVCELL_WINKIT_CACHE_DIR:-$HOME/.devcell/cache/qemu}"
         win_iso="${DEVCELL_TEST_WINDOWS_ISO:-${cache_dir}/windows-arm64-en-us.iso}"
         virtio_iso="${DEVCELL_TEST_VIRTIO_ISO:-${cache_dir}/virtio-win.iso}"
         fw_override="${QEMU_FIRMWARE_OVERRIDE:-}"
@@ -922,7 +938,7 @@ tasks:
           echo ""
 
           echo "--- cache directory ---"
-          echo "  DEVCELL_QEMU_CACHE_DIR=${DEVCELL_QEMU_CACHE_DIR:-<unset>}"
+          echo "  DEVCELL_WINKIT_CACHE_DIR=${DEVCELL_WINKIT_CACHE_DIR:-<unset>}"
           echo "  resolved: $cache_dir"
           if [ -d "$cache_dir" ]; then
             ls -lh "$cache_dir" 2>/dev/null | sed 's/^/  /'
@@ -935,7 +951,7 @@ tasks:
           echo "  DEVCELL_TEST_WINDOWS_ISO=${DEVCELL_TEST_WINDOWS_ISO:-<unset>}"
           echo "  DEVCELL_TEST_VIRTIO_ISO=${DEVCELL_TEST_VIRTIO_ISO:-<unset>}"
           echo "  QEMU_FIRMWARE_OVERRIDE=${QEMU_FIRMWARE_OVERRIDE:-<unset>}"
-          echo "  DEVCELL_QEMU_EFI_KERNEL=${DEVCELL_QEMU_EFI_KERNEL:-<unset>}"
+          echo "  DEVCELL_WINKIT_EFI_KERNEL=${DEVCELL_WINKIT_EFI_KERNEL:-<unset>}"
           echo ""
 
           echo "--- qemu share directory ---"
@@ -957,7 +973,7 @@ tasks:
         echo "▸ TestWinPECDVisibility (all variants) → ${log}"
         env_args=""
         [ -n "$fw_override" ] && env_args="QEMU_FIRMWARE_OVERRIDE=$fw_override"
-        if env $env_args go test -run "TestWinPECDVisibility/scsi-cd/hvf" -timeout 60m -v ./internal/vm/qemu/ 2>&1 | tee "${log}"; then
+        if env $env_args go test -run "TestWinPECDVisibility/scsi-cd/hvf" -timeout 60m -v ./internal/engine/winkit/ 2>&1 | tee "${log}"; then
           echo "  ✓ PASS"
         else
           echo "  ✗ FAIL"
@@ -983,7 +999,7 @@ tasks:
           echo "▸ TestWinPEHyperVInjection/${sub} → ${log}"
           env_args=""
           [ -n "$fw_override" ] && env_args="QEMU_FIRMWARE_OVERRIDE=$fw_override"
-          if env $env_args go test -run "TestWinPEHyperVInjection/${sub}" -timeout 15m -v ./internal/vm/qemu/ 2>&1 | tee "${log}"; then
+          if env $env_args go test -run "TestWinPEHyperVInjection/${sub}" -timeout 15m -v ./internal/engine/winkit/ 2>&1 | tee "${log}"; then
             echo "  ✓ PASS"
           else
             echo "  ✗ FAIL"
@@ -1137,10 +1153,10 @@ tasks:
           # Our kernel-loaded EL3 firmware drives stock ramfb.
           dispdev=ramfb
           FW="{{.FIRMWARE}}"
-          [ -f "$FW" ] || FW="${DEVCELL_QEMU_EFI_KERNEL:-}"
+          [ -f "$FW" ] || FW="${DEVCELL_WINKIT_EFI_KERNEL:-}"
           if [ -z "$FW" ] || [ ! -f "$FW" ]; then FW="{{.TASKFILE_DIR}}/test/testdata/QEMU_EFI.kernel.fd"; fi
           if [ ! -f "$FW" ]; then
-            echo "ERROR: no kernel-bootable firmware (FIRMWARE / \$DEVCELL_QEMU_EFI_KERNEL / testdata)"
+            echo "ERROR: no kernel-bootable firmware (FIRMWARE / \$DEVCELL_WINKIT_EFI_KERNEL / testdata)"
             exit 1
           fi
           set -- -kernel "$FW"
@@ -2334,7 +2350,7 @@ tasks:
         item "DEVCELL_* overrides in the environment"
         env | grep -E '^DEVCELL_(BUILD|NIX)_' || echo "  none set — defaults apply"
         # --dry-run is documented as "print docker run argv and exit without
-        # running" (cmd/root.go). It is wired for the tart/qemu/vagrant builders;
+        # running" (cmd/root.go). It is wired for the tart/winkit builders;
         # if the thin/docker path does not honour it yet this prints a real build
         # instead, so it is guarded by a timeout and --debug supplies the daemon
         # diagnostics (logDockerDiagnostics) regardless.

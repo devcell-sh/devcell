@@ -1,4 +1,4 @@
-// image_test.go — base image validation, entrypoint, dotenv parsing tests
+// image_test.go: base image validation, entrypoint, `cell shell`, and bundled CLI (cell, claude) tests.
 
 package container_test
 
@@ -17,27 +17,12 @@ import (
 	"github.com/DimmKirr/devcell/internal/scaffold"
 	"github.com/DimmKirr/devcell/internal/testutil"
 	"github.com/creack/pty"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
+	"golang.org/x/mod/semver"
 )
 
 // --- Entrypoint ---
-
-// buildTestUserImage builds a user image from a scaffolded config directory.
-// Returns the tag. Removes the image on cleanup.
-func buildTestUserImage(t *testing.T, configDir string) string {
-	t.Helper()
-	tag := fmt.Sprintf("devcell-test-user:%s-%s", shortSHA(), time.Now().Format("20060102T150405"))
-	t.Logf("Building user image: %s (from %s)", tag, configDir)
-
-	cmd := osexec.Command("docker", "build", "-t", tag, configDir)
-	cmd.Dir = filepath.Join("..")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("build user image: %v", err)
-	}
-	t.Cleanup(func() { osexec.Command("docker", "rmi", tag).Run() })
-	return tag
-}
 
 // TestEntrypoint_Fragments verifies entrypoint fragments and GUI services
 // on the pre-built image. No rebuild — uses DEVCELL_TEST_IMAGE directly.
@@ -84,53 +69,6 @@ func TestEntrypoint_Fragments(t *testing.T) {
 		}
 		t.Logf("PASS: xrdp listening on :3389\n%s", out)
 	})
-}
-
-// TestScaffold_BuildPipeline verifies the scaffold → build pipeline produces
-// a working image. Uses ultimate as base so home-manager switch is a near-instant
-// no-op (all packages already in /nix/store).
-func TestScaffold_BuildPipeline(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping in short mode")
-	}
-
-	// Use the pre-built ultimate image as base — nix packages already cached.
-	ultimateImg := image()
-
-	configDir := t.TempDir()
-	t.Setenv("DEVCELL_BASE_IMAGE", ultimateImg)
-	nixhomePath, _ := filepath.Abs(nixhomeDir())
-	if err := scaffold.Scaffold(configDir, "", nixhomePath, false); err != nil {
-		t.Fatalf("scaffold: %v", err)
-	}
-
-	buildDir := filepath.Join(configDir, ".devcell")
-
-	// Verify Dockerfile FROM line uses the ultimate image.
-	dockerfile, err := os.ReadFile(filepath.Join(buildDir, "Dockerfile"))
-	if err != nil {
-		t.Fatalf("read Dockerfile: %v", err)
-	}
-	if !strings.HasPrefix(string(dockerfile), "FROM "+ultimateImg) {
-		t.Fatalf("Dockerfile FROM doesn't match: got %.80s", string(dockerfile))
-	}
-	t.Logf("Scaffold OK: Dockerfile FROM %s", ultimateImg)
-
-	// Build — should be fast since ultimate already has all nix packages.
-	userImage := buildTestUserImage(t, buildDir)
-
-	// Quick smoke test: run echo in the built image.
-	out, err := osexec.Command("docker", "run", "--rm", "--user", "0",
-		"-e", "HOST_USER=testuser", "-e", "APP_NAME=test",
-		userImage, "echo", "scaffold-build-ok",
-	).CombinedOutput()
-	if err != nil {
-		t.Fatalf("smoke test failed: %v\n%s", err, out)
-	}
-	if !strings.Contains(string(out), "scaffold-build-ok") {
-		t.Errorf("expected 'scaffold-build-ok' in output, got: %s", out)
-	}
-	t.Logf("PASS: scaffold → build → run pipeline OK")
 }
 
 // TestEntrypoint_DebugTimestamps verifies that DEVCELL_DEBUG=true produces
@@ -556,129 +494,6 @@ func runCellShell(t *testing.T, cellBin, dir, configDir, home, userImage string,
 	return buf.String()
 }
 
-// --- Dotenv ---
-
-// extractDotEnvKeys replicates the shell's key-extraction logic from the wrapper.
-func extractDotEnvKeys(content string) []string {
-	var keys []string
-	for _, line := range strings.Split(content, "\n") {
-		// skip comments and blank lines
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		// _key="${_line%%=*}" -- take everything before the first '='
-		key := line
-		if i := strings.IndexByte(line, '='); i >= 0 {
-			key = line[:i]
-		}
-		// _key="${_key#export }"
-		key = strings.TrimPrefix(key, "export ")
-		if key == "" {
-			continue
-		}
-		keys = append(keys, key)
-	}
-	return keys
-}
-
-func TestDotEnv_KeyExtraction(t *testing.T) {
-	tests := []struct {
-		name     string
-		content  string
-		wantKeys []string
-	}{
-		{
-			name:     "simple KEY=VALUE pairs",
-			content:  "TEST_PASSWORD=hello123\nGITHUB_TOKEN=ghtoken456\n",
-			wantKeys: []string{"TEST_PASSWORD", "GITHUB_TOKEN"},
-		},
-		{
-			name:     "export prefix stripped",
-			content:  "export SECRET_KEY=value\nexport OTHER=x\n",
-			wantKeys: []string{"SECRET_KEY", "OTHER"},
-		},
-		{
-			name:     "comments and blank lines skipped",
-			content:  "# this is a comment\n\nMY_KEY=value\n\n# another comment\nSECOND=val\n",
-			wantKeys: []string{"MY_KEY", "SECOND"},
-		},
-		{
-			name:     "empty value (KEY=) still yields key",
-			content:  "TEST_USERNAME=\nTEST_PASSWORD=\n",
-			wantKeys: []string{"TEST_USERNAME", "TEST_PASSWORD"},
-		},
-		{
-			name:     "key with no equals sign",
-			content:  "BARE_KEY\n",
-			wantKeys: []string{"BARE_KEY"},
-		},
-		{
-			name:     "value contains equals sign",
-			content:  "DB_URL=postgres://host:5432/db?sslmode=disable\n",
-			wantKeys: []string{"DB_URL"},
-		},
-		{
-			name:     "empty file",
-			content:  "",
-			wantKeys: nil,
-		},
-		{
-			name:     "only comments and blanks",
-			content:  "# comment\n\n# another\n",
-			wantKeys: nil,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := extractDotEnvKeys(tc.content)
-			if len(got) != len(tc.wantKeys) {
-				t.Errorf("got keys %v, want %v", got, tc.wantKeys)
-				return
-			}
-			for i, k := range tc.wantKeys {
-				if got[i] != k {
-					t.Errorf("key[%d]: got %q, want %q", i, got[i], k)
-				}
-			}
-		})
-	}
-}
-
-// TestDotEnv_OnlyDotEnvKeysForwarded verifies that only keys present in .env
-// are forwarded.
-func TestDotEnv_OnlyDotEnvKeysForwarded(t *testing.T) {
-	dotEnv := "TEST_PASSWORD=placeholder\nGITHUB_TOKEN=placeholder\n"
-	containerEnv := map[string]string{
-		"TEST_PASSWORD": "hello123",
-		"GITHUB_TOKEN":  "ghtoken456",
-		"APP_NAME":      "test",     // in container env but NOT in .env
-		"HOST_USER":     "testuser", // in container env but NOT in .env
-	}
-
-	keys := extractDotEnvKeys(dotEnv)
-	secrets := map[string]string{}
-	for _, k := range keys {
-		if v, ok := containerEnv[k]; ok {
-			secrets[k] = v
-		}
-	}
-
-	if secrets["TEST_PASSWORD"] != "hello123" {
-		t.Errorf("TEST_PASSWORD: got %q, want hello123", secrets["TEST_PASSWORD"])
-	}
-	if secrets["GITHUB_TOKEN"] != "ghtoken456" {
-		t.Errorf("GITHUB_TOKEN: got %q, want ghtoken456", secrets["GITHUB_TOKEN"])
-	}
-	if _, ok := secrets["APP_NAME"]; ok {
-		t.Errorf("APP_NAME must not be forwarded (not in .env), got %q", secrets["APP_NAME"])
-	}
-	if _, ok := secrets["HOST_USER"]; ok {
-		t.Errorf("HOST_USER must not be forwarded (not in .env), got %q", secrets["HOST_USER"])
-	}
-	t.Logf("PASS: only .env keys forwarded: %v", secrets)
-}
-
 // --- Cell CLI ---
 
 // TestCell_Binary — cell CLI binary must be bundled in the image at /opt/devcell/.local/bin/cell.
@@ -703,4 +518,93 @@ func TestCell_Binary(t *testing.T) {
 		t.Errorf("unexpected version output: %s", out)
 	}
 	t.Logf("cell --version: %s", out)
+}
+
+// --- Toolchain ---
+
+// TestClaude_CodeVersion verifies claude CLI is present and >= minVersion.
+// Each subtest builds a thin image for the target stack, starts a container
+// via testcontainers, and execs `claude --version`. Artifacts persist under
+// test/results/<datetime>-<sha>/TestClaude_CodeVersion/<stack>/.
+func TestClaude_CodeVersion(t *testing.T) {
+	if testing.Short() {
+		t.Skip("long: builds thin image per stack")
+	}
+
+	const minVersion = "v2.1.70"
+
+	stacks := []string{"base"}
+
+	for _, stack := range stacks {
+		t.Run(stack, func(t *testing.T) {
+			// Persist artifacts for post-run inspection.
+			outDir := testutil.TestResultsDir(t, hostBaseDirFn)
+			projectDir := filepath.Join(outDir, "project")
+			homeDir := filepath.Join(outDir, "home")
+			for _, d := range []string{projectDir, homeDir, filepath.Join(homeDir, ".config", "devcell")} {
+				if err := os.MkdirAll(d, 0o755); err != nil {
+					t.Fatalf("mkdir %s: %v", d, err)
+				}
+			}
+
+			toml := fmt.Sprintf("[cell]\nstack = %q\n", stack)
+			if err := os.WriteFile(filepath.Join(projectDir, ".devcell.toml"), []byte(toml), 0o644); err != nil {
+				t.Fatalf("write .devcell.toml: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(homeDir, ".config", "devcell", "devcell.toml"), []byte("[cell]\n"), 0o644); err != nil {
+				t.Fatalf("write global config: %v", err)
+			}
+
+			// Build thin image for this stack.
+			img, err := buildThinImage(stack)
+			if err != nil {
+				t.Fatalf("build %s thin image: %v", stack, err)
+			}
+
+			ctx := context.Background()
+			req := testcontainers.ContainerRequest{
+				Image: img,
+				Env: map[string]string{
+					"HOST_USER": hostUser,
+					"APP_NAME":  "test",
+				},
+				User: "0",
+				Cmd:  []string{"tail", "-f", "/dev/null"},
+				Mounts: testcontainers.Mounts(
+					testcontainers.VolumeMount(thinVolumeName(), "/nix"),
+				),
+				WaitingFor: wait.ForExec([]string{"pgrep", "tail"}).
+					WithStartupTimeout(30 * time.Second),
+			}
+			c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+				ContainerRequest: req,
+				Started:          true,
+			})
+			if err != nil {
+				t.Fatalf("start container: %v", err)
+			}
+			t.Cleanup(func() { _ = c.Terminate(ctx) })
+
+			out, code := asUser(t, c, "claude --version")
+			if code != 0 {
+				t.Fatalf("claude not available (exit %d): %s", code, out)
+			}
+
+			// Persist output for inspection.
+			_ = os.WriteFile(filepath.Join(outDir, "claude-version.txt"), []byte(out), 0o644)
+
+			// claude --version outputs e.g. "2.1.25 (Claude Code)"
+			ver := strings.Fields(out)[0]
+			semVer := "v" + ver
+
+			if !semver.IsValid(semVer) {
+				t.Fatalf("could not parse claude version %q as semver", ver)
+			}
+			if semver.Compare(semVer, minVersion) < 0 {
+				t.Errorf("claude version %s < minimum %s", ver, minVersion)
+			} else {
+				t.Logf("claude version %s >= %s", ver, minVersion)
+			}
+		})
+	}
 }

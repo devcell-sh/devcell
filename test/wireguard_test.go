@@ -9,11 +9,17 @@
 package container_test
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	osexec "os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DimmKirr/devcell/internal/cfg"
+	"github.com/DimmKirr/devcell/internal/engine/docker"
 )
 
 // protonPTConfig is a ProtonVPN Portugal WireGuard config (sans PrivateKey).
@@ -199,6 +205,101 @@ func TestWireguard_PTExitIP(t *testing.T) {
 	t.Logf("exit IP: %s, country: %s (%s)", resp.IP, resp.Country, resp.CountryISO)
 	if resp.CountryISO != "PT" {
 		t.Fatalf("expected country_iso=PT, got %q (IP: %s)", resp.CountryISO, resp.IP)
+	}
+}
+
+// wgRandomKey returns a throwaway 32-byte base64 key. Any 32 bytes are a
+// syntactically valid WireGuard key, so no real credentials are needed.
+func wgRandomKey(t *testing.T) string {
+	t.Helper()
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		t.Fatalf("rand: %v", err)
+	}
+	return base64.StdEncoding.EncodeToString(b)
+}
+
+// TestWireguard_PresharedKeyApplied (CELL-595) runs the real host-side
+// rewrite (PrepareWireguard) against a config with NO manual PostUp, boots
+// the container with WG_PRIVATE_KEY and WG_PRESHARED_KEY, and verifies:
+//
+//  1. both env vars are visible inside the container,
+//  2. the fragment wrote both /run/secrets files with mode 600,
+//  3. the kernel peer carries the preshared key (`wg show ... preshared-keys`).
+//
+// No live peer is needed: the interface comes up without a handshake.
+func TestWireguard_PresharedKeyApplied(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+	img := image()
+	requireWgQuick(t, img)
+
+	privKey := wgRandomKey(t)
+	psk := wgRandomKey(t)
+	peerPub := wgRandomKey(t)
+
+	cellCfg := cfg.CellConfig{Wireguard: []cfg.WireguardEntry{{
+		Name:    "wg0",
+		Enabled: true,
+		Config: "[Interface]\nAddress = 10.99.0.2/32\n\n" +
+			"[Peer]\nPublicKey = " + peerPub + "\nAllowedIPs = 10.99.0.0/24\n",
+	}}}
+	wgDir := t.TempDir()
+	if err := docker.PrepareWireguard(wgDir, cellCfg); err != nil {
+		t.Fatalf("PrepareWireguard: %v", err)
+	}
+	conf, err := os.ReadFile(filepath.Join(wgDir, ".wg", "wg0.conf"))
+	if err != nil {
+		t.Fatalf("read rewritten conf: %v", err)
+	}
+
+	inner := `bash -c "echo WGENV:; env | grep -o '^WG_[A-Z_]*' | sort; ` +
+		`echo SECRETS:; sudo -n ls -l /run/secrets; ` +
+		`echo PSK:; sudo -n wg show wg0 preshared-keys"`
+	script := wgBootScript(string(conf), inner)
+
+	args := wgBaseArgs(img, map[string]string{
+		"HOST_USER":          "testuser",
+		"APP_NAME":           "wgtest",
+		"DEVCELL_WG_ENABLED": "1",
+		"DEVCELL_CELL_NAME":  "main",
+		"WG_PRIVATE_KEY":     privKey,
+		"WG_PRESHARED_KEY":   psk,
+		"DEVCELL_DEBUG":      "true",
+	},
+		"--cap-add=NET_ADMIN",
+		"--device=/dev/net/tun",
+		"--sysctl", "net.ipv4.conf.all.src_valid_mark=1",
+		"--entrypoint", "bash",
+	)
+	args = append(args, "-c", script)
+
+	out, err := osexec.Command("docker", args...).CombinedOutput()
+	output := string(out)
+	t.Logf("output:\n%s", output)
+	if err != nil {
+		t.Fatalf("docker run: %v\noutput: %s", err, output)
+	}
+
+	for _, k := range []string{"WG_PRIVATE_KEY", "WG_PRESHARED_KEY"} {
+		if !strings.Contains(output, k) {
+			t.Errorf("container does not see %s in its environment", k)
+		}
+	}
+	for _, f := range []string{"wg-private-key", "wg-preshared-key"} {
+		if !strings.Contains(output, f) {
+			t.Errorf("/run/secrets/%s was not written", f)
+		}
+	}
+	if !strings.Contains(output, "-rw------- ") {
+		t.Errorf("/run/secrets files must be mode 600")
+	}
+	if !strings.Contains(output, peerPub+"\t"+psk) {
+		t.Errorf("peer %s does not carry the preshared key (want %q in `wg show wg0 preshared-keys`)", peerPub, psk)
+	}
+	if strings.Contains(output, peerPub+"\t(none)") {
+		t.Errorf("preshared key reported as (none): PSK PostUp was not applied")
 	}
 }
 

@@ -75,15 +75,15 @@ func TestCodex_NoOllama_NoOSSFlags(t *testing.T) {
 	}
 }
 
-// TestCodex_ConfigUseOllama_InjectsFlags verifies that [llm] use_ollama=true
+// TestCodex_ConfigProviderOllama_InjectsFlags verifies that [llm] provider = "ollama"
 // in devcell.toml enables --oss --local-provider ollama.
-func TestCodex_ConfigUseOllama_InjectsFlags(t *testing.T) {
+func TestCodex_ConfigProviderOllama_InjectsFlags(t *testing.T) {
 	home := scaffoldedHome(t)
 
 	cfgDir := filepath.Join(home, ".config", "devcell")
 	tomlContent := `[cell]
 [llm]
-use_ollama = true
+provider = "ollama"
 `
 	if err := os.WriteFile(filepath.Join(cfgDir, "devcell.toml"), []byte(tomlContent), 0644); err != nil {
 		t.Fatal(err)
@@ -109,17 +109,16 @@ use_ollama = true
 	}
 }
 
-// TestCodex_ConfigUseOllama_WithModel verifies that llm.models.default is
+// TestCodex_ConfigProviderOllama_WithModel verifies that [llm] model is
 // passed as --model when ollama is enabled.
-func TestCodex_ConfigUseOllama_WithModel(t *testing.T) {
+func TestCodex_ConfigProviderOllama_WithModel(t *testing.T) {
 	home := scaffoldedHome(t)
 
 	cfgDir := filepath.Join(home, ".config", "devcell")
 	tomlContent := `[cell]
 [llm]
-use_ollama = true
-[llm.models]
-default = "qwen2.5-coder:32b"
+provider = "ollama"
+model = "qwen2.5-coder:32b"
 `
 	if err := os.WriteFile(filepath.Join(cfgDir, "devcell.toml"), []byte(tomlContent), 0644); err != nil {
 		t.Fatal(err)
@@ -186,17 +185,16 @@ func TestCodex_OpenRouterFlag_Stripped(t *testing.T) {
 	}
 }
 
-// TestCodex_ConfigUseOpenRouter_WithModel verifies [llm] use_openrouter=true plus
+// TestCodex_ConfigProviderOpenRouter_WithModel verifies [llm] provider = "openrouter" plus
 // an openrouter/-prefixed default model produces --model with the bare slug.
-func TestCodex_ConfigUseOpenRouter_WithModel(t *testing.T) {
+func TestCodex_ConfigProviderOpenRouter_WithModel(t *testing.T) {
 	home := scaffoldedHome(t)
 
 	cfgDir := filepath.Join(home, ".config", "devcell")
 	tomlContent := `[cell]
 [llm]
-use_openrouter = true
-[llm.models]
-default = "openrouter/moonshotai/kimi-k3"
+provider = "openrouter"
+model = "openrouter/moonshotai/kimi-k3"
 `
 	if err := os.WriteFile(filepath.Join(cfgDir, "devcell.toml"), []byte(tomlContent), 0644); err != nil {
 		t.Fatal(err)
@@ -219,14 +217,14 @@ default = "openrouter/moonshotai/kimi-k3"
 	}
 }
 
-// TestCodex_OpenRouterBeatsOllama verifies --openrouter wins when use_ollama=true.
+// TestCodex_OpenRouterBeatsOllama verifies --openrouter wins when provider = "ollama".
 func TestCodex_OpenRouterBeatsOllama(t *testing.T) {
 	home := scaffoldedHome(t)
 
 	cfgDir := filepath.Join(home, ".config", "devcell")
 	tomlContent := `[cell]
 [llm]
-use_ollama = true
+provider = "ollama"
 `
 	if err := os.WriteFile(filepath.Join(cfgDir, "devcell.toml"), []byte(tomlContent), 0644); err != nil {
 		t.Fatal(err)

@@ -76,15 +76,15 @@ func TestClaude_NoOllama_NoEnv(t *testing.T) {
 	}
 }
 
-// TestClaude_ConfigUseOllama_InjectsEnv verifies that [llm] use_ollama=true
+// TestClaude_ConfigProviderOllama_InjectsEnv verifies that [llm] provider = "ollama"
 // in devcell.toml injects the ollama env vars.
-func TestClaude_ConfigUseOllama_InjectsEnv(t *testing.T) {
+func TestClaude_ConfigProviderOllama_InjectsEnv(t *testing.T) {
 	home := scaffoldedHome(t)
 
 	cfgDir := filepath.Join(home, ".config", "devcell")
 	tomlContent := `[cell]
 [llm]
-use_ollama = true
+provider = "ollama"
 `
 	if err := os.WriteFile(filepath.Join(cfgDir, "devcell.toml"), []byte(tomlContent), 0644); err != nil {
 		t.Fatal(err)
@@ -107,7 +107,7 @@ use_ollama = true
 	}
 }
 
-// TestClaude_OllamaConfigModel_WithPrefix verifies that [llm.models] default = "ollama/model"
+// TestClaude_OllamaConfigModel_WithPrefix verifies that [llm] model = "ollama/model"
 // injects ANTHROPIC_MODEL with the prefix stripped.
 func TestClaude_OllamaConfigModel_WithPrefix(t *testing.T) {
 	home := scaffoldedHome(t)
@@ -115,10 +115,8 @@ func TestClaude_OllamaConfigModel_WithPrefix(t *testing.T) {
 	cfgDir := filepath.Join(home, ".config", "devcell")
 	tomlContent := `[cell]
 [llm]
-use_ollama = true
-
-[llm.models]
-default = "ollama/qwen3:30b"
+provider = "ollama"
+model = "ollama/qwen3:30b"
 `
 	if err := os.WriteFile(filepath.Join(cfgDir, "devcell.toml"), []byte(tomlContent), 0644); err != nil {
 		t.Fatal(err)
@@ -149,10 +147,8 @@ func TestClaude_OllamaConfigModel_NoPrefix(t *testing.T) {
 	cfgDir := filepath.Join(home, ".config", "devcell")
 	tomlContent := `[cell]
 [llm]
-use_ollama = true
-
-[llm.models]
-default = "qwen3:30b"
+provider = "ollama"
+model = "qwen3:30b"
 `
 	if err := os.WriteFile(filepath.Join(cfgDir, "devcell.toml"), []byte(tomlContent), 0644); err != nil {
 		t.Fatal(err)
@@ -173,14 +169,15 @@ default = "qwen3:30b"
 }
 
 // TestClaude_OllamaFlag_ConfigModel verifies that --ollama flag also picks up
-// [llm.models] default from config (flag + config model should both work).
+// [llm] model from config (flag + config model should both work).
 func TestClaude_OllamaFlag_ConfigModel(t *testing.T) {
 	home := scaffoldedHome(t)
 
 	cfgDir := filepath.Join(home, ".config", "devcell")
 	tomlContent := `[cell]
-[llm.models]
-default = "ollama/deepseek-r1:32b"
+[llm]
+provider = "ollama"
+model = "deepseek-r1:32b"
 `
 	if err := os.WriteFile(filepath.Join(cfgDir, "devcell.toml"), []byte(tomlContent), 0644); err != nil {
 		t.Fatal(err)
@@ -268,15 +265,15 @@ func TestClaude_OpenRouterFlag_Stripped(t *testing.T) {
 	}
 }
 
-// TestClaude_ConfigUseOpenRouter_InjectsEnv verifies that [llm] use_openrouter=true
+// TestClaude_ConfigProviderOpenRouter_InjectsEnv verifies that [llm] provider = "openrouter"
 // in devcell.toml injects the openrouter env vars.
-func TestClaude_ConfigUseOpenRouter_InjectsEnv(t *testing.T) {
+func TestClaude_ConfigProviderOpenRouter_InjectsEnv(t *testing.T) {
 	home := scaffoldedHome(t)
 
 	cfgDir := filepath.Join(home, ".config", "devcell")
 	tomlContent := `[cell]
 [llm]
-use_openrouter = true
+provider = "openrouter"
 `
 	if err := os.WriteFile(filepath.Join(cfgDir, "devcell.toml"), []byte(tomlContent), 0644); err != nil {
 		t.Fatal(err)
@@ -299,7 +296,7 @@ use_openrouter = true
 	}
 }
 
-// TestClaude_OpenRouterConfigModel verifies that [llm.models] default with openrouter/
+// TestClaude_OpenRouterConfigModel verifies that [llm] model with openrouter/
 // prefix is stripped and injected as ANTHROPIC_MODEL.
 func TestClaude_OpenRouterConfigModel(t *testing.T) {
 	home := scaffoldedHome(t)
@@ -307,10 +304,8 @@ func TestClaude_OpenRouterConfigModel(t *testing.T) {
 	cfgDir := filepath.Join(home, ".config", "devcell")
 	tomlContent := `[cell]
 [llm]
-use_openrouter = true
-
-[llm.models]
-default = "openrouter/google/gemini-2.5-pro"
+provider = "openrouter"
+model = "openrouter/google/gemini-2.5-pro"
 `
 	if err := os.WriteFile(filepath.Join(cfgDir, "devcell.toml"), []byte(tomlContent), 0644); err != nil {
 		t.Fatal(err)
@@ -349,20 +344,17 @@ func TestClaude_OpenRouterNoKey_Error(t *testing.T) {
 	}
 }
 
-// TestClaude_OpenRouterProviderFallback verifies that when default is an ollama model,
-// openrouter mode falls back to the first model in [llm.models.providers.openrouter].
+// TestClaude_OpenRouterProviderFallback verifies that without [llm] model,
+// openrouter mode falls back to the first model in [llm.providers.openrouter].
 func TestClaude_OpenRouterProviderFallback(t *testing.T) {
 	home := scaffoldedHome(t)
 
 	cfgDir := filepath.Join(home, ".config", "devcell")
 	tomlContent := `[cell]
 [llm]
-use_openrouter = true
+provider = "openrouter"
 
-[llm.models]
-default = "ollama/qwen3-coder:30b"
-
-[llm.models.providers.openrouter]
+[llm.providers.openrouter]
 models = ["moonshotai/kimi-k3", "google/gemini-2.5-pro", "x-ai/grok-4.6"]
 `
 	if err := os.WriteFile(filepath.Join(cfgDir, "devcell.toml"), []byte(tomlContent), 0644); err != nil {

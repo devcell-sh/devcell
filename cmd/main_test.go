@@ -16,15 +16,17 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	defer os.RemoveAll(tmp)
 
 	binaryPath = tmp + "/cell"
 	out, err := exec.Command("go", "build", "-o", binaryPath, ".").CombinedOutput()
 	if err != nil {
+		os.RemoveAll(tmp)
 		panic("go build failed: " + string(out))
 	}
 
-	os.Exit(m.Run())
+	code := m.Run()
+	os.RemoveAll(tmp) // os.Exit skips defers
+	os.Exit(code)
 }
 
 func TestHelp(t *testing.T) {
@@ -98,6 +100,115 @@ func scaffoldedHome(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return home
+}
+
+// hermeticDryRun runs `cell <args...> --dry-run` in a fresh project whose
+// .devcell.toml is projectTOML and whose only git config is gitconfig. The
+// developer's own GIT_*, locale, timezone, cell name and XDG config dir are
+// stripped from the environment so they cannot leak into the guest env.
+func hermeticDryRun(t *testing.T, projectTOML, gitconfig string, extraEnv []string, args ...string) string {
+	t.Helper()
+	home := scaffoldedHome(t)
+	if err := os.WriteFile(home+"/.devcell.toml", []byte(projectTOML), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(home+"/.gitconfig", []byte(gitconfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+	var env []string
+	for _, kv := range os.Environ() {
+		k, _, _ := strings.Cut(kv, "=")
+		switch {
+		case strings.HasPrefix(k, "GIT_"), k == "XDG_CONFIG_HOME", k == "HOME",
+			k == "DEVCELL_CELL_NAME", k == "TMUX_SESSION_NAME", k == "TZ", k == "LANG", k == "LC_ALL":
+			continue
+		}
+		env = append(env, kv)
+	}
+	env = append(env, "HOME="+home, "DEVCELL_BUNK=1",
+		"GIT_CONFIG_GLOBAL="+home+"/.gitconfig", "GIT_CONFIG_NOSYSTEM=1")
+	cmd := exec.Command(binaryPath, append(args, "--dry-run")...)
+	cmd.Dir = home
+	cmd.Env = append(env, extraEnv...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("cell %v --dry-run: %v\noutput: %s", args, err, out)
+	}
+	return string(out)
+}
+
+// guestEnvTOML exercises [env] (with host expansion) and [mise].
+const guestEnvTOML = `[cell]
+[env]
+FROM_TOML_ENV = "plain"
+EXPANDED = "${DEVCELL_TEST_HOST_VALUE}"
+[mise]
+trusted_config_paths = "/"
+`
+
+const guestEnvGitconfig = "[user]\n\tname = Hopper\n\temail = hopper@example.com\n"
+
+// assertGuestEnvDryRun checks that a VM engine's dry-run hands the guest the
+// unified cell env (internal/cell.GuestEnv): [env], [mise], cell name,
+// IS_SANDBOX, LANG/LC_ALL and the git identity precedence
+// host env > [git] > host git config > DevCell default.
+func assertGuestEnvDryRun(t *testing.T, engineArgs ...string) {
+	t.Helper()
+	run := func(t *testing.T, toml string, extraEnv ...string) string {
+		t.Helper()
+		env := append([]string{"DEVCELL_TEST_HOST_VALUE=expanded-ok"}, extraEnv...)
+		args := append(append([]string{}, engineArgs...), "--cell-name=flagcell", "shell")
+		return hermeticDryRun(t, toml, guestEnvGitconfig, env, args...)
+	}
+	mustContain := func(t *testing.T, out string, wants ...string) {
+		t.Helper()
+		for _, w := range wants {
+			if !strings.Contains(out, w) {
+				t.Errorf("expected %q in dry-run output, got:\n%s", w, out)
+			}
+		}
+	}
+
+	t.Run("env mise locale cell name", func(t *testing.T) {
+		out := run(t, guestEnvTOML)
+		mustContain(t, out,
+			"FROM_TOML_ENV=plain",
+			"EXPANDED=expanded-ok",
+			"MISE_TRUSTED_CONFIG_PATHS=/",
+			"DEVCELL_CELL_NAME=flagcell",
+			"IS_SANDBOX=1",
+			"LANG=en_US.UTF-8",
+			"LC_ALL=en_US.UTF-8",
+		)
+	})
+	t.Run("git config when no env and no [git]", func(t *testing.T) {
+		out := run(t, guestEnvTOML)
+		mustContain(t, out, "GIT_AUTHOR_NAME=Hopper", "GIT_COMMITTER_EMAIL=hopper@example.com")
+	})
+	t.Run("[git] beats git config", func(t *testing.T) {
+		out := run(t, guestEnvTOML+"[git]\nauthor_name = \"TomlName\"\nauthor_email = \"toml@example.com\"\n")
+		mustContain(t, out, "GIT_AUTHOR_NAME=TomlName", "GIT_COMMITTER_EMAIL=toml@example.com")
+		if strings.Contains(out, "Hopper") {
+			t.Errorf("git config identity leaked past [git]:\n%s", out)
+		}
+	})
+	t.Run("host env beats [git]", func(t *testing.T) {
+		out := run(t, guestEnvTOML+"[git]\nauthor_name = \"TomlName\"\n", "GIT_AUTHOR_NAME=EnvName")
+		mustContain(t, out, "GIT_AUTHOR_NAME=EnvName", "GIT_AUTHOR_EMAIL=devcell@devcell.io")
+		if strings.Contains(out, "TomlName") || strings.Contains(out, "Hopper") {
+			t.Errorf("lower-tier identity leaked past host env:\n%s", out)
+		}
+	})
+}
+
+// shellWords splits line the way sh would, via printf.
+func shellWords(t *testing.T, line string) []string {
+	t.Helper()
+	out, err := exec.Command("sh", "-c", `printf '%s\0' `+line).Output()
+	if err != nil {
+		t.Fatalf("sh cannot parse %q: %v", line, err)
+	}
+	return strings.Split(strings.TrimSuffix(string(out), "\x00"), "\x00")
 }
 
 // TestPlainTextNoSpinnerChars verifies that --plain-text suppresses spinner

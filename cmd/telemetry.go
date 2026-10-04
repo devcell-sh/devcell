@@ -73,11 +73,7 @@ var telemetryStatusCmd = &cobra.Command{
 }
 
 func resolveConfigDir() string {
-	if c, err := config.LoadFromOS(); err == nil {
-		return c.ConfigDir
-	}
-	home, _ := os.UserHomeDir()
-	return home + "/.config/devcell"
+	return config.ResolveConfigDir(os.Getenv)
 }
 
 func init() {

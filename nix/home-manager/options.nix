@@ -35,11 +35,11 @@ in
     tart_ssh_user = opt types.str;
     tart_ssh_key = opt types.str;
     tart_oci_image = opt types.str;
-    qemu_ssh_port = opt types.int;
+    winkit_ssh_port = opt types.int;
+    winkit_windows_iso = opt types.str;
+    winkit_cpus = opt types.int;
+    winkit_memory_gb = opt types.int;
     qemu_ssh_host = opt types.str;
-    qemu_windows_iso = opt types.str;
-    qemu_cpus = opt types.int;
-    qemu_memory_gb = opt types.int;
     qemu_disk_size_gb = opt types.int;
     qemu_display = opt types.str;
     libvirt_uri = opt types.str;
@@ -75,17 +75,14 @@ in
     system_prompt_file = opt types.str;
     append_system_prompt = opt types.str;
     append_system_prompt_file = opt types.str;
-    use_ollama = opt types.bool;
-    use_openrouter = opt types.bool;
-    models = {
-      default = opt types.str;
-      providers = opt (types.attrsOf (types.submodule {
-        options = {
-          base_url = opt types.str;
-          models = opt (types.listOf types.str);
-        };
-      }));
-    };
+    provider = opt types.str;
+    model = opt types.str;
+    providers = opt (types.attrsOf (types.submodule {
+      options = {
+        base_url = opt types.str;
+        models = opt (types.listOf types.str);
+      };
+    }));
   };
   git = {
     author_name = opt types.str;
@@ -130,7 +127,7 @@ in
     };
   }));
   packages = {
-    npm = opt (types.attrsOf types.str);
+    node = opt (types.attrsOf types.str);
     python = opt (types.attrsOf types.str);
     nix = {
       stable = opt (types.listOf types.str);

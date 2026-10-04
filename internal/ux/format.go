@@ -77,3 +77,19 @@ func rowsToMaps(headers []string, rows [][]string) []map[string]string {
 	}
 	return result
 }
+
+// HumanBytes formats a byte count as "1.4 GB" / "237 MB" / "812 KB" / "42 B".
+// Uses 1024-based units (KiB/MiB/GiB semantics) but the conventional
+// abbreviations users expect from `docker images`.
+func HumanBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for x := n / unit; x >= unit; x /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
+}

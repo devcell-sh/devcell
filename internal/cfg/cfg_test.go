@@ -767,16 +767,14 @@ func TestLoadFile_LLMSection(t *testing.T) {
 	dir := t.TempDir()
 	writeTOML(t, dir, "devcell.toml", `
 [llm]
-use_ollama = true
+provider = "ollama"
+model = "deepseek-r1:32b"
 system_prompt = "This project uses Go 1.22."
 
-[llm.models]
-default = "ollama/deepseek-r1:32b"
-
-[llm.models.providers.ollama]
+[llm.providers.ollama]
 models = ["deepseek-r1:32b", "qwen3:8b"]
 
-[llm.models.providers.lmstudio]
+[llm.providers.lmstudio]
 base_url = "http://host.docker.internal:1235/v1"
 models = ["deepseek-r1:32b"]
 `)
@@ -784,16 +782,16 @@ models = ["deepseek-r1:32b"]
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !c.LLM.UseOllama {
-		t.Error("expected UseOllama=true")
+	if c.LLM.Provider != "ollama" {
+		t.Errorf("provider: got %q", c.LLM.Provider)
 	}
 	if c.LLM.SystemPrompt != "This project uses Go 1.22." {
 		t.Errorf("system_prompt: got %q", c.LLM.SystemPrompt)
 	}
-	if c.LLM.Models.Default != "ollama/deepseek-r1:32b" {
-		t.Errorf("default: want ollama/deepseek-r1:32b, got %q", c.LLM.Models.Default)
+	if c.LLM.Model != "deepseek-r1:32b" {
+		t.Errorf("model: want deepseek-r1:32b, got %q", c.LLM.Model)
 	}
-	ollama, ok := c.LLM.Models.Providers["ollama"]
+	ollama, ok := c.LLM.Providers["ollama"]
 	if !ok {
 		t.Fatal("ollama provider not found")
 	}
@@ -803,7 +801,7 @@ models = ["deepseek-r1:32b"]
 	if ollama.BaseURL != "" {
 		t.Errorf("ollama base_url should be empty (use default), got %q", ollama.BaseURL)
 	}
-	lms, ok := c.LLM.Models.Providers["lmstudio"]
+	lms, ok := c.LLM.Providers["lmstudio"]
 	if !ok {
 		t.Fatal("lmstudio provider not found")
 	}
@@ -846,35 +844,35 @@ func TestLoadFile_LLMDefaultsEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.LLM.UseOllama {
-		t.Error("expected UseOllama=false when not set")
+	if c.LLM.Provider != "" {
+		t.Errorf("expected empty provider, got %q", c.LLM.Provider)
 	}
 	if c.LLM.SystemPrompt != "" {
 		t.Errorf("expected empty system_prompt, got %q", c.LLM.SystemPrompt)
 	}
-	if c.LLM.Models.Default != "" {
-		t.Errorf("expected empty default, got %q", c.LLM.Models.Default)
+	if c.LLM.Model != "" {
+		t.Errorf("expected empty model, got %q", c.LLM.Model)
 	}
-	if len(c.LLM.Models.Providers) != 0 {
-		t.Errorf("expected no providers, got %v", c.LLM.Models.Providers)
+	if len(c.LLM.Providers) != 0 {
+		t.Errorf("expected no providers, got %v", c.LLM.Providers)
 	}
 }
 
-func TestMerge_LLMUseOllamaProjectWins(t *testing.T) {
-	global := cfg.CellConfig{LLM: cfg.LLMSection{UseOllama: false}}
-	project := cfg.CellConfig{LLM: cfg.LLMSection{UseOllama: true}}
+func TestMerge_LLMProviderProjectWins(t *testing.T) {
+	global := cfg.CellConfig{LLM: cfg.LLMSection{Provider: "ollama"}}
+	project := cfg.CellConfig{LLM: cfg.LLMSection{Provider: "openrouter"}}
 	merged := cfg.Merge(global, project)
-	if !merged.LLM.UseOllama {
-		t.Error("expected project use_ollama=true to win over global false")
+	if merged.LLM.Provider != "openrouter" {
+		t.Errorf("expected project provider to win, got %q", merged.LLM.Provider)
 	}
 }
 
 func TestMerge_LLMGlobalKeptWhenProjectUnset(t *testing.T) {
-	global := cfg.CellConfig{LLM: cfg.LLMSection{UseOllama: true}}
+	global := cfg.CellConfig{LLM: cfg.LLMSection{Provider: "ollama"}}
 	project := cfg.CellConfig{}
 	merged := cfg.Merge(global, project)
-	if !merged.LLM.UseOllama {
-		t.Error("expected global use_ollama=true to be preserved when project unset")
+	if merged.LLM.Provider != "ollama" {
+		t.Errorf("expected global provider to be preserved, got %q", merged.LLM.Provider)
 	}
 }
 
@@ -899,34 +897,30 @@ func TestMerge_LLMSystemPromptGlobalKeptWhenProjectEmpty(t *testing.T) {
 func TestMerge_LLMModelsProjectWins(t *testing.T) {
 	global := cfg.CellConfig{
 		LLM: cfg.LLMSection{
-			Models: cfg.LLMModelsSection{
-				Default: "ollama/qwen3:8b",
-				Providers: map[string]cfg.LLMProvider{
-					"ollama": {Models: []string{"qwen3:8b"}},
-				},
+			Model: "ollama/qwen3:8b",
+			Providers: map[string]cfg.LLMProvider{
+				"ollama": {Models: []string{"qwen3:8b"}},
 			},
 		},
 	}
 	project := cfg.CellConfig{
 		LLM: cfg.LLMSection{
-			Models: cfg.LLMModelsSection{
-				Default: "ollama/deepseek-r1:32b",
-				Providers: map[string]cfg.LLMProvider{
-					"ollama":   {Models: []string{"deepseek-r1:32b"}},
-					"lmstudio": {Models: []string{"deepseek-r1:32b"}},
-				},
+			Model: "ollama/deepseek-r1:32b",
+			Providers: map[string]cfg.LLMProvider{
+				"ollama":   {Models: []string{"deepseek-r1:32b"}},
+				"lmstudio": {Models: []string{"deepseek-r1:32b"}},
 			},
 		},
 	}
 	merged := cfg.Merge(global, project)
-	if merged.LLM.Models.Default != "ollama/deepseek-r1:32b" {
-		t.Errorf("default: project should win, got %q", merged.LLM.Models.Default)
+	if merged.LLM.Model != "ollama/deepseek-r1:32b" {
+		t.Errorf("model: project should win, got %q", merged.LLM.Model)
 	}
-	if len(merged.LLM.Models.Providers) != 2 {
-		t.Errorf("want 2 providers, got %d", len(merged.LLM.Models.Providers))
+	if len(merged.LLM.Providers) != 2 {
+		t.Errorf("want 2 providers, got %d", len(merged.LLM.Providers))
 	}
-	if merged.LLM.Models.Providers["ollama"].Models[0] != "deepseek-r1:32b" {
-		t.Errorf("ollama models should be project's, got %v", merged.LLM.Models.Providers["ollama"].Models)
+	if merged.LLM.Providers["ollama"].Models[0] != "deepseek-r1:32b" {
+		t.Errorf("ollama models should be project's, got %v", merged.LLM.Providers["ollama"].Models)
 	}
 }
 
@@ -1620,7 +1614,7 @@ modules = ["electronics"]
 // --- Validation ---
 
 func TestValidateStack_ValidNames(t *testing.T) {
-	valid := []string{"base", "go", "node", "python", "fullstack", "electronics", "ultimate"}
+	valid := []string{"base", "go", "node", "python", "fullstack", "electronics", "ultimate", "bbb"}
 	for _, name := range valid {
 		t.Run(name, func(t *testing.T) {
 			if err := cfg.ValidateStack(name); err != nil {
@@ -1651,33 +1645,6 @@ func TestValidateStack_EmptyIsValid(t *testing.T) {
 	// Empty stack means "use default (base)" — not an error
 	if err := cfg.ValidateStack(""); err != nil {
 		t.Errorf("empty stack should be valid (defaults to ultimate): %v", err)
-	}
-}
-
-// --- KnownStacks ---
-
-func TestKnownStacks_ReturnsExpectedList(t *testing.T) {
-	stacks := cfg.KnownStacks()
-	// CELL-292: `core` prepended as the smallest first-class stack (just
-	// home-manager + one tiny package). Modules 2.0 (CELL-63): `dev`
-	// between base and the legacy stacks.
-	want := []string{"core", "base", "dev", "go", "node", "python", "fullstack", "electronics", "ultimate"}
-	if len(stacks) != len(want) {
-		t.Fatalf("want %d stacks, got %d: %v", len(want), len(stacks), stacks)
-	}
-	for i, w := range want {
-		if stacks[i] != w {
-			t.Errorf("stack[%d]: want %q, got %q", i, w, stacks[i])
-		}
-	}
-}
-
-func TestKnownStacks_ReturnsCopy(t *testing.T) {
-	stacks := cfg.KnownStacks()
-	stacks[0] = "mutated"
-	fresh := cfg.KnownStacks()
-	if fresh[0] == "mutated" {
-		t.Error("KnownStacks should return a copy, not a reference to internal slice")
 	}
 }
 
@@ -1846,7 +1813,7 @@ hostname = "custom-host"
 }
 
 // Project [cell] hostname must survive Merge so that LoadLayered ->
-// LoadFromOS exposes the value to runner.BuildArgv. Previously Hostname
+// LoadFromOS exposes the value to docker.BuildArgv. Previously Hostname
 // was loaded by LoadFile but dropped by Merge, so cell shell silently
 // used the computed default.
 func TestMerge_HostnameProjectWins(t *testing.T) {
@@ -1967,7 +1934,11 @@ func TestApplyEnv_DefaultCommand(t *testing.T) {
 }
 
 func TestValidateDefaultCommand_Valid(t *testing.T) {
-	for _, cmd := range cfg.KnownDefaultCommands() {
+	for _, cmd := range []string{
+		"claude", "codex", "opencode", "gemini", "shell",
+		"build", "init", "vnc", "rdp", "models", "modules",
+		"serve", "auth", "telemetry",
+	} {
 		if err := cfg.ValidateDefaultCommand(cmd); err != nil {
 			t.Errorf("valid command %q should not error: %v", cmd, err)
 		}
@@ -2750,22 +2721,22 @@ func TestMerge_LLMAppendSystemPromptGlobalSurvivesEmptyProject(t *testing.T) {
 
 // ── CELL-446: Packages merge ────────────────────────────────────────────────
 
-func TestMerge_PackagesNpmAccumulates(t *testing.T) {
+func TestMerge_PackagesNodeAccumulates(t *testing.T) {
 	global := cfg.CellConfig{Packages: cfg.PackagesSection{
-		Npm: map[string]string{"prettier": "*", "eslint": "8"},
+		Node: map[string]string{"prettier": "*", "eslint": "8"},
 	}}
 	project := cfg.CellConfig{Packages: cfg.PackagesSection{
-		Npm: map[string]string{"eslint": "9", "typescript": "*"},
+		Node: map[string]string{"eslint": "9", "typescript": "*"},
 	}}
 	merged := cfg.Merge(global, project)
-	if merged.Packages.Npm["prettier"] != "*" {
-		t.Errorf("prettier should be *, got %q", merged.Packages.Npm["prettier"])
+	if merged.Packages.Node["prettier"] != "*" {
+		t.Errorf("prettier should be *, got %q", merged.Packages.Node["prettier"])
 	}
-	if merged.Packages.Npm["eslint"] != "9" {
-		t.Errorf("eslint: project should win, got %q", merged.Packages.Npm["eslint"])
+	if merged.Packages.Node["eslint"] != "9" {
+		t.Errorf("eslint: project should win, got %q", merged.Packages.Node["eslint"])
 	}
-	if merged.Packages.Npm["typescript"] != "*" {
-		t.Errorf("typescript should be *, got %q", merged.Packages.Npm["typescript"])
+	if merged.Packages.Node["typescript"] != "*" {
+		t.Errorf("typescript should be *, got %q", merged.Packages.Node["typescript"])
 	}
 }
 
@@ -2787,11 +2758,11 @@ func TestMerge_PackagesPythonAccumulates(t *testing.T) {
 
 func TestMerge_PackagesGlobalSurvivesEmptyProject(t *testing.T) {
 	global := cfg.CellConfig{Packages: cfg.PackagesSection{
-		Npm: map[string]string{"prettier": "*"},
+		Node: map[string]string{"prettier": "*"},
 	}}
 	merged := cfg.Merge(global, cfg.CellConfig{})
-	if merged.Packages.Npm["prettier"] != "*" {
-		t.Errorf("global npm packages should survive empty project, got %q", merged.Packages.Npm["prettier"])
+	if merged.Packages.Node["prettier"] != "*" {
+		t.Errorf("global node packages should survive empty project, got %q", merged.Packages.Npm["prettier"])
 	}
 }
 
@@ -3237,6 +3208,73 @@ AllowedIPs = 0.0.0.0/0`,
 	}
 }
 
+func TestValidateWireguard_InvalidPresharedKey(t *testing.T) {
+	c := cfg.CellConfig{
+		Wireguard: []cfg.WireguardEntry{{
+			Name:    "bad-psk",
+			Enabled: true,
+			Config: `[Interface]
+Address = 10.2.0.2/32
+
+[Peer]
+PublicKey = fkBdrgo6NaOI9ICRd+i2mDbieKUzEXkj4vX3ItZ+5lM=
+PresharedKey = not-valid-base64!!!
+AllowedIPs = 0.0.0.0/0`,
+		}},
+	}
+	err := cfg.ValidateWireguard(c)
+	if err == nil {
+		t.Fatal("expected error for invalid base64 PresharedKey")
+	}
+	if !strings.Contains(err.Error(), "PresharedKey") {
+		t.Errorf("error should mention PresharedKey, got: %v", err)
+	}
+}
+
+func TestValidateWireguard_ValidPresharedKey(t *testing.T) {
+	c := cfg.CellConfig{
+		Wireguard: []cfg.WireguardEntry{{
+			Name:    "good-psk",
+			Enabled: true,
+			Config: `[Interface]
+Address = 10.2.0.2/32
+
+[Peer]
+PublicKey = fkBdrgo6NaOI9ICRd+i2mDbieKUzEXkj4vX3ItZ+5lM=
+PresharedKey = fkBdrgo6NaOI9ICRd+i2mDbieKUzEXkj4vX3ItZ+5lM=
+AllowedIPs = 0.0.0.0/0`,
+		}},
+	}
+	if err := cfg.ValidateWireguard(c); err != nil {
+		t.Fatalf("valid 32-byte PresharedKey should pass, got: %v", err)
+	}
+}
+
+func TestValidateWireguard_DistinctInlinePresharedKeysRejected(t *testing.T) {
+	c := cfg.CellConfig{
+		Wireguard: []cfg.WireguardEntry{{
+			Name:    "two-psk",
+			Enabled: true,
+			Config: `[Interface]
+Address = 10.2.0.2/32
+
+[Peer]
+PublicKey = fkBdrgo6NaOI9ICRd+i2mDbieKUzEXkj4vX3ItZ+5lM=
+PresharedKey = AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+AllowedIPs = 10.1.0.0/16
+
+[Peer]
+PublicKey = fkBdrgo6NaOI9ICRd+i2mDbieKUzEXkj4vX3ItZ+5lM=
+PresharedKey = BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA=
+AllowedIPs = 10.2.0.0/16`,
+		}},
+	}
+	err := cfg.ValidateWireguard(c)
+	if err == nil {
+		t.Fatal("expected error: WG_PRESHARED_KEY is a single secret, so peers cannot carry distinct PSKs")
+	}
+}
+
 // --- FlakeEnabled ---
 
 func TestFlakeEnabled_DefaultFalse(t *testing.T) {
@@ -3276,5 +3314,24 @@ func TestFlakeEnabled_EnvOverridesToFalse(t *testing.T) {
 	c := cfg.CellSection{Flake: boolPtr(true)}
 	if c.FlakeEnabled() {
 		t.Error("DEVCELL_FLAKE=0 should override TOML flake=true")
+	}
+}
+
+// Engine must survive Merge: a project-level `engine = "tart"` is how the
+// dispatch in runAgent/build/init selects the engine, and Merge starts from
+// the global Cell section. Without an explicit override the project value
+// silently vanishes whenever a global config file exists.
+func TestMerge_EngineProjectWins(t *testing.T) {
+	global := cfg.CellConfig{Cell: cfg.CellSection{Engine: "docker"}}
+	project := cfg.CellConfig{Cell: cfg.CellSection{Engine: "tart"}}
+	if got := cfg.Merge(global, project).Cell.Engine; got != "tart" {
+		t.Errorf("merged Engine = %q, want %q", got, "tart")
+	}
+}
+
+func TestMerge_EngineGlobalKeptWhenProjectUnset(t *testing.T) {
+	global := cfg.CellConfig{Cell: cfg.CellSection{Engine: "winkit"}}
+	if got := cfg.Merge(global, cfg.CellConfig{}).Cell.Engine; got != "winkit" {
+		t.Errorf("merged Engine = %q, want global value preserved", got)
 	}
 }

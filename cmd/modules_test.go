@@ -4,14 +4,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/runner"
+	"github.com/DimmKirr/devcell/internal/nixhome"
 )
 
 // TestFormatCatalogList: given a Catalog, the human-facing output should
 // list each module on its own line with name + size + description.
 // Tests the formatting layer in isolation (no nix invocation).
 func TestFormatCatalogList_NameAndDescriptionVisible(t *testing.T) {
-	cat := runner.Catalog{
+	cat := nixhome.Catalog{
 		"electronics": {
 			Description: "KiCad EDA, SPICE",
 			MCPServers:  []string{"kicad-mcp"},
@@ -38,7 +38,7 @@ func TestFormatCatalogList_NameAndDescriptionVisible(t *testing.T) {
 
 // Names must be sorted alphabetically for reproducible output.
 func TestFormatCatalogList_NamesSorted(t *testing.T) {
-	cat := runner.Catalog{
+	cat := nixhome.Catalog{
 		"zebra":       {Description: "z"},
 		"apple":       {Description: "a"},
 		"electronics": {Description: "e"},
@@ -56,7 +56,7 @@ func TestFormatCatalogList_NamesSorted(t *testing.T) {
 // Modules with MCP servers should surface the server names so users know
 // which MCP gets activated when they add the module.
 func TestFormatCatalogList_ShowsMCPServerNames(t *testing.T) {
-	cat := runner.Catalog{
+	cat := nixhome.Catalog{
 		"travel": {
 			Description: "Maps + TripIt",
 			MCPServers:  []string{"google-maps", "tripit"},

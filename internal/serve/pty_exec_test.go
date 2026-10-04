@@ -8,6 +8,25 @@ import (
 	"time"
 )
 
+// PTYExecutor options for tests. Exported so the external serve_test
+// package (pty_integration_test.go) can use them too.
+
+func WithPTYArgs(args ...string) PTYExecOption {
+	return func(e *PTYExecutor) { e.args = args }
+}
+
+func WithReadyMarker(m string) PTYExecOption {
+	return func(e *PTYExecutor) { e.readyMarker = m }
+}
+
+func WithResponseTimeout(d time.Duration) PTYExecOption {
+	return func(e *PTYExecutor) { e.responseTimeout = d }
+}
+
+func WithStableDelay(d time.Duration) PTYExecOption {
+	return func(e *PTYExecutor) { e.stableDelay = d }
+}
+
 func TestPTYExecutor_ImplementsExecutor(t *testing.T) {
 	var _ Executor = (*PTYExecutor)(nil)
 }

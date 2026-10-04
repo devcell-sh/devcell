@@ -35,7 +35,7 @@ type Config struct {
 // Pure — no os.* calls inside.
 func Load(cwd string, getenv func(string) string) Config {
 	bunk := resolveBunk(getenv)
-	cellName := resolveCellName(getenv)
+	cellName := ResolveCellName(getenv)
 	portPrefix := resolvePortPrefix(getenv, bunk)
 	appName := filepath.Base(cwd) + "-" + bunk
 	home := getenv("HOME")
@@ -45,7 +45,7 @@ func Load(cwd string, getenv func(string) string) Config {
 		imageTag = tag
 	}
 
-	configDir := resolveConfigDir(getenv)
+	configDir := ResolveConfigDir(getenv)
 	return Config{
 		Bunk:          bunk,
 		AppName:       appName,
@@ -112,7 +112,9 @@ func resolveBunk(getenv func(string) string) string {
 	return "0"
 }
 
-func resolveCellName(getenv func(string) string) string {
+// ResolveCellName is the one implementation of cell-name precedence:
+// DEVCELL_CELL_NAME, then tmux's TMUX_SESSION_NAME, then "main".
+func ResolveCellName(getenv func(string) string) string {
 	if s := getenv("DEVCELL_CELL_NAME"); s != "" {
 		return s
 	}
@@ -126,7 +128,9 @@ func resolvePortPrefix(getenv func(string) string, bunk string) string {
 	return getenv("SESSION_PORT_PREFIX") + bunk
 }
 
-func resolveConfigDir(getenv func(string) string) string {
+// ResolveConfigDir is the one implementation of the global config dir
+// precedence: $XDG_CONFIG_HOME/devcell, then $HOME/.config/devcell.
+func ResolveConfigDir(getenv func(string) string) string {
 	if xdg := getenv("XDG_CONFIG_HOME"); xdg != "" {
 		return xdg + "/devcell"
 	}

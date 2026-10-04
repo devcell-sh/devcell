@@ -137,6 +137,9 @@ func TestEngineTart_NoDebugOnLinux(t *testing.T) {
 
 // TestEngineTart_DebugMockOutput checks that --debug prints mock/simulation output.
 func TestEngineTart_DebugMockOutput(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("mock output only on non-darwin")
+	}
 	home := tartTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=tart", "--debug", "shell")
 	cmd.Dir = home
@@ -162,6 +165,9 @@ func TestEngineTart_DebugMockOutput(t *testing.T) {
 
 // TestEngineTart_DebugMockNoDocker checks mock output has no docker references.
 func TestEngineTart_DebugMockNoDocker(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("mock output only on non-darwin")
+	}
 	home := tartTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=tart", "--debug", "shell")
 	cmd.Dir = home
@@ -188,6 +194,36 @@ func TestEngineTart_DryRunContainsNixSource(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "nix-daemon.sh") {
 		t.Errorf("expected nix-daemon.sh source in dry-run output, got:\n%s", out)
+	}
+}
+
+// TestEngineTart_DryRunGuestEnv checks the unified cell env ([env], [mise],
+// git identity precedence, LC_ALL, cell name) reaches the macOS guest.
+func TestEngineTart_DryRunGuestEnv(t *testing.T) {
+	assertGuestEnvDryRun(t, "--engine=tart")
+}
+
+// TestEngineTart_DryRunLineParsesAsShell checks the printed `tart exec` line
+// is a valid shell command whose last word is the exact guest command, even
+// when an [env] value carries a single quote.
+func TestEngineTart_DryRunLineParsesAsShell(t *testing.T) {
+	out := hermeticDryRun(t, "[cell]\n[env]\nQUOTED = \"it's a b\"\n", "", []string{"USER=admin"},
+		"--engine=tart", "shell")
+	var line string
+	for _, l := range strings.Split(out, "\n") {
+		if strings.HasPrefix(l, "tart exec ") {
+			line = l
+		}
+	}
+	if line == "" {
+		t.Fatalf("no `tart exec` line in output:\n%s", out)
+	}
+	words := shellWords(t, line)
+	if len(words) != 7 || words[3] != "bash" || words[5] != "-c" {
+		t.Fatalf("want [tart exec <vm> bash -l -c <cmd>], got %q", words)
+	}
+	if !strings.Contains(words[6], `'QUOTED=it'\''s a b'`) {
+		t.Errorf("guest command lost the quoted [env] value: %q", words[6])
 	}
 }
 

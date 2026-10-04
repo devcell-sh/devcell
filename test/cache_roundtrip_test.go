@@ -26,6 +26,7 @@ import (
 	osexec "os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -192,7 +193,7 @@ func ensureCrane(t *testing.T) {
 func waitForRegistry(t *testing.T, host string, port int) {
 	t.Helper()
 	deadline := time.Now().Add(15 * time.Second)
-	addr := fmt.Sprintf("%s:%d", host, port)
+	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	for time.Now().Before(deadline) {
 		conn, err := net.DialTimeout("tcp", addr, 200*time.Millisecond)
 		if err == nil {
@@ -362,20 +363,6 @@ func osShellOutput(t *testing.T, script string) string {
 	return string(out)
 }
 
-// runShellPipe executes a sh -c script and fails the test with the full
-// merged stdout/stderr on non-zero exit. Used in place of manually
-// wiring up os/exec pipes between N processes.
-func runShellPipe(t *testing.T, label, script string) {
-	t.Helper()
-	out, err := osexec.Command("sh", "-c", script).CombinedOutput()
-	if err != nil {
-		t.Fatalf("%s failed: %v\nscript: %s\noutput:\n%s", label, err, script, out)
-	}
-	if len(out) > 0 {
-		t.Logf("%s output:\n%s", label, out)
-	}
-}
-
 // lastLayerDigest extracts .layers[-1].digest from a `crane manifest` JSON.
 func lastLayerDigest(t *testing.T, manifest string) string {
 	t.Helper()
@@ -429,4 +416,3 @@ func verifyVolumesMatch(t *testing.T, srcVol, dstVol string) {
 		t.Fatalf("volume content mismatch (exit=%v)", err)
 	}
 }
-

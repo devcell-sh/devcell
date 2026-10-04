@@ -8,8 +8,9 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/DimmKirr/devcell/internal/cell"
 	"github.com/DimmKirr/devcell/internal/config"
-	"github.com/DimmKirr/devcell/internal/runner"
+	"github.com/DimmKirr/devcell/internal/engine/docker"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
@@ -33,7 +34,7 @@ Examples:
 		applyOutputFlags()
 
 		c, err := config.LoadFromOS()
-		if err == nil && runner.ContainerRunning(context.Background(), c.ContainerName) {
+		if err == nil && docker.ContainerRunning(context.Background(), c.ContainerName) {
 			binary := "zsh"
 			var execArgs []string
 			for i, a := range args {
@@ -69,16 +70,16 @@ Examples:
 }
 
 func execIntoContainer(containerName, binary string, args []string) error {
-	spec := runner.ExecSpec{
+	spec := docker.ExecSpec{
 		ContainerName: containerName,
 		Binary:        binary,
 		Args:          args,
 		TTY:           isatty.IsTerminal(os.Stdin.Fd()),
 	}
-	argv := runner.BuildExecArgv(spec)
+	argv := docker.BuildExecArgv(spec)
 
 	if scanFlag("--dry-run") {
-		fmt.Println(shellJoin(argv))
+		fmt.Println(cell.ShellJoin(argv))
 		return nil
 	}
 

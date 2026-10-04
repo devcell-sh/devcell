@@ -24,3 +24,16 @@ repos:
         pass_filenames: false
         require_serial: true
         verbose: true
+
+      # Keep the published config schema (web/public/schema/v0.0.0/) in sync
+      # with internal/cfg.CellConfig and the home catalog. Regenerates on
+      # every commit that touches either; a changed output fails the commit
+      # so you re-stage it (pre-commit's formatter convention). The drift
+      # test in internal/cfg is the CI backstop.
+      - id: schema-generate
+        name: Regenerate web/public/schema/v0.0.0/devcell.json
+        entry: task schema:generate
+        language: system
+        files: ^(internal/cfg/.*\.go|web/public/schema/v0\.0\.0/.*\.json)$
+        pass_filenames: false
+        require_serial: true

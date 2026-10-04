@@ -1,0 +1,121 @@
+package nixhome_test
+
+import (
+	"testing"
+
+	"github.com/DimmKirr/devcell/internal/nixhome"
+)
+
+// UpstreamFlakeRef is the single builder for the canonical nixhome flake URL.
+// Replaces 4 scattered fmt.Sprintf calls that all encoded the same template.
+
+func TestUpstreamFlakeRef_ExplicitVersion(t *testing.T) {
+	if got := nixhome.UpstreamFlakeRef("v1.2.3"); got != "github:devcell-sh/home/v1.2.3" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestUpstreamFlakeRef_EmptyCoercesToDefault(t *testing.T) {
+	want := "github:devcell-sh/home/" + nixhome.DefaultNixhomeGitRef
+	if got := nixhome.UpstreamFlakeRef(""); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestUpstreamFlakeRef_V000CoercesToDefault(t *testing.T) {
+	want := "github:devcell-sh/home/" + nixhome.DefaultNixhomeGitRef
+	if got := nixhome.UpstreamFlakeRef("v0.0.0"); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// GoReleaser's {{.Version}} strips the "v" prefix, so the dev build injects
+// "0.0.0" (not "v0.0.0"). Both forms must coerce to the default branch.
+func TestUpstreamFlakeRef_Bare000CoercesToDefault(t *testing.T) {
+	want := "github:devcell-sh/home/" + nixhome.DefaultNixhomeGitRef
+	if got := nixhome.UpstreamFlakeRef("0.0.0"); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestUpstreamFlakeRef_DevVersionCoercesToDefault(t *testing.T) {
+	want := "github:devcell-sh/home/" + nixhome.DefaultNixhomeGitRef
+	for _, v := range []string{
+		"v0.8.2-94-g0ac6be1-dirty",
+		"v1.0.0-3-gabcdef0",
+		"v2.0.0-dirty",
+	} {
+		if got := nixhome.UpstreamFlakeRef(v); got != want {
+			t.Errorf("UpstreamFlakeRef(%q) = %q, want %q", v, got, want)
+		}
+	}
+}
+
+// Shallow, tagless CI checkouts degrade `git describe --tags --always` to a
+// bare short SHA — a devcell commit that can never exist as a ref in the
+// nixhome repo. Those must coerce to the default branch too.
+func TestUpstreamFlakeRef_BareCommitSHACoercesToDefault(t *testing.T) {
+	want := "github:devcell-sh/home/" + nixhome.DefaultNixhomeGitRef
+	for _, v := range []string{
+		"cb823b7", // exact string from the failed Dev Build run
+		"372d58f", // local shallow-clone describe output
+		"deadbeefcafe",
+		"0ac6be1d4fb50fe8760efc1e7df1aeafa9abbbea", // full 40-char SHA
+	} {
+		if got := nixhome.UpstreamFlakeRef(v); got != want {
+			t.Errorf("UpstreamFlakeRef(%q) = %q, want %q", v, got, want)
+		}
+	}
+}
+
+// Real tags and branch names must keep passing through verbatim — the SHA
+// heuristic must not swallow them.
+func TestUpstreamFlakeRef_TagsAndBranchesPassThrough(t *testing.T) {
+	for _, v := range []string{"v1.2.3", "main", "feature-x", "v0.9.0"} {
+		want := "github:devcell-sh/home/" + v
+		if got := nixhome.UpstreamFlakeRef(v); got != want {
+			t.Errorf("UpstreamFlakeRef(%q) = %q, want %q", v, got, want)
+		}
+	}
+}
+
+func TestResolveNixhomeRef_EnvOverride(t *testing.T) {
+	t.Setenv("DEVCELL_NIXHOME", "/home/user/my-nixhome")
+	if got := nixhome.ResolveNixhomeRef("v1.0.0"); got != "/home/user/my-nixhome" {
+		t.Errorf("got %q, want env override", got)
+	}
+}
+
+func TestResolveNixhomeRef_LegacyPathFallback(t *testing.T) {
+	t.Setenv("DEVCELL_NIXHOME", "")
+	t.Setenv("DEVCELL_NIXHOME_PATH", "/Users/me/dev/community-home")
+	if got := nixhome.ResolveNixhomeRef("v1.0.0"); got != "/Users/me/dev/community-home" {
+		t.Errorf("got %q, want legacy DEVCELL_NIXHOME_PATH fallback", got)
+	}
+}
+
+func TestResolveNixhomeRef_NewOverridesLegacy(t *testing.T) {
+	t.Setenv("DEVCELL_NIXHOME", "github:myuser/my-nixhome/dev")
+	t.Setenv("DEVCELL_NIXHOME_PATH", "/Users/me/dev/community-home")
+	if got := nixhome.ResolveNixhomeRef("v1.0.0"); got != "github:myuser/my-nixhome/dev" {
+		t.Errorf("got %q, want DEVCELL_NIXHOME to take precedence", got)
+	}
+}
+
+func TestResolveNixhomeRef_DefaultsToUpstream(t *testing.T) {
+	t.Setenv("DEVCELL_NIXHOME", "")
+	t.Setenv("DEVCELL_NIXHOME_PATH", "")
+	want := nixhome.UpstreamFlakeRef("v1.0.0")
+	if got := nixhome.ResolveNixhomeRef("v1.0.0"); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestUpstreamFlakeRefNoVersion(t *testing.T) {
+	// The "no specific ref" variant — for callers that want the catalog as it
+	// exists upstream today (not pinned to a version). Used by `cell modules
+	// list` and similar introspection.
+	if got := nixhome.UpstreamFlakeRefNoVersion(); got != "github:devcell-sh/home" {
+		t.Errorf("got %q", got)
+	}
+}

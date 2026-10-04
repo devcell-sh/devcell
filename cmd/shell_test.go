@@ -3,11 +3,11 @@ package main_test
 import (
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/runner"
+	"github.com/DimmKirr/devcell/internal/engine/docker"
 )
 
 func TestShellExecArgv_DefaultZsh(t *testing.T) {
-	argv := runner.BuildExecArgv(runner.ExecSpec{
+	argv := docker.BuildExecArgv(docker.ExecSpec{
 		ContainerName: "cell-myproject-0-run",
 		Binary:        "zsh",
 		TTY:           true,
@@ -24,7 +24,7 @@ func TestShellExecArgv_DefaultZsh(t *testing.T) {
 }
 
 func TestShellExecArgv_CustomCommand(t *testing.T) {
-	argv := runner.BuildExecArgv(runner.ExecSpec{
+	argv := docker.BuildExecArgv(docker.ExecSpec{
 		ContainerName: "cell-myproject-0-run",
 		Binary:        "bash",
 		Args:          []string{"-c", "echo hello"},

@@ -24,13 +24,13 @@ On first run, `cell` creates `.devcell.toml` and `.devcell/` in your project dir
 - **Stealth Chromium + zero-password login** - `cell login <url>` opens a clean browser on your host, you log in, press Enter; cookies and localStorage sync to the container. The agent never sees your password. Anti-fingerprint Playwright replays sessions that pass Cloudflare and Kasada
 - **Remote desktop** - VNC and RDP into the container to watch or interact with GUI apps
 - **1Password secrets** - list document names in `.devcell.toml`; fields are injected as env vars into the container at runtime, written to a RAM-only tmpfs, gone when the container stops
-- **Docker or VM engine** - default: Docker container. Add `--macos` to provision a Debian ARM64 VM via Vagrant + UTM instead — same nixhome toolchain, same commands, no Docker Desktop required
-- **3 primary stacks** — `base` (minimal), `dev` (default seed, ~3 GB: stealth browser + IaC MCPs), `ultimate` (everything, ~15 GB). Legacy: go/node/python/fullstack/electronics. See [MIGRATION.md](./MIGRATION.md).
+- **Docker or VM engine** - default: a Linux Docker container. `--os macos` runs a macOS VM on Tart, `--os windows` a Windows VM via winkit; same commands
+- **4 primary stacks**: `base` (minimal), `dev` (seed: stealth browser + IaC MCPs), `ultimate` (general development), `bbb` (ultimate plus specialist tools). Legacy: go/node/python/fullstack/electronics. See [MIGRATION.md](./MIGRATION.md).
 - **Model ranking** - `cell models` shows cloud models (Anthropic, OpenAI, Google via OpenRouter) and local ollama models ranked by SWE-Bench score and speed, side by side
 
 ## Stacks
 
-Published to `ghcr.io/devcell-sh/devcell`. Multi-arch: linux/amd64, linux/arm64. Modules 2.0 introduces a `dev` seed stack and reshapes `ultimate` to enable every catalog module (see [MIGRATION.md](./MIGRATION.md)). Legacy stacks (go, node, python, fullstack, electronics) still build.
+Published to `ghcr.io/devcell-sh/devcell`. Multi-arch: linux/amd64, linux/arm64. The `dev` seed and `ultimate` general development stack support extra capability modules; `bbb` retains the specialist tools previously bundled with ultimate (see [MIGRATION.md](./MIGRATION.md)). Legacy stacks (go, node, python, fullstack, electronics) still build.
 
 | Stack | What's inside |
 |---|---|
@@ -40,7 +40,8 @@ Published to `ghcr.io/devcell-sh/devcell`. Multi-arch: linux/amd64, linux/arm64.
 | **python** | base + Python 3.13, uv, stealth Chromium |
 | **fullstack** | go + node + python |
 | **electronics** | base + GUI desktop + KiCad, ngspice, ESPHome, PlatformIO, wokwi-cli |
-| **ultimate** | fullstack + GUI desktop, all MCP servers, Inkscape, KiCad *(default)* |
+| **ultimate** | General development, cloud tools, browser automation, desktop and Draw.io |
+| **bbb** | ultimate + KiCad, Wine, QEMU, Swift, publishing, security/RE, Inkscape/GIMP, FFmpeg/yt-dlp, Kitty, wxWidgets, FreeRDP, native UI development and personal-service MCPs |
 
 Add-on modules (set `modules = ["android"]` in `.devcell.toml`):
 
@@ -51,80 +52,27 @@ Add-on modules (set `modules = ["android"]` in `.devcell.toml`):
 | **scraping** | Playwright stealth scripts, anti-fingerprint Chromium config |
 | **infra** | Cloud CLI tools: AWS, GCP, Azure |
 
-## Vagrant engine (no Docker required)
+## Engines and guests
 
-Run cells as native VMs instead of Docker containers — useful for Apple Silicon without Docker Desktop, or when you need full Linux kernel features (KVM, `/dev/kvm`).
+The guest is the OS inside the cell (`--os`); the engine is how the cell runs (`--engine`). Pick the guest and the engine follows:
+
+| `--os` | Engine | What runs | Host |
+|---|---|---|---|
+| `linux` (default) | `docker` | Linux container | any |
+| `macos` | `tart` | macOS VM | Apple Silicon |
+| `windows` or `winpe` | `winkit` | Windows PE + WSL1 VM (vz on macOS, qemu on Linux) | macOS, Linux |
 
 ```bash
-cell claude --macos          # provision Debian ARM64 VM via UTM, then open Claude Code
-cell build --macos           # re-apply nixhome flake inside the VM
-cell build --update --macos  # nix flake update inside VM, then re-provision
-cell rdp --list              # shows docker + vagrant cells side by side
+cell claude --os macos       # open Claude Code in a macOS VM
+cell build --os windows      # build the Windows VM image
 ```
 
 Set permanently in `.devcell.toml`:
 
 ```toml
 [cell]
-engine = "vagrant"
-vagrant_provider = "utm"   # utm (macOS) or libvirt (Linux)
-vagrant_box = "utm/bookworm"
+os = "macos"
 ```
-
-On first run the CLI scaffolds a `Vagrantfile`, starts the VM, installs Nix single-user, and applies the same home-manager configuration used by Docker images. Subsequent runs detect whether provisioning is needed and skip it if the binary is already present.
-
-## libvirt engine (host VMs from inside a cell)
-
-Inside a Docker cell on a Mac there is no HVF and no `/dev/kvm`, so `--engine=qemu` falls back to TCG software emulation (10–20× slower). The libvirt engine instead drives QEMU **on the macOS host** — with HVF acceleration — through libvirtd, reached from the cell over `qemu+tcp://host.docker.internal/session`.
-
-Scope: libvirt mode boots and connects to an **already-prepped template**. Build the template once with `cell build --engine=qemu` on the macOS host; `cell build --engine=libvirt` intentionally refuses (CELL-379 tracks install-over-libvirt).
-
-One-time host setup (macOS):
-
-```bash
-brew install libvirt
-brew services start libvirt
-```
-
-Enable TCP listen for the session daemon in `libvirtd.conf` (usually `/opt/homebrew/etc/libvirt/libvirtd.conf`):
-
-```
-listen_tcp = 1
-listen_addr = "127.0.0.1"
-auth_tcp = "none"
-```
-
-> **Security note:** `qemu+tcp` with `auth_tcp = "none"` is unauthenticated — anyone who can reach the port can control your VMs. Keep `listen_addr` on loopback/the Docker bridge only. A hardened `qemu+ssh://` transport is planned; until then treat this as a local-development convenience.
-
-Then from any cell:
-
-```bash
-cell shell --engine=libvirt            # boot the template on the host, SSH in
-cell shell --engine=libvirt --dry-run  # print the resolved URI + domain XML
-```
-
-**Auto-default:** inside a Docker cell on a Mac (container + `host.docker.internal` resolves + no usable `/dev/kvm`), `--engine=qemu` automatically upgrades to libvirt remote mode — local qemu could only mean TCG. Pin the in-container path with `--engine=qemu --local`.
-
-**Project files:** the guest's `~\<project>` is synced over the session's SSH channel — pushed before your agent starts (`push`, default), optionally pulled back on exit (`two-way`), or disabled (`off`).
-
-Configuration (`.devcell.toml`):
-
-```toml
-[cell]
-engine = "libvirt"
-libvirt_uri = "qemu+tcp://host.docker.internal/session"  # default; env: DEVCELL_LIBVIRT_URI
-qemu_project_sync = "push"  # push (default) | two-way | off; env: DEVCELL_QEMU_PROJECT_SYNC
-
-# Container→host path rewrites for the domain XML: QEMU on the host must
-# open disks/firmware at HOST paths, not the cell's bind-mount paths.
-[cell.libvirt_path_map]
-"/devcell-155" = "/Users/dmitry/dev/dimmkirr/devcell"
-"/home/dmitry" = "/Users/dmitry"
-```
-
-The host UEFI firmware defaults to brew's `/opt/homebrew/share/qemu/edk2-aarch64-code.fd`; override with `DEVCELL_LIBVIRT_FIRMWARE`.
-
-Verify connectivity with `virsh -c qemu+tcp://host.docker.internal/session list --all` from inside the cell, or just run any libvirt-engine command — the preflight maps each failure (port closed, wrong service, auth enabled) to the fix.
 
 ## MCP servers
 
@@ -162,7 +110,7 @@ The fingerprint (`User-Agent`, platform, browser brands) is read from your real 
 
 ## Security
 
-- Project directory mounted at `/workspace`. Host filesystem is unreachable
+- Project directory mounted at `/workspace`, exposed inside the container as `$DEVCELL_PROJECT_DIR` (`$WORKSPACE` still set for compatibility). Host filesystem is unreachable
 - SSH keys, `.env` files outside the project, and host credentials are not mounted
 - Session user runs without root privileges
 - 1Password secrets injected at runtime, never persisted
@@ -172,6 +120,29 @@ The fingerprint (`User-Agent`, platform, browser brands) is read from your real 
 ## Configuration
 
 Project config at `.devcell.toml` (created by `cell init` or first run). Optional global defaults at `~/.config/devcell/devcell.toml`. See `cell --help` and the [CLI docs](https://devcell.sh/docs/cell) for the full reference.
+
+A JSON Schema for the config is published at `https://devcell.sh/schema/<version>/devcell.json`. Today `<version>` is always `v0.0.0`, tracking `main`; per-release directories can be added later without changing URLs. Add this line to the top of the file for editor validation and completion (taplo, Even Better TOML for VS Code, Zed, Neovim):
+
+```toml
+#:schema https://devcell.sh/schema/v0.0.0/devcell.json
+```
+
+The schema carries a top-level `version` field so you can tell which one you are looking at. The module, stack, and package catalog of the matching home flake is published next to it, so editors offer `modules` and `stack` completions and you can check what a stack already ships before adding a package:
+
+- `https://devcell.sh/schema/<version>/devcell-sh/home/modules.json`: module name, description, MCP servers, size
+- `https://devcell.sh/schema/<version>/devcell-sh/home/stacks.json`: modules enabled and packages installed per stack
+- `https://devcell.sh/schema/<version>/devcell-sh/home/packages.json`: package version and which stacks ship it
+
+Only `v0.0.0` is published for now. It is regenerated by the `schema-generate` pre-commit hook (and on every `task cell:build`) whenever the config struct or the catalog changes; a drift test in `internal/cfg` backs that up in CI. Refresh the catalog with `task schema:catalog` (needs nix) after the home flake changes.
+
+## WireGuard tunnels
+
+Add one `[[wireguard]]` block per tunnel to `.devcell.toml` with a standard wg-quick config. The container gets `NET_ADMIN`, `/dev/net/tun`, and brings the tunnel up at start. Secrets never land in the config file on disk:
+
+- `WG_PRIVATE_KEY` (required): the `[Interface]` private key. Any inline `PrivateKey` is stripped and loaded from this variable at runtime.
+- `WG_PRESHARED_KEY` (optional): applied to every `[Peer]` in the tunnel. Any inline `PresharedKey` is stripped the same way. Peers with different PSKs are rejected at validation time, so use one tunnel per PSK.
+
+Set both in the host environment where you run `cell`. When a tunnel is enabled they are forwarded into the container by name (values never appear in the `docker run` command line), written to a `/run/secrets` tmpfs, and applied with `wg set` after the interface is up. No manual `PostUp` is needed.
 
 ## Customization
 
@@ -231,7 +202,7 @@ task nix:validate    # Syntax check + attribute resolution across all stacks
 | **cell** | A named, persistent identity. A boundary. One shared `$HOME` (`~/.devcell/<cellName>/`), one network, one secrets scope. Examples: `DIMM`, `work`, `personal`, `main` (default). May host many projects. May be running or stopped. |
 | **project** | A host directory with code. Mounted into a container. |
 | **container** | The running docker instance for one (cell, project) pair. Ephemeral. The cell is the boundary; the container is the runtime. |
-| **stack** | The image variant a container is built from (`base`, `dev`, `ultimate`). |
+| **stack** | The image variant a container is built from (`base`, `dev`, `ultimate`, `bbb`). |
 | **module** | A toggleable Nix capability composed into a stack (see [MIGRATION.md](./MIGRATION.md)). |
 
 **One-line model:** *a cell is the boundary; many projects live inside it; each project at a time spawns one container.*

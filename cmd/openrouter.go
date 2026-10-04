@@ -1,26 +1,27 @@
 package main
 
 import (
-	"fmt"
-	"os"
+	"strings"
+
+	"github.com/DimmKirr/devcell/internal/cfg"
 )
 
-// OpenRouter exposes two API surfaces: the Anthropic-compat endpoint used by
-// Claude Code (ANTHROPIC_BASE_URL, no /v1 — Claude Code appends it) and the
-// OpenAI-compat endpoint used by Codex and OpenCode SDKs.
-const (
-	openRouterAnthropicBaseURL = "https://openrouter.ai/api"
-	openRouterOpenAIBaseURL    = "https://openrouter.ai/api/v1"
-)
+// llmDefaultBaseURLs are the API roots of the built-in providers, as seen
+// from inside the container, without the /v1 suffix. Claude Code takes the
+// root (it appends /v1 itself); OpenAI-compat clients take root + "/v1".
+var llmDefaultBaseURLs = map[string]string{
+	cfg.LLMProviderOllama:     "http://host.docker.internal:11434",
+	cfg.LLMProviderLMStudio:   "http://host.docker.internal:1234",
+	cfg.LLMProviderOpenRouter: "https://openrouter.ai/api",
+}
 
-// FillOpenRouterKey fills OPENROUTER_API_KEY from the environment. Called
-// after 1Password resolution so the key is available. Env builders that need
-// the key set OPENROUTER_API_KEY to "" as a placeholder; runAgent fills it.
-func FillOpenRouterKey(env map[string]string) error {
-	apiKey := os.Getenv("OPENROUTER_API_KEY")
-	if apiKey == "" {
-		return fmt.Errorf("--openrouter requires OPENROUTER_API_KEY env var (set it or add to [secrets.onepassword] documents)")
+// llmBaseURL returns the API root of a built-in provider: its
+// [llm.providers.<name>] base_url (written with or without /v1), else the
+// default.
+func llmBaseURL(l cfg.LLMSection, provider string) string {
+	u := strings.TrimSuffix(strings.TrimRight(l.Providers[provider].BaseURL, "/"), "/v1")
+	if u == "" {
+		return llmDefaultBaseURLs[provider]
 	}
-	env["OPENROUTER_API_KEY"] = apiKey
-	return nil
+	return u
 }

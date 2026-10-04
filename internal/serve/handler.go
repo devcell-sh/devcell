@@ -14,12 +14,18 @@ import (
 	"github.com/DimmKirr/devcell/internal/logger"
 )
 
-// agentForPrefix maps model prefix to the binary name.
+// agentForPrefix maps model prefix to the binary name. "default" matches
+// [llm] provider = "default" (Claude Code on its own backend); "anthropic"
+// stays because /v1/models lists discovered models as "anthropic/<id>".
 var agentForPrefix = map[string]string{
 	"claude":    "claude",
+	"default":   "claude",
 	"anthropic": "claude",
 	"opencode":  "opencode",
 }
+
+// validModelPrefixes is the user-facing list for unknown-model errors.
+const validModelPrefixes = "default, anthropic, claude, opencode"
 
 // Executor runs an agent command and returns the result.
 type Executor interface {
@@ -109,7 +115,7 @@ type ChatMessage struct {
 
 // ChatRequest is the OpenAI-compatible chat completions request.
 type ChatRequest struct {
-	// Model selects the agent. Use "claude", "anthropic", or "opencode" as a prefix.
+	// Model selects the agent. Use "claude", "default", "anthropic", or "opencode" as a prefix.
 	// Append a sub-model with a slash: "claude/claude-sonnet-4-5".
 	Model string `json:"model" example:"claude"`
 	// Messages is the conversation history. The last user message is used as the prompt.
@@ -203,7 +209,7 @@ func chatcmplID() string {
 // @Description LLM agent binary (Claude Code or OpenCode) running inside the DevCell container.
 // @Description
 // @Description The `model` field determines which agent handles the request:
-// @Description - `"claude"` or `"anthropic"` — routes to Claude Code CLI
+// @Description - `"claude"`, `"default"` or `"anthropic"` — routes to Claude Code CLI
 // @Description - `"opencode"` — routes to OpenCode CLI
 // @Description - `"claude/claude-sonnet-4-5"` — routes to Claude Code with a specific sub-model
 // @Description
@@ -255,7 +261,7 @@ func NewChatHandler(exec Executor, logPrompts bool, systemPromptFile, basePrompt
 		prefix, submodel := parseModel(req.Model)
 		agent, ok := agentForPrefix[prefix]
 		if !ok {
-			http.Error(w, fmt.Sprintf("unknown model %q; valid prefixes: anthropic, claude, opencode", prefix), http.StatusBadRequest)
+			http.Error(w, fmt.Sprintf("unknown model %q; valid prefixes: %s", prefix, validModelPrefixes), http.StatusBadRequest)
 			return
 		}
 

@@ -1,7 +1,9 @@
 // nix_cache_test.go — TDD tests for CELL-163: nix store pre-seeding with DB
 //
-// L2: Integration — nix DB recognized after copy (needs Docker)
-// L3: E2E — full build with cache donor (needs Docker + registry)
+// All tests here are L2 in the pyramid described in sudo_test.go: they
+// `docker run` the existing test image from image() and never build one.
+//   - nix DB recognized after copy (DbPresent, PathsRegistered)
+//   - the image the cached build produced has the expected tools (UltimateTools)
 
 package container_test
 
@@ -13,7 +15,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// L2 — Integration: nix DB recognized after copy
+// nix DB recognized after copy
 // ---------------------------------------------------------------------------
 
 // TestNixCache_DbPresent verifies the ultimate image has a valid nix DB
@@ -72,7 +74,7 @@ func TestNixCache_PathsRegistered(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// L3 — E2E: built image has expected tools
+// Built image has expected tools
 // ---------------------------------------------------------------------------
 
 // TestNixCache_UltimateTools verifies key tools are present in the

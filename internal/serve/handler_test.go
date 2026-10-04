@@ -171,7 +171,7 @@ func TestHandler_UnknownAgent(t *testing.T) {
 		t.Fatalf("expected 400, got %d", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "anthropic") || !strings.Contains(body, "opencode") {
+	if !strings.Contains(body, "default") || !strings.Contains(body, "anthropic") || !strings.Contains(body, "opencode") {
 		t.Errorf("error should list valid prefixes, got: %s", body)
 	}
 }
@@ -334,5 +334,20 @@ func TestHandler_Effort_AbsentNoFlag(t *testing.T) {
 	}
 	if fe.effort != "" {
 		t.Errorf("absent reasoning_effort produced executor effort=%q", fe.effort)
+	}
+}
+
+// "default" matches [llm] provider = "default": Claude Code on its own backend.
+func TestHandler_DefaultPrefixRoutesToClaude(t *testing.T) {
+	fe := &fakeExec{stdout: "ok"}
+	h := NewChatHandler(fe, false, "", "")
+
+	rec := postChat(t, h, `{"model":"default/opus","messages":[{"role":"user","content":"hello"}]}`)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if fe.agent != "claude" || fe.model != "opus" {
+		t.Errorf("agent/model = %q/%q, want claude/opus", fe.agent, fe.model)
 	}
 }

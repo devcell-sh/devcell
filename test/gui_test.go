@@ -3,14 +3,12 @@
 package container_test
 
 import (
-	"archive/tar"
 	"context"
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
 	goimage "image"
 	"image/png"
-	"io"
 	"log"
 	"math"
 	"math/cmplx"
@@ -104,21 +102,6 @@ func assertContains(t *testing.T, label, content, expected string) {
 }
 
 // ── Pixel assertion helpers ──────────────────────────────────────────────────
-
-// pixelHex returns the hex color "#rrggbb" at (x, y) in img.
-func pixelHex(img goimage.Image, x, y int) string {
-	r, g, b, _ := img.At(x, y).RGBA()
-	return fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, b>>8)
-}
-
-// assertPixel checks that the pixel at (x, y) matches the expected hex color.
-func assertPixel(t *testing.T, img goimage.Image, x, y int, expected, label string) {
-	t.Helper()
-	got := pixelHex(img, x, y)
-	if got != expected {
-		t.Errorf("%s: pixel(%d,%d) = %s, want %s", label, x, y, got, expected)
-	}
-}
 
 // assertPixelTolerance checks pixel with ±tolerance per channel (for rendering differences).
 func assertPixelTolerance(t *testing.T, img goimage.Image, x, y int, expected string, tolerance uint8, label string) {
@@ -321,15 +304,6 @@ func saveScreenshot(t *testing.T) {
 	})
 }
 
-// skipIfNoGUI skips VNC tests when the image lacks GUI binaries (e.g. nix-only image).
-func skipIfNoGUI(t *testing.T, c testcontainers.Container) {
-	t.Helper()
-	_, code := exec(t, c, []string{"sh", "-c", "command -v x11vnc"})
-	if code != 0 {
-		t.Skip("skipping: image lacks x11vnc (nix-only image without GUI support)")
-	}
-}
-
 // probeGUI skips the test if the image lacks GUI support.
 // Checks DEVCELL_PROFILE in the image config — desktop stacks (ultimate,
 // electronics) include GUI tools. DEVCELL_GUI_ENABLED is a runtime flag
@@ -357,14 +331,6 @@ func probeGUI(t *testing.T) {
 	}
 }
 
-func skipIfNoXrdp(t *testing.T, c testcontainers.Container) {
-	t.Helper()
-	_, code := exec(t, c, []string{"sh", "-c", "command -v xrdp"})
-	if code != 0 {
-		t.Skip("skipping: image lacks xrdp")
-	}
-}
-
 // skipIfNoXfreerdp skips the test if xfreerdp is not on PATH inside the container.
 func skipIfNoXfreerdp(t *testing.T, c testcontainers.Container) {
 	t.Helper()
@@ -372,40 +338,6 @@ func skipIfNoXfreerdp(t *testing.T, c testcontainers.Container) {
 	if code != 0 {
 		t.Skip("skipping: xfreerdp not on PATH")
 	}
-}
-
-// startDesktopGUIContainer starts a container with DEVCELL_GUI_ENABLED=true
-// and waits for the full GUI stack (Xvfb + WM + x11vnc) to be running.
-func startDesktopGUIContainer(t *testing.T) testcontainers.Container {
-	t.Helper()
-	ctx := context.Background()
-	req := testcontainers.ContainerRequest{
-		Image: image(),
-		Env: map[string]string{
-			"HOST_USER":           hostUser,
-			"APP_NAME":            "test",
-			"DEVCELL_GUI_ENABLED": "true",
-		},
-		User: "0",
-		Cmd:  []string{"tail", "-f", "/dev/null"},
-		WaitingFor: wait.ForExec([]string{"sh", "-c",
-			"grep -qi 170C /proc/net/tcp6 /proc/net/tcp 2>/dev/null && grep -qi ' 0A ' /proc/net/tcp6 /proc/net/tcp 2>/dev/null"}).
-			WithStartupTimeout(60 * time.Second),
-	}
-	if isThinVariant() {
-		req.Mounts = testcontainers.Mounts(
-			testcontainers.VolumeMount(thinVolumeName(), "/nix"),
-		)
-	}
-	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: req,
-		Started:          true,
-	})
-	if err != nil {
-		t.Fatalf("start desktop GUI container: %v", err)
-	}
-	t.Cleanup(func() { _ = c.Terminate(ctx) })
-	return c
 }
 
 // startRdpContainer starts a container with GUI enabled and publishes port 3389.
@@ -1182,7 +1114,8 @@ func TestRdp_AudioPlayback(t *testing.T) {
 // Subtests isolate each pipeline hop to pinpoint where audio breaks.
 //
 // Pipeline: paplay → PA xrdp-sink → module-xrdp-sink → xrdp rdpsnd
-//           → xfreerdp /sound:sys:pulse → client PA → ClientSink
+//
+//	→ xfreerdp /sound:sys:pulse → client PA → ClientSink
 func TestRdp_AudioRedirection(t *testing.T) {
 	probeGUI(t)
 	c := startRdpContainer(t)
@@ -1412,36 +1345,6 @@ func generateSineWAV(freq float64, sampleRate, durationSec, channels int) []byte
 		}
 	}
 	return buf
-}
-
-// copyFromContainer copies a file from the container to a local path.
-func copyFromContainer(t *testing.T, c testcontainers.Container, containerPath, localPath string) {
-	t.Helper()
-	ctx := context.Background()
-	reader, err := c.CopyFileFromContainer(ctx, containerPath)
-	if err != nil {
-		t.Fatalf("copy %s from container: %v", containerPath, err)
-	}
-	defer reader.Close()
-
-	// CopyFileFromContainer returns a tar stream; extract the single file.
-	data, err := extractTarFile(reader)
-	if err != nil {
-		t.Fatalf("extract %s from tar: %v", containerPath, err)
-	}
-	if err := os.WriteFile(localPath, data, 0644); err != nil {
-		t.Fatalf("write %s: %v", localPath, err)
-	}
-}
-
-// extractTarFile reads the first file from a tar archive stream.
-func extractTarFile(r io.Reader) ([]byte, error) {
-	tr := tar.NewReader(r)
-	_, err := tr.Next()
-	if err != nil {
-		return nil, fmt.Errorf("tar next: %w", err)
-	}
-	return io.ReadAll(tr)
 }
 
 // analyzeWavFrequency reads a 16-bit PCM WAV file, computes RMS amplitude and

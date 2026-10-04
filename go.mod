@@ -13,7 +13,6 @@ require (
 	github.com/charmbracelet/x/xpty v0.1.3
 	github.com/creack/pty v1.1.24
 	github.com/devcell-sh/go-diskoci v0.1.0
-	github.com/digitalocean/go-libvirt v0.0.0-20260609165003-6254771e63a8
 	github.com/docker/docker v28.5.1+incompatible
 	github.com/google/go-containerregistry v0.22.0
 	github.com/google/uuid v1.6.0
@@ -32,16 +31,17 @@ require (
 	golang.org/x/image v0.41.0
 	golang.org/x/mod v0.39.0
 	gopkg.in/yaml.v3 v3.0.1
-	howett.net/plist v1.0.1
 	k8s.io/client-go v0.36.2
-	libvirt.org/go/libvirtxml v1.12005.0
 	sigs.k8s.io/controller-runtime v0.24.1
 )
 
 require (
+	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
 	github.com/diskfs/go-diskfs v1.9.4 // indirect
+	github.com/gliderlabs/ssh v0.3.8 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/pkg/sftp v1.13.11 // indirect
+	github.com/tmc/apple v0.6.18 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 )
 
@@ -81,9 +81,9 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/devcell-sh/go-nixoci v0.1.0
-	github.com/devcell-sh/go-regedit v0.1.0
-	github.com/devcell-sh/go-wimlib v0.1.0
-	github.com/devcell-sh/go-winkit v0.2.1-0.20260925055439-8c91bd7fede0
+	github.com/devcell-sh/go-regedit v0.1.0 // indirect
+	github.com/devcell-sh/go-wimlib v0.1.0 // indirect
+	github.com/devcell-sh/go-winkit v0.2.1-0.20260930143555-d6bd279fd194
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/djherbis/times v1.6.0 // indirect
 	github.com/docker/cli v29.7.2+incompatible // indirect
@@ -148,7 +148,7 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/shirou/gopsutil/v4 v4.25.6 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
+	github.com/spf13/pflag v1.0.10
 	github.com/swaggo/files/v2 v2.0.0 // indirect
 	github.com/tidwall/gjson v1.14.4 // indirect
 	github.com/tidwall/match v1.1.1 // indirect

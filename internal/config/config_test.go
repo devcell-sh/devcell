@@ -157,6 +157,51 @@ func TestConfigDir_DefaultHome(t *testing.T) {
 	}
 }
 
+// --- Exported resolvers: the single implementation other packages call ---
+
+func TestResolveCellName_Precedence(t *testing.T) {
+	cases := []struct {
+		name string
+		env  func(string) string
+		want string
+	}{
+		{"explicit wins over tmux", env("DEVCELL_CELL_NAME", "explicit", "TMUX_SESSION_NAME", "work"), "explicit"},
+		{"tmux session", env("TMUX_SESSION_NAME", "work"), "work"},
+		{"default main", env(), "main"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := config.ResolveCellName(tc.env); got != tc.want {
+				t.Errorf("ResolveCellName = %q, want %q", got, tc.want)
+			}
+			if got := config.Load("/cwd", tc.env).CellName; got != tc.want {
+				t.Errorf("Load().CellName = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestResolveConfigDir_Precedence(t *testing.T) {
+	cases := []struct {
+		name string
+		env  func(string) string
+		want string
+	}{
+		{"xdg wins over home", env("XDG_CONFIG_HOME", "/tmp/xdg", "HOME", "/home/bob"), "/tmp/xdg/devcell"},
+		{"home", env("HOME", "/home/bob"), "/home/bob/.config/devcell"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := config.ResolveConfigDir(tc.env); got != tc.want {
+				t.Errorf("ResolveConfigDir = %q, want %q", got, tc.want)
+			}
+			if got := config.Load("/cwd", tc.env).ConfigDir; got != tc.want {
+				t.Errorf("Load().ConfigDir = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 // --- BuildDir ---
 
 func TestBuildDir_DefaultSameAsConfigDir(t *testing.T) {

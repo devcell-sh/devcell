@@ -34,24 +34,16 @@ func TestStripCellFlags_StringFlagSpaceFormStripped(t *testing.T) {
 }
 
 func TestStripCellFlags_StringFlagEqualsFormStripped(t *testing.T) {
-	got := stripCellFlags([]string{"--engine=vagrant", "claude"})
+	got := stripCellFlags([]string{"--engine=tart", "claude"})
 	want := []string{"claude"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("want %v, got %v", want, got)
 	}
 }
 
-func TestStripCellFlags_VagrantProviderSpaceForm(t *testing.T) {
-	got := stripCellFlags([]string{"--vagrant-provider", "utm", "opencode"})
+func TestStripCellFlags_OSSpaceForm(t *testing.T) {
+	got := stripCellFlags([]string{"--os", "macos", "opencode"})
 	want := []string{"opencode"}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("want %v, got %v", want, got)
-	}
-}
-
-func TestStripCellFlags_VagrantBoxEqualsForm(t *testing.T) {
-	got := stripCellFlags([]string{"--vagrant-box=mybox", "claude"})
-	want := []string{"claude"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("want %v, got %v", want, got)
 	}
@@ -59,10 +51,10 @@ func TestStripCellFlags_VagrantBoxEqualsForm(t *testing.T) {
 
 func TestStripCellFlags_MultipleMixed(t *testing.T) {
 	got := stripCellFlags([]string{
-		"--engine", "vagrant",
+		"--engine", "tart",
 		"--macos",
 		"--plain-text",
-		"--vagrant-provider=utm",
+		"--os=macos",
 		"--resume",
 		"abc",
 	})
@@ -166,12 +158,12 @@ func TestApplyOutputFlags_NoFormatLeavesDefault(t *testing.T) {
 
 func TestScanStringFlag_SpaceForm(t *testing.T) {
 	old := osArgs
-	osArgs = []string{"cell", "--engine", "vagrant", "claude"}
+	osArgs = []string{"cell", "--engine", "tart", "claude"}
 	defer func() { osArgs = old }()
 
 	got := scanStringFlag("--engine")
-	if got != "vagrant" {
-		t.Errorf("want vagrant, got %q", got)
+	if got != "tart" {
+		t.Errorf("want tart, got %q", got)
 	}
 }
 

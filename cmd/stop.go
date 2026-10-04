@@ -6,7 +6,7 @@ import (
 	"os/exec"
 
 	"github.com/DimmKirr/devcell/internal/config"
-	"github.com/DimmKirr/devcell/internal/runner"
+	"github.com/DimmKirr/devcell/internal/engine/docker"
 	"github.com/spf13/cobra"
 )
 
@@ -21,7 +21,7 @@ The container is automatically removed after stopping.`,
 			return fmt.Errorf("load config: %w", err)
 		}
 		ctx := context.Background()
-		if !runner.ContainerRunning(ctx, c.ContainerName) {
+		if !docker.ContainerRunning(ctx, c.ContainerName) {
 			fmt.Printf("No running container %s found\n", c.ContainerName)
 			return nil
 		}

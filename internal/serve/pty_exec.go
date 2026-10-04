@@ -29,28 +29,13 @@ type PTYExecutor struct {
 	cancel context.CancelFunc
 }
 
-// PTYExecOption configures a PTYExecutor.
+// PTYExecOption configures a PTYExecutor. Tests define the options
+// (WithPTYArgs, WithReadyMarker, ...) in pty_exec_test.go.
 type PTYExecOption func(*PTYExecutor)
-
-func WithPTYArgs(args ...string) PTYExecOption {
-	return func(e *PTYExecutor) { e.args = args }
-}
-
-func WithReadyMarker(m string) PTYExecOption {
-	return func(e *PTYExecutor) { e.readyMarker = m }
-}
-
-func WithResponseTimeout(d time.Duration) PTYExecOption {
-	return func(e *PTYExecutor) { e.responseTimeout = d }
-}
-
-func WithStableDelay(d time.Duration) PTYExecOption {
-	return func(e *PTYExecutor) { e.stableDelay = d }
-}
 
 // NewPTYExecutor creates a PTY-based executor. The bin argument is the path
 // to the agent binary (normally "claude"). Default args include
-// --dangerously-skip-permissions; override with WithPTYArgs for testing.
+// --dangerously-skip-permissions.
 func NewPTYExecutor(bin string, opts ...PTYExecOption) *PTYExecutor {
 	ctx, cancel := context.WithCancel(context.Background())
 	e := &PTYExecutor{

@@ -8,7 +8,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/runner"
+	"github.com/DimmKirr/devcell/internal/nixhome"
 	"github.com/DimmKirr/devcell/internal/telemetry"
 	"github.com/spf13/cobra"
 )
@@ -42,7 +42,7 @@ func runModulesList(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
 	defer cancel()
 
-	cat, err := runner.ReadCatalogFromFlake(ctx, flakeRef)
+	cat, err := nixhome.ReadCatalogFromFlake(ctx, flakeRef)
 	if err != nil {
 		return fmt.Errorf("read catalog from %s: %w\n\nHint: make sure the nixhome flake is reachable and has a `devcellModules` output. See https://devcell.sh/docs/modules", flakeRef, err)
 	}
@@ -61,12 +61,12 @@ func resolveModulesFlakeRef() string {
 	if _, err := os.Stat("./nixhome/flake.nix"); err == nil {
 		return "path:./nixhome"
 	}
-	return runner.UpstreamFlakeRefNoVersion()
+	return nixhome.UpstreamFlakeRefNoVersion()
 }
 
 // formatCatalogList renders the catalog as a human-readable table.
 // Pure function — fed a Catalog, returns a string. Easy to test.
-func formatCatalogList(cat runner.Catalog) string {
+func formatCatalogList(cat nixhome.Catalog) string {
 	var b strings.Builder
 	tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "MODULE\tSIZE\tMCP SERVERS\tDESCRIPTION")

@@ -252,8 +252,9 @@ func resolveSpeed(m Model, bandwidthGBs float64) float64 {
 	return EstimateLocalSpeedTPM(ParseParamSize(m.ParameterSize), bandwidthGBs)
 }
 
-// FormatTOMLSnippet generates a commented-out TOML snippet for devcell.toml
-// from ranked models.
+// FormatTOMLSnippet generates a commented-out [llm] config for devcell.toml
+// that routes agents through ollama, with the #1 ranked model as the default
+// and every ranked model in the ollama catalog.
 func FormatTOMLSnippet(ranked []RankedModel) string {
 	if len(ranked) == 0 {
 		return ""
@@ -263,33 +264,17 @@ func FormatTOMLSnippet(ranked []RankedModel) string {
 	for _, r := range ranked {
 		names = append(names, fmt.Sprintf("%q", r.Name))
 	}
+	active := fmt.Sprintf("[llm]\nprovider = \"ollama\"\nmodel = %q\n\n[llm.providers.ollama]\nmodels = [%s]",
+		ranked[0].Name, strings.Join(names, ", "))
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("# [models]\n"))
-	b.WriteString(fmt.Sprintf("# default = \"ollama/%s\"\n", ranked[0].Name))
-	b.WriteString("# [models.providers.ollama]\n")
-	b.WriteString(fmt.Sprintf("# models = [%s]\n", strings.Join(names, ", ")))
-
-	return b.String()
-}
-
-// FormatActiveTOMLSnippet generates an active (uncommented) TOML snippet
-// for devcell.toml from ranked models. The #1 ranked model becomes the default.
-func FormatActiveTOMLSnippet(ranked []RankedModel) string {
-	if len(ranked) == 0 {
-		return ""
+	b.WriteString("# Detected local ollama models. Uncomment to route agents through ollama.\n")
+	for _, line := range strings.Split(active, "\n") {
+		if line == "" {
+			b.WriteString("#\n")
+			continue
+		}
+		b.WriteString("# " + line + "\n")
 	}
-
-	var names []string
-	for _, r := range ranked {
-		names = append(names, fmt.Sprintf("%q", r.Name))
-	}
-
-	var b strings.Builder
-	b.WriteString("[llm.models]\n")
-	b.WriteString(fmt.Sprintf("default = \"ollama/%s\"\n", ranked[0].Name))
-	b.WriteString("\n[llm.models.providers.ollama]\n")
-	b.WriteString(fmt.Sprintf("models = [%s]\n", strings.Join(names, ", ")))
-
 	return b.String()
 }

@@ -1,9 +1,12 @@
 package container_test
 
-// kicad_mcp_test.go — tests for the kicad-mcp MCP server in the electronics profile.
-// Run against the electronics image:
+// kicad_mcp_test.go: tests for the kicad-mcp MCP server (electronics module).
 //
-//	DEVCELL_TEST_IMAGE=ghcr.io/devcell-sh/devcell:v0.0.0-electronics go test -v -run TestKicad_Mcp ./...
+// Runs on the default test image from image(), not a dedicated electronics
+// build. kicad-mcp only ships in stacks that include the electronics module,
+// so point DEVCELL_TEST_IMAGE at one:
+//
+//	DEVCELL_TEST_IMAGE=ghcr.io/devcell-sh/devcell:v0.0.0-electronics go test -v -run TestKicad_Mcp ./test/
 
 import (
 	"encoding/json"

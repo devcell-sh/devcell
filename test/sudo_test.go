@@ -11,8 +11,15 @@
 // Fix: pure-image builder (nixhome/image.nix) stages a permissive
 // /etc/pam.d/sudo pointing at pam_permit.so so pam_start succeeds.
 //
-// L1: file-content wiring on image.nix.
-// L2: container exec — `sudo whoami` returns "root" in a fresh pure cell.
+// Test levels used across test/ (cheapest first):
+//
+//	L0: pure Go logic, no I/O.
+//	L1: file-content wiring checks against source files, no Docker.
+//	L2: container exec against an existing image.
+//	L3: end to end; builds its own image (long, gated by testing.Short()).
+//
+// Every test in this file is L2: container exec, e.g. `sudo whoami` returns
+// "root" in a fresh cell.
 
 package container_test
 
@@ -21,15 +28,11 @@ import (
 	"testing"
 )
 
-// ---------------------------------------------------------------------------
-// L1 — Wiring checks (file content)
-// ---------------------------------------------------------------------------
-
 // TestSudo_WorksInFreshCell pins the user-visible bug. Pre-CELL-86, this
 // fails with "unable to initialize PAM: Critical error - immediate abort"
 // before sudo even reads /etc/sudoers. With the PAM stub in place, the
 // sudoers plugin proceeds to its policy check, sees NOPASSWD:ALL for the
-// session user, and runs the command.
+// host user, and runs the command.
 func TestSudo_WorksInFreshCell(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping L2 in -short mode")
@@ -75,7 +78,7 @@ func TestSudo_NoPamInitErrorOnPlainSudo(t *testing.T) {
 //
 // Cheap test (no network): just inspect sudo's env. The full
 // "sudo nix profile add" round-trip is covered by TestSudo_NixInstallHtop
-// behind the integration build tag.
+// below, which needs network access.
 func TestSudo_PreservesNixEnv(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping L2 in -short mode")
@@ -90,6 +93,49 @@ func TestSudo_PreservesNixEnv(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("sudo env missing %q — env_keep not effective; sudo nix install paths will fail on cert/locale issues\n--- sudo env output ---\n%s", want, out)
 		}
+	}
+}
+
+// TestSudo_NixInstallHtop pins the user-visible UX: `sudo nix profile add
+// nixpkgs#htop` succeeds without --preserve-env= flags. Pre-fix this failed
+// with "SSL peer certificate ... was not OK" because sudo's env_reset
+// stripped NIX_SSL_CERT_FILE; nix then couldn't trust cache.nixos.org and
+// gave up after retries.
+//
+// TestSudo_PreservesNixEnv proves the env vars survive sudo; this test
+// proves they are SUFFICIENT for the real-world "install a package" UX.
+// Fetches from cache.nixos.org (10-30s, depending on cache state).
+func TestSudo_NixInstallHtop(t *testing.T) {
+	if testing.Short() {
+		t.Skip("needs network: installs htop from cache.nixos.org")
+	}
+	c := startContainer(t, nil)
+
+	// Install into root's nix profile. Exit 0 = success.
+	out, code := exec(t, c, []string{"sudo", "nix", "profile", "add", "nixpkgs#htop"})
+	if code != 0 {
+		t.Fatalf("`sudo nix profile add nixpkgs#htop` failed (exit=%d) — env_keep insufficient or another regression\n--- output ---\n%s", code, out)
+	}
+	// SSL failures show up even with exit 0 sometimes (nix retries silently),
+	// so explicitly assert no cert errors leaked into the log.
+	for _, bad := range []string{
+		"SSL peer certificate",
+		"unable to get local issuer certificate",
+		"unable to download",
+	} {
+		if strings.Contains(out, bad) {
+			t.Errorf("sudo nix output contains cert/download error %q — env_keep entries may be incomplete\n--- output ---\n%s", bad, out)
+		}
+	}
+
+	// Sanity: htop binary should be reachable in root's profile after install.
+	out, code = exec(t, c, []string{"sudo", "/root/.nix-profile/bin/htop", "--version"})
+	if code != 0 {
+		// Fallback path some nix versions use.
+		out, code = exec(t, c, []string{"sudo", "/nix/var/nix/profiles/per-user/root/profile/bin/htop", "--version"})
+	}
+	if code != 0 || !strings.Contains(strings.ToLower(out), "htop") {
+		t.Fatalf("htop not runnable after install (exit=%d): %s", code, out)
 	}
 }
 
@@ -108,7 +154,7 @@ func TestSudo_PreservesNixEnv(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestSudo_SessionUserCanEscalate is the user-visible bug: `sudo` from the
-// session user's shell. The CELL-86 L2 tests above exec as uid 0, so they pass
+// host user's shell. The CELL-86 L2 tests above exec as uid 0, so they pass
 // even when the setuid bit is missing entirely — only an unprivileged caller
 // actually exercises the wrapper.
 func TestSudo_SessionUserCanEscalate(t *testing.T) {

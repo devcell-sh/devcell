@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/runner"
+	"github.com/DimmKirr/devcell/internal/engine/docker"
 	"github.com/DimmKirr/devcell/internal/testutil"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/testcontainers/testcontainers-go"
@@ -26,7 +26,7 @@ import (
 )
 
 // nixhomeDir resolves the nixhome checkout that file-reading tests assert
-// against. Mirrors runner.ResolveNixhomeRef precedence:
+// against. Mirrors nixhome.ResolveNixhomeRef precedence:
 // DEVCELL_NIXHOME > DEVCELL_NIXHOME_PATH (legacy) > ../nixhome (in-repo).
 // Env values that aren't existing local directories (e.g. github: flake
 // refs) are skipped — these tests read files from disk.
@@ -49,10 +49,6 @@ var (
 	baseOnce sync.Once
 	baseTag  string
 	baseErr  error
-
-	electronicsOnce sync.Once
-	electronicsTag  string
-	electronicsErr  error
 
 	testdataOnce sync.Once
 	testdataTag  string
@@ -176,9 +172,6 @@ func TestMain(m *testing.M) {
 	if baseTag != "" {
 		osexec.Command("docker", "rmi", baseTag).Run()
 	}
-	if electronicsTag != "" {
-		osexec.Command("docker", "rmi", electronicsTag).Run()
-	}
 	if testdataTag != "" {
 		osexec.Command("docker", "rmi", testdataTag).Run()
 	}
@@ -289,9 +282,10 @@ const (
 // thinVolumeName returns the Docker volume to mount at /nix for thin-variant
 // tests. Reads BOTH:
 //   - DEVCELL_NIX_VOLUME (the canonical production env var also honoured by
-//     `runner.ThinStoreVolume` — set by tests that drive `cell build` and
+//     `docker.ThinStoreVolume` — set by tests that drive `cell build` and
 //     need build + run to target the same volume), preferred.
 //   - DEVCELL_TEST_VOLUME_NAME (legacy test-only override), fallback.
+//
 // Either lets a test isolate to a unique volume with t.Cleanup-based removal.
 func thinVolumeName() string {
 	if v := os.Getenv("DEVCELL_NIX_VOLUME"); v != "" {
@@ -370,9 +364,9 @@ func image() string {
 		return tag
 	}
 	if skip != "" {
-		// `image()` can't t.Skip — it has no *testing.T. Panic with a clear
-		// setup hint. Tests that need a graceful skip should call pureImage(t)
-		// or impureImage(t) directly.
+		// `image()` can't t.Skip: it has no *testing.T. Panic with a clear
+		// setup hint. In -short mode, requirePrebuiltImage(t) (called by
+		// startContainer) skips before this point is reached.
 		panic("image: " + skip)
 	}
 	// Empty tag + no skip = impure scratch-bake fallback.
@@ -402,50 +396,6 @@ func requirePrebuiltImage(t *testing.T) {
 	}
 }
 
-// pureImage returns the pure (nix2container) variant tag for tests asserting
-// pure-image-specific behavior. Skips the test if no pure image is available
-// (env override or local tag from `task image:pure:build:ultimate`).
-func pureImage(t *testing.T) string {
-	t.Helper()
-	tag, skip := imageTagForVariant(
-		"pure",
-		os.Getenv("DEVCELL_TEST_PURE_IMAGE"),
-		"",
-		imageExists,
-	)
-	if tag == "" {
-		t.Skip(skip)
-	}
-	return tag
-}
-
-// impureImage returns the impure (Debian-based) variant tag explicitly,
-// bypassing DEVCELL_TEST_VARIANT. Useful for tests that assert
-// impure-specific behavior (e.g. /etc/devcell/base-image-version).
-func impureImage(t *testing.T) string {
-	t.Helper()
-	tag, _ := imageTagForVariant(
-		"impure",
-		"",
-		os.Getenv("DEVCELL_TEST_IMAGE"),
-		imageExists,
-	)
-	if tag != "" && tag == localImpureUltimateTag && os.Getenv("DEVCELL_TEST_IMAGE") == "" {
-		return testdataImage()
-	}
-	if tag != "" {
-		return tag
-	}
-	// Fall back to the same scratch-bake path image() uses for impure.
-	ultimateOnce.Do(func() {
-		ultimateTag, ultimateErr = buildLocalImage("local-ultimate", "devcell-test")
-	})
-	if ultimateErr != nil {
-		t.Fatalf("impureImage: %v", ultimateErr)
-	}
-	return ultimateTag
-}
-
 // imageExists checks if a Docker image exists locally.
 func imageExists(tag string) bool {
 	return osexec.Command("docker", "image", "inspect", tag).Run() == nil
@@ -466,96 +416,6 @@ func baseImage() string {
 	return baseTag
 }
 
-// ── Electronics image (base + home-manager switch devcell-electronics) ────────
-//
-// Builds a user-level image following the scaffold Dockerfile pattern:
-//   1. FROM base image (nix + home-manager, no stack)
-//   2. Copy local nixhome/ flake
-//   3. home-manager switch --flake .#devcell-electronics (smallest profile with desktop module)
-//   4. patchright now comes from nix (scraping/default.nix buildNpmPackage), not npm
-//
-// Used by stealth MCP tests instead of the pre-built ultimate image.
-
-const elecDockerfile = `FROM {{BASE_IMAGE}}
-
-COPY --chown=devcell:usergroup nixhome/ /opt/devcell/.config/devcell/nixhome/
-COPY --chown=devcell:usergroup flake.nix /opt/devcell/.config/devcell/
-
-RUN ARCH=$(uname -m) && \
-    [ "$ARCH" = "aarch64" ] && ARCH_SUFFIX="-aarch64" || ARCH_SUFFIX="" && \
-    home-manager switch \
-      --flake "/opt/devcell/.config/devcell#devcell-electronics${ARCH_SUFFIX}" \
-      --impure && \
-    ln -sfT "$(readlink -f /opt/devcell/.nix-profile)" \
-            /opt/devcell/.local/state/nix/profiles/profile
-
-COPY --chown=devcell:usergroup package.json /opt/npm-tools/
-RUN cd /opt/npm-tools && npm install
-ENV PATH="/opt/npm-tools/node_modules/.bin:${PATH}"
-`
-
-const elecFlakeNix = `{
-  description = "DevCell electronics test stack";
-  inputs.devcell.url = "path:./nixhome";
-  outputs = { self, devcell, ... }: {
-    homeConfigurations = devcell.homeConfigurations;
-  };
-}
-`
-
-const elecPackageJSON = `{
-  "name": "devcell-tools",
-  "version": "1.0.0",
-  "private": true,
-  "dependencies": {}
-}
-`
-
-// buildElectronicsImage creates a temp build context with the local nixhome,
-// writes a Dockerfile targeting devcell-electronics, and runs docker build.
-func buildElectronicsImage() (string, error) {
-	baseImg := baseImage()
-
-	dir, err := os.MkdirTemp("", "devcell-elec-test-*")
-	if err != nil {
-		return "", fmt.Errorf("mkdtemp: %w", err)
-	}
-	defer os.RemoveAll(dir)
-
-	// Write Dockerfile with base image substituted.
-	dockerfile := strings.ReplaceAll(elecDockerfile, "{{BASE_IMAGE}}", baseImg)
-	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte(dockerfile), 0644); err != nil {
-		return "", fmt.Errorf("write Dockerfile: %w", err)
-	}
-
-	// Write flake.nix (path:./nixhome input).
-	if err := os.WriteFile(filepath.Join(dir, "flake.nix"), []byte(elecFlakeNix), 0644); err != nil {
-		return "", fmt.Errorf("write flake.nix: %w", err)
-	}
-
-	// Write package.json (only patchright-mcp).
-	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(elecPackageJSON), 0644); err != nil {
-		return "", fmt.Errorf("write package.json: %w", err)
-	}
-
-	// Copy local nixhome/ into the build context.
-	nixhomeSrc := nixhomeDir()
-	nixhomeDst := filepath.Join(dir, "nixhome")
-	if err := copyDirRecursive(nixhomeSrc, nixhomeDst); err != nil {
-		return "", fmt.Errorf("copy nixhome: %w", err)
-	}
-
-	tag := fmt.Sprintf("devcell-test-electronics:%s-%s", shortSHA(), time.Now().Format("20060102T150405"))
-	log.Printf("Building electronics image: %s (from base %s)", tag, baseImg)
-	cmd := osexec.Command("docker", "build", "--no-cache", "--progress=plain", "-t", tag, dir)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("build electronics: %w", err)
-	}
-	return tag, nil
-}
-
 // copyDirRecursive copies src directory tree to dst.
 func copyDirRecursive(src, dst string) error {
 	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
@@ -572,55 +432,6 @@ func copyDirRecursive(src, dst string) error {
 			return err
 		}
 		return os.WriteFile(target, data, info.Mode())
-	})
-}
-
-// electronicsImage returns the electronics image tag.
-// Uses DEVCELL_TEST_ELECTRONICS_IMAGE if set (CI); otherwise builds once from
-// base + local nixhome with devcell-electronics stack.
-func electronicsImage() string {
-	if img := os.Getenv("DEVCELL_TEST_ELECTRONICS_IMAGE"); img != "" {
-		return img
-	}
-	electronicsOnce.Do(func() {
-		electronicsTag, electronicsErr = buildElectronicsImage()
-	})
-	if electronicsErr != nil {
-		panic(fmt.Sprintf("electronicsImage: %v", electronicsErr))
-	}
-	return electronicsTag
-}
-
-// startElectronicsContainer starts a container from the electronics image.
-func startElectronicsContainer(t *testing.T, env map[string]string) testcontainers.Container {
-	t.Helper()
-	requireDockerSocket(t)
-	ctx := context.Background()
-	req := testcontainers.ContainerRequest{
-		Image: electronicsImage(),
-		Env:   env,
-		User:  "0",
-		Cmd:   []string{"tail", "-f", "/dev/null"},
-		WaitingFor: wait.ForExec([]string{"pgrep", "tail"}).
-			WithStartupTimeout(30 * 1e9),
-	}
-	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: req,
-		Started:          true,
-	})
-	if err != nil {
-		t.Fatalf("start electronics container: %v", err)
-	}
-	t.Cleanup(func() { _ = c.Terminate(ctx) })
-	return c
-}
-
-// startElectronicsEnvContainer starts an electronics container with standard env.
-func startElectronicsEnvContainer(t *testing.T) testcontainers.Container {
-	t.Helper()
-	return startElectronicsContainer(t, map[string]string{
-		"HOST_USER": hostUser,
-		"APP_NAME":  "test",
 	})
 }
 
@@ -732,13 +543,13 @@ func isThinVariant() bool {
 // ensureDockerHost bridges testcontainers-go and non-default Docker runtimes
 // (Colima, etc.). testcontainers doesn't use `docker context`: it searches
 // hardcoded socket paths and panics when none match. We reuse
-// runner.CollectDockerDebugInfo (which already does context inspection and
+// docker.CollectDockerDebugInfo (which already does context inspection and
 // runtime classification) to set the env vars testcontainers needs.
 var ensureDockerHostOnce sync.Once
 
 func ensureDockerHost() {
 	ensureDockerHostOnce.Do(func() {
-		info, err := runner.CollectDockerDebugInfo(context.Background())
+		info, err := docker.CollectDockerDebugInfo(context.Background())
 		if err != nil {
 			return
 		}
@@ -793,6 +604,112 @@ func startContainer(t *testing.T, env map[string]string) testcontainers.Containe
 	}
 	t.Cleanup(func() { _ = c.Terminate(ctx) })
 	return c
+}
+
+// hostUser is the HOST_USER the tests pass to the container; the entrypoint
+// creates this account and $HOME=/home/<hostUser>.
+const hostUser = "testuser"
+
+// startEnvContainer starts a container with the standard HOST_USER/APP_NAME env.
+func startEnvContainer(t *testing.T) testcontainers.Container {
+	t.Helper()
+	return startContainer(t, map[string]string{
+		"HOST_USER": hostUser,
+		"APP_NAME":  "test",
+	})
+}
+
+// asUser runs cmd as the host user inside a login shell so ~/.bashrc is sourced.
+func asUser(t *testing.T, c testcontainers.Container, cmd string) (string, int) {
+	t.Helper()
+	return exec(t, c, []string{"gosu", hostUser, "bash", "-lc", cmd})
+}
+
+// startContainerWithStaleHome starts a container where $HOME is pre-seeded
+// with stale state that simulates a persistent bind mount from a previous
+// image build.
+func startContainerWithStaleHome(t *testing.T) testcontainers.Container {
+	t.Helper()
+	ctx := context.Background()
+	img := image()
+	volName := "devcell-stale-home-" + time.Now().Format("150405")
+
+	// Step 1: Create a volume and seed it with stale content.
+	seedScript := `
+set -e
+mkdir -p /home/testuser/.config/nix
+mkdir -p /home/testuser/.config/mise
+mkdir -p /home/testuser/.config/fontconfig/conf.d
+mkdir -p /home/testuser/.fluxbox/styles/devcell-ocean
+ln -s /nix/store/STALE_HASH_DOES_NOT_EXIST-home-manager-files/.config/mise/config.toml \
+      /home/testuser/.config/mise/config.toml
+ln -s /nix/store/STALE_HASH_DOES_NOT_EXIST-home-manager-files/.tool-versions \
+      /home/testuser/.tool-versions
+ln -s /nix/store/STALE_HASH_DOES_NOT_EXIST-home-manager-files/.config/fontconfig/conf.d/10-hm-fonts.conf \
+      /home/testuser/.config/fontconfig/conf.d/10-hm-fonts.conf
+ln -s /nix/store/STALE_HASH_DOES_NOT_EXIST-home-manager-files/.fluxbox/styles/devcell-ocean/theme.cfg \
+      /home/testuser/.fluxbox/styles/devcell-ocean/theme.cfg
+chown -R 1000:1000 /home/testuser
+echo "STALE_SEED_DONE"
+`
+	// Seed using a throwaway alpine container with the volume.
+	seedReq := testcontainers.ContainerRequest{
+		Image: "alpine:latest",
+		Cmd:   []string{"sh", "-c", seedScript},
+		Mounts: testcontainers.Mounts(
+			testcontainers.VolumeMount(volName, "/home/testuser"),
+		),
+		WaitingFor: wait.ForLog("STALE_SEED_DONE").WithStartupTimeout(15 * time.Second),
+	}
+	seedC, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: seedReq,
+		Started:          true,
+	})
+	if err != nil {
+		t.Fatalf("seed container: %v", err)
+	}
+	_ = seedC.Terminate(ctx)
+	t.Logf("Seeded stale home volume: %s", volName)
+
+	// Step 2: Start the real container with the pre-seeded volume.
+	req := testcontainers.ContainerRequest{
+		Image: img,
+		Env: map[string]string{
+			"HOST_USER": hostUser,
+			"APP_NAME":  "test",
+		},
+		User: "0",
+		Cmd:  []string{"tail", "-f", "/dev/null"},
+		Mounts: testcontainers.Mounts(
+			testcontainers.VolumeMount(volName, "/home/testuser"),
+		),
+		WaitingFor: wait.ForExec([]string{"pgrep", "tail"}).
+			WithStartupTimeout(30 * time.Second),
+	}
+	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
+	if err != nil {
+		t.Fatalf("start container with stale home: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = c.Terminate(ctx)
+		// Remove the volume after test.
+		removeVolume(volName)
+	})
+	return c
+}
+
+// removeVolume removes a Docker volume (best-effort).
+func removeVolume(name string) {
+	ctx := context.Background()
+	cli, err := testcontainers.NewDockerClientWithOpts(ctx)
+	if err != nil {
+		return
+	}
+	defer cli.Close()
+	cli.VolumeRemove(ctx, name, true) //nolint:errcheck
 }
 
 func exec(t *testing.T, c testcontainers.Container, cmd []string) (string, int) {

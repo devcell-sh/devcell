@@ -5,10 +5,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/BurntSushi/toml"
 
 	ollamaapi "github.com/ollama/ollama/api"
 
+	"github.com/DimmKirr/devcell/internal/cfg"
 	"github.com/DimmKirr/devcell/internal/ollama"
 )
 
@@ -288,7 +292,7 @@ func TestFormatTOMLSnippet_ProducesCommentedConfig(t *testing.T) {
 		t.Fatal("expected non-empty snippet")
 	}
 	// Should have the default model
-	if !contains(snippet, "ollama/deepseek-r1:70b") {
+	if !contains(snippet, `model = "deepseek-r1:70b"`) {
 		t.Error("expected default model in snippet")
 	}
 	// Should list both models
@@ -299,45 +303,29 @@ func TestFormatTOMLSnippet_ProducesCommentedConfig(t *testing.T) {
 	if snippet[0] != '#' {
 		t.Error("expected snippet to start with comment")
 	}
-}
-
-func TestFormatActiveTOMLSnippet_ProducesUncommentedConfig(t *testing.T) {
-	ranked := []ollama.RankedModel{
-		{Model: ollama.Model{Name: "deepseek-r1:70b"}, SWEScore: 43.8, Rank: 1},
-		{Model: ollama.Model{Name: "qwen3:32b"}, SWEScore: 38.2, Rank: 2},
+	// Uncommented, it must be the [llm] schema devcell reads.
+	var c cfg.CellConfig
+	if _, err := toml.Decode(strings.ReplaceAll(snippet[strings.Index(snippet, "\n")+1:], "# ", ""), &c); err != nil {
+		t.Fatalf("uncommented snippet is not valid TOML: %v\n%s", err, snippet)
 	}
-
-	snippet := ollama.FormatActiveTOMLSnippet(ranked)
-
-	if len(snippet) == 0 {
-		t.Fatal("expected non-empty snippet")
-	}
-	// Should start with active TOML (no comment prefix)
-	if snippet[0] == '#' {
-		t.Error("expected snippet to NOT start with comment")
-	}
-	// Should have the default model set to #1 ranked
-	if !contains(snippet, `default = "ollama/deepseek-r1:70b"`) {
-		t.Error("expected default model to be #1 ranked")
-	}
-	// Should list both models
-	if !contains(snippet, "deepseek-r1:70b") || !contains(snippet, "qwen3:32b") {
-		t.Error("expected both models in snippet")
-	}
-	// Should have [llm.models] header
-	if !contains(snippet, "[llm.models]") {
-		t.Error("expected [llm.models] section header")
-	}
-	// Should have [llm.models.providers.ollama] header
-	if !contains(snippet, "[llm.models.providers.ollama]") {
-		t.Error("expected [llm.models.providers.ollama] section header")
+	if c.LLM.Provider != "ollama" || c.LLM.Model != "deepseek-r1:70b" || len(c.LLM.Providers["ollama"].Models) != 2 {
+		t.Errorf("uncommented snippet decodes to %+v", c.LLM)
 	}
 }
 
-func TestFormatActiveTOMLSnippet_Empty(t *testing.T) {
-	snippet := ollama.FormatActiveTOMLSnippet(nil)
-	if snippet != "" {
+func TestFormatTOMLSnippet_Empty(t *testing.T) {
+	if snippet := ollama.FormatTOMLSnippet(nil); snippet != "" {
 		t.Errorf("expected empty string for nil ranked, got: %q", snippet)
+	}
+}
+
+// Every line is commented, so init output keeps only [cell] active.
+func TestFormatTOMLSnippet_EveryLineCommented(t *testing.T) {
+	snippet := ollama.FormatTOMLSnippet([]ollama.RankedModel{{Model: ollama.Model{Name: "qwen3:8b"}, Rank: 1}})
+	for _, line := range strings.Split(strings.TrimRight(snippet, "\n"), "\n") {
+		if !strings.HasPrefix(line, "#") {
+			t.Errorf("active line %q in snippet:\n%s", line, snippet)
+		}
 	}
 }
 

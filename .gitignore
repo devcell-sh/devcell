@@ -4,12 +4,10 @@
 .env.devcell
 *.egg-info
 python-tools
-.vagrant
 compose.local.yml
 Dockerfile-local
 node_modules
 uv.lock
-Vagrantfile.local
 web/node_modules
 web/dist
 web/.astro
@@ -39,7 +37,7 @@ test/results_archive
 !examples/*/.devcell.toml
 .gocache
 .gomodcache
-docs/
+api/swagger/
 .nixhome-tmp/
 .rendered-ps1/
 

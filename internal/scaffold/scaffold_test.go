@@ -2,13 +2,14 @@ package scaffold_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/BurntSushi/toml"
 	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/runner"
+	"github.com/DimmKirr/devcell/internal/nixhome"
 	"github.com/DimmKirr/devcell/internal/scaffold"
 )
 
@@ -22,7 +23,7 @@ func TestScaffold_CreatesAllFiles(t *testing.T) {
 		t.Errorf("missing .devcell.toml in project root: %v", err)
 	}
 	// Build artifacts in .devcell/ subdir
-	for _, name := range []string{"Dockerfile", "flake.nix"} {
+	for _, name := range []string{"flake.nix"} {
 		if _, err := os.Stat(filepath.Join(dir, ".devcell", name)); err != nil {
 			t.Errorf("missing %s in .devcell/: %v", name, err)
 		}
@@ -34,86 +35,21 @@ func TestScaffold_Idempotent(t *testing.T) {
 	if err := scaffold.Scaffold(dir, "", "", false); err != nil {
 		t.Fatal(err)
 	}
-	// Overwrite Dockerfile with sentinel content
+	// Overwrite flake.nix with sentinel content
 	sentinel := "# SENTINEL CONTENT\n"
-	if err := os.WriteFile(filepath.Join(dir, ".devcell", "Dockerfile"), []byte(sentinel), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".devcell", "flake.nix"), []byte(sentinel), 0644); err != nil {
 		t.Fatal(err)
 	}
 	// Scaffold again — must not overwrite
 	if err := scaffold.Scaffold(dir, "", "", false); err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile(filepath.Join(dir, ".devcell", "Dockerfile"))
+	data, err := os.ReadFile(filepath.Join(dir, ".devcell", "flake.nix"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(data) != sentinel {
-		t.Error("Scaffold overwrote existing Dockerfile — should be idempotent")
-	}
-}
-
-func TestScaffold_DockerfileStartsWithFROM(t *testing.T) {
-	dir := t.TempDir()
-	if err := scaffold.Scaffold(dir, "", "", false); err != nil {
-		t.Fatal(err)
-	}
-	data, _ := os.ReadFile(filepath.Join(dir, ".devcell", "Dockerfile"))
-	want := "FROM " + runner.BaseImageTag()
-	if !strings.HasPrefix(strings.TrimSpace(string(data)), want) {
-		t.Errorf("Dockerfile should start with %s, got: %s", want, string(data)[:80])
-	}
-}
-
-// TestScaffold_DefaultBaseImageIsRemote — without DEVCELL_BASE_IMAGE, new users
-// must get the remote registry tag (not core-local which requires local build).
-func TestScaffold_DefaultBaseImageIsRemote(t *testing.T) {
-	t.Setenv("DEVCELL_BASE_IMAGE", "") // clear any override
-	tag := runner.BaseImageTag()
-	if strings.Contains(tag, "-local") {
-		t.Errorf("default base image must not be a local tag: %s", tag)
-	}
-	if !strings.HasPrefix(tag, "ghcr.io/devcell-sh/devcell:") {
-		t.Errorf("default base image must be from GHCR registry: %s", tag)
-	}
-}
-
-func TestScaffold_BaseImageOverride(t *testing.T) {
-	t.Setenv("DEVCELL_BASE_IMAGE", "myregistry.io/devcell:test-v42")
-	dir := t.TempDir()
-	if err := scaffold.Scaffold(dir, "", "", false); err != nil {
-		t.Fatal(err)
-	}
-	data, _ := os.ReadFile(filepath.Join(dir, ".devcell", "Dockerfile"))
-	want := "FROM myregistry.io/devcell:test-v42"
-	if !strings.HasPrefix(strings.TrimSpace(string(data)), want) {
-		t.Errorf("Dockerfile should start with %s, got: %s", want, string(data)[:80])
-	}
-}
-
-// TestScaffold_DockerfileDoesNotInstallHomeManager — home-manager is
-// pre-installed in the base image; scaffold must NOT duplicate it.
-func TestScaffold_DockerfileDoesNotInstallHomeManager(t *testing.T) {
-	dir := t.TempDir()
-	if err := scaffold.Scaffold(dir, "", "", false); err != nil {
-		t.Fatal(err)
-	}
-	data, _ := os.ReadFile(filepath.Join(dir, ".devcell", "Dockerfile"))
-	s := string(data)
-	if strings.Contains(s, "nix profile install") {
-		t.Errorf("Dockerfile should NOT install home-manager (it's in the base image), got:\n%s", s)
-	}
-}
-
-// TestScaffold_DockerfileRunsHomeManagerSwitch — user Dockerfile must run
-// home-manager switch to activate the stack from the user flake.
-func TestScaffold_DockerfileRunsHomeManagerSwitch(t *testing.T) {
-	dir := t.TempDir()
-	if err := scaffold.Scaffold(dir, "", "", false); err != nil {
-		t.Fatal(err)
-	}
-	data, _ := os.ReadFile(filepath.Join(dir, ".devcell", "Dockerfile"))
-	if !strings.Contains(string(data), "home-manager switch") {
-		t.Errorf("Dockerfile must contain home-manager switch, got:\n%s", string(data))
+		t.Error("Scaffold overwrote existing flake.nix — should be idempotent")
 	}
 }
 
@@ -152,8 +88,8 @@ func TestScaffold_FlakeNixContainsUpstreamURL(t *testing.T) {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(filepath.Join(dir, ".devcell", "flake.nix"))
-	if !strings.Contains(string(data), runner.UpstreamOwner+"/"+runner.UpstreamRepo) {
-		t.Errorf("flake.nix should reference %s/%s, got:\n%s", runner.UpstreamOwner, runner.UpstreamRepo, string(data))
+	if !strings.Contains(string(data), nixhome.UpstreamOwner+"/"+nixhome.UpstreamRepo) {
+		t.Errorf("flake.nix should reference %s/%s, got:\n%s", nixhome.UpstreamOwner, nixhome.UpstreamRepo, string(data))
 	}
 }
 
@@ -167,64 +103,11 @@ func TestScaffold_FlakeNixVersionSubstituted(t *testing.T) {
 	if strings.Contains(s, "{{VERSION}}") {
 		t.Errorf("unreplaced {{VERSION}} placeholder in flake.nix:\n%s", s)
 	}
-	// v0.0.0 (dev build) coerces to DefaultNixhomeGitRef via runner.UpstreamFlakeRef
+	// v0.0.0 (dev build) coerces to DefaultNixhomeGitRef via nixhome.UpstreamFlakeRef
 	// — literal v0.0.0 would 404 against github (no such tag).
-	want := runner.UpstreamOwner + "/" + runner.UpstreamRepo + "/" + runner.DefaultNixhomeGitRef
+	want := nixhome.UpstreamOwner + "/" + nixhome.UpstreamRepo + "/" + nixhome.DefaultNixhomeGitRef
 	if !strings.Contains(s, want) {
 		t.Errorf("flake.nix should contain coerced upstream URL %q, got:\n%s", want, s)
-	}
-}
-
-// --- ScaffoldVagrantfile ---
-
-func TestScaffoldVagrantfile_CreatesFile(t *testing.T) {
-	dir := t.TempDir()
-	if err := scaffold.ScaffoldVagrantfile(dir, "my-box", ""); err != nil {
-		t.Fatalf("ScaffoldVagrantfile failed: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "Vagrantfile")); err != nil {
-		t.Errorf("Vagrantfile not created: %v", err)
-	}
-}
-
-func TestScaffoldVagrantfile_BoxNameSubstituted(t *testing.T) {
-	dir := t.TempDir()
-	if err := scaffold.ScaffoldVagrantfile(dir, "devcell-macOS26", ""); err != nil {
-		t.Fatal(err)
-	}
-	data, _ := os.ReadFile(filepath.Join(dir, "Vagrantfile"))
-	if !strings.Contains(string(data), "devcell-macOS26") {
-		t.Errorf("box name not found in Vagrantfile:\n%s", string(data))
-	}
-	if strings.Contains(string(data), "{{VAGRANT_BOX}}") {
-		t.Error("unreplaced {{VAGRANT_BOX}} placeholder found in Vagrantfile")
-	}
-}
-
-func TestScaffoldVagrantfile_EmptyBoxKeepsEnvFallback(t *testing.T) {
-	dir := t.TempDir()
-	if err := scaffold.ScaffoldVagrantfile(dir, "", ""); err != nil {
-		t.Fatal(err)
-	}
-	data, _ := os.ReadFile(filepath.Join(dir, "Vagrantfile"))
-	// With empty box, the env-var fallback line must still be present
-	if !strings.Contains(string(data), "MACOS_BOX") {
-		t.Errorf("MACOS_BOX env fallback missing from Vagrantfile:\n%s", string(data))
-	}
-}
-
-func TestScaffoldVagrantfile_Idempotent(t *testing.T) {
-	dir := t.TempDir()
-	if err := scaffold.ScaffoldVagrantfile(dir, "first-box", ""); err != nil {
-		t.Fatal(err)
-	}
-	// Second call with different box name must not overwrite
-	if err := scaffold.ScaffoldVagrantfile(dir, "second-box", ""); err != nil {
-		t.Fatal(err)
-	}
-	data, _ := os.ReadFile(filepath.Join(dir, "Vagrantfile"))
-	if !strings.Contains(string(data), "first-box") {
-		t.Error("ScaffoldVagrantfile overwrote existing Vagrantfile — should be idempotent")
 	}
 }
 
@@ -232,7 +115,7 @@ func TestScaffoldVagrantfile_Idempotent(t *testing.T) {
 
 func TestScaffold_WithModelsSnippet_InjectsIntoToml(t *testing.T) {
 	dir := t.TempDir()
-	snippet := "# [models]\n# default = \"ollama/deepseek-r1:70b\"\n# [models.providers.ollama]\n# models = [\"deepseek-r1:70b\", \"qwen3:32b\"]\n"
+	snippet := "# [llm]\n# provider = \"ollama\"\n# model = \"deepseek-r1:70b\"\n#\n# [llm.providers.ollama]\n# models = [\"deepseek-r1:70b\", \"qwen3:32b\"]\n"
 	if err := scaffold.Scaffold(dir, snippet, "", false); err != nil {
 		t.Fatal(err)
 	}
@@ -246,22 +129,26 @@ func TestScaffold_WithModelsSnippet_InjectsIntoToml(t *testing.T) {
 	}
 }
 
-func TestScaffold_EmptySnippet_UsesDefaultModelsSection(t *testing.T) {
+func TestScaffold_EmptySnippet_ShowsCommentedLLMReference(t *testing.T) {
 	dir := t.TempDir()
 	if err := scaffold.Scaffold(dir, "", "", false); err != nil {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(filepath.Join(dir, ".devcell.toml"))
 	s := string(data)
-	// Default template has the generic commented example
-	if !strings.Contains(s, "# [llm.models]") {
-		t.Errorf("expected default llm.models section in .devcell.toml, got:\n%s", s)
+	for _, want := range []string{"# [llm]", "# [llm.providers.ollama]"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("expected %q in .devcell.toml, got:\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, "{{MODELS_SECTION}}") {
+		t.Error("placeholder must be removed when no models are detected")
 	}
 }
 
 func TestScaffold_WithSnippet_StillValidTOML(t *testing.T) {
 	dir := t.TempDir()
-	snippet := "# [llm.models]\n# default = \"ollama/deepseek-r1:70b\"\n# [llm.models.providers.ollama]\n# models = [\"deepseek-r1:70b\"]\n"
+	snippet := "# [llm]\n# provider = \"ollama\"\n# model = \"deepseek-r1:70b\"\n#\n# [llm.providers.ollama]\n# models = [\"deepseek-r1:70b\", \"qwen3:32b\"]\n"
 	if err := scaffold.Scaffold(dir, snippet, "", false); err != nil {
 		t.Fatal(err)
 	}
@@ -269,48 +156,6 @@ func TestScaffold_WithSnippet_StillValidTOML(t *testing.T) {
 	var v interface{}
 	if _, err := toml.Decode(string(data), &v); err != nil {
 		t.Errorf(".devcell.toml is not valid TOML: %v\ncontent:\n%s", err, string(data))
-	}
-}
-
-func TestScaffoldVagrantfile_CellHomeUsesDevcell(t *testing.T) {
-	dir := t.TempDir()
-	if err := scaffold.ScaffoldVagrantfile(dir, "", ""); err != nil {
-		t.Fatal(err)
-	}
-	data, _ := os.ReadFile(filepath.Join(dir, "Vagrantfile"))
-	s := string(data)
-	if strings.Contains(s, ".claude-sandbox") {
-		t.Error("Vagrantfile still references stale .claude-sandbox path")
-	}
-	if !strings.Contains(s, ".devcell") {
-		t.Errorf("Vagrantfile should reference .devcell path, got:\n%s", s)
-	}
-}
-
-func TestScaffoldVagrantfile_NixhomePathSubstituted(t *testing.T) {
-	dir := t.TempDir()
-	nixhome := "/Users/dmitry/dev/dimmkirr/devcell/nixhome"
-	if err := scaffold.ScaffoldVagrantfile(dir, "", nixhome); err != nil {
-		t.Fatal(err)
-	}
-	data, _ := os.ReadFile(filepath.Join(dir, "Vagrantfile"))
-	s := string(data)
-	if !strings.Contains(s, nixhome) {
-		t.Errorf("nixhome path not found in Vagrantfile:\n%s", s)
-	}
-	if strings.Contains(s, "{{NIXHOME_PATH}}") {
-		t.Error("unreplaced {{NIXHOME_PATH}} placeholder found in Vagrantfile")
-	}
-}
-
-func TestScaffoldVagrantfile_EmptyNixhomeKeepsEnvFallback(t *testing.T) {
-	dir := t.TempDir()
-	if err := scaffold.ScaffoldVagrantfile(dir, "", ""); err != nil {
-		t.Fatal(err)
-	}
-	data, _ := os.ReadFile(filepath.Join(dir, "Vagrantfile"))
-	if !strings.Contains(string(data), "NIXHOME_PATH") {
-		t.Error("NIXHOME_PATH env fallback missing from Vagrantfile")
 	}
 }
 
@@ -340,43 +185,6 @@ func TestScaffold_WithNixhomePath_FlakeUsesPathInput(t *testing.T) {
 		if strings.Contains(trimmed, "inputs.devcell.url") && strings.Contains(trimmed, "github:") {
 			t.Errorf("active inputs.devcell.url must not use github: when nixhomePath is set, got line: %s", trimmed)
 		}
-	}
-}
-
-// TestScaffold_WithNixhomePath_DockerfileCopiesNixhome — when nixhomePath is set,
-// Dockerfile must COPY nixhome/ into the build context before flake.nix.
-func TestScaffold_WithNixhomePath_DockerfileCopiesNixhome(t *testing.T) {
-	dir := t.TempDir()
-	fakeNixhome := t.TempDir()
-	os.WriteFile(filepath.Join(fakeNixhome, "flake.nix"), []byte("# fake"), 0644)
-	if err := scaffold.Scaffold(dir, "", fakeNixhome, false); err != nil {
-		t.Fatal(err)
-	}
-	data, _ := os.ReadFile(filepath.Join(dir, ".devcell", "Dockerfile"))
-	s := string(data)
-	nixhomeCopyLine := "COPY --chown=devcell:usergroup nixhome/"
-	if !strings.Contains(s, nixhomeCopyLine) {
-		t.Errorf("Dockerfile must COPY nixhome/ when nixhomePath is set, got:\n%s", s)
-	}
-	// nixhome COPY must appear before flake.* COPY
-	nixhomeIdx := strings.Index(s, nixhomeCopyLine)
-	flakeCopyIdx := strings.Index(s, "COPY --chown=devcell:usergroup flake.*")
-	if nixhomeIdx < 0 || flakeCopyIdx < 0 || nixhomeIdx > flakeCopyIdx {
-		t.Errorf("nixhome/ COPY must appear before flake.* COPY in Dockerfile")
-	}
-}
-
-// TestScaffold_WithoutNixhomePath_DockerfileNoCopyNixhome — when nixhomePath is empty,
-// Dockerfile must NOT contain a COPY nixhome/ line (no regression).
-func TestScaffold_WithoutNixhomePath_DockerfileNoCopyNixhome(t *testing.T) {
-	dir := t.TempDir()
-	if err := scaffold.Scaffold(dir, "", "", false); err != nil {
-		t.Fatal(err)
-	}
-	data, _ := os.ReadFile(filepath.Join(dir, ".devcell", "Dockerfile"))
-	s := string(data)
-	if strings.Contains(s, "COPY") && strings.Contains(s, "nixhome/") {
-		t.Errorf("Dockerfile must NOT COPY nixhome/ when nixhomePath is empty, got:\n%s", s)
 	}
 }
 
@@ -413,6 +221,31 @@ func TestSyncNixhome_CopiesDirectory(t *testing.T) {
 	subDest := filepath.Join(configDir, "nixhome", "modules", "base.nix")
 	if _, err := os.Stat(subDest); err != nil {
 		t.Errorf("expected %s to exist: %v", subDest, err)
+	}
+}
+
+// A nixhome checkout that is also opened as a cell project has its own
+// .devcell/ build dir, holding a nested git repo with no commits. Copying it
+// broke the `git add` that makes the flake visible to nix.
+func TestSyncNixhome_SkipsSourceBuildDir(t *testing.T) {
+	srcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(srcDir, "flake.nix"), []byte("# nixhome flake"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	nested := filepath.Join(srcDir, ".devcell", "nixhome")
+	if err := os.MkdirAll(nested, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := exec.Command("git", "init", "-q", nested).Run(); err != nil {
+		t.Skipf("git unavailable: %v", err)
+	}
+
+	configDir := t.TempDir()
+	if err := scaffold.SyncNixhome(srcDir, configDir); err != nil {
+		t.Fatalf("SyncNixhome failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(configDir, "nixhome", ".devcell")); !os.IsNotExist(err) {
+		t.Errorf("the source's .devcell/ must not be copied (stat err: %v)", err)
 	}
 }
 
@@ -646,7 +479,7 @@ func TestGenerateFlakeNix_VersionSubstituted(t *testing.T) {
 	if strings.Contains(content, "{{VERSION}}") {
 		t.Errorf("unreplaced {{VERSION}} placeholder:\n%s", content)
 	}
-	want := runner.UpstreamOwner + "/" + runner.UpstreamRepo + "/v2.3.4"
+	want := nixhome.UpstreamOwner + "/" + nixhome.UpstreamRepo + "/v2.3.4"
 	if !strings.Contains(content, want) {
 		t.Errorf("expected versioned URL containing %q:\n%s", want, content)
 	}
@@ -719,7 +552,7 @@ func TestGenerateFlakeNix_AllStacks(t *testing.T) {
 func TestGenerateFlakeNix_NixPackagesStable(t *testing.T) {
 	pkgs := cfg.NixPackages{Stable: []string{"tmux", "htop"}}
 	content := scaffold.GenerateFlakeNix("go", nil, "v1.0.0", false, pkgs)
-	if !strings.Contains(content, "({ lib, pkgs, ... }: { home.packages = (map lib.hiPrio (with pkgs; [ tmux htop ])); })") {
+	if !strings.Contains(content, "({ lib, pkgs, ... }: { home.packages = (map (lib.setPrio (-10)) (with pkgs; [ tmux htop ])); })") {
 		t.Errorf("expected module-function wrapper with hiPri stable packages:\n%s", content)
 	}
 }
@@ -731,21 +564,22 @@ func TestGenerateFlakeNix_NixPackagesAllTiers(t *testing.T) {
 		Edge:     []string{"edge-pkg"},
 	}
 	content := scaffold.GenerateFlakeNix("base", nil, "v1.0.0", false, pkgs)
-	if !strings.Contains(content, "map lib.hiPrio (with pkgs; [ tmux ])") {
-		t.Errorf("expected hiPri stable:\n%s", content)
+	// Lower number wins: a newer channel beats an older one on file collisions.
+	if !strings.Contains(content, "map (lib.setPrio (-10)) (with pkgs; [ tmux ])") {
+		t.Errorf("expected stable at -10:\n%s", content)
 	}
-	if !strings.Contains(content, "map lib.hiPrio (with pkgsUnstable; [ tool-a ])") {
-		t.Errorf("expected hiPri unstable:\n%s", content)
+	if !strings.Contains(content, "map (lib.setPrio (-15)) (with pkgsUnstable; [ tool-a ])") {
+		t.Errorf("expected unstable at -15:\n%s", content)
 	}
-	if !strings.Contains(content, "map lib.hiPrio (with pkgsEdge; [ edge-pkg ])") {
-		t.Errorf("expected hiPri edge:\n%s", content)
+	if !strings.Contains(content, "map (lib.setPrio (-20)) (with pkgsEdge; [ edge-pkg ])") {
+		t.Errorf("expected edge at -20:\n%s", content)
 	}
 }
 
 func TestGenerateFlakeNix_NixPackagesEmpty(t *testing.T) {
 	content := scaffold.GenerateFlakeNix("go", nil, "v1.0.0", false, cfg.NixPackages{})
-	if strings.Contains(content, "lib.hiPrio") {
-		t.Errorf("no hiPri expected when all tiers empty:\n%s", content)
+	if strings.Contains(content, "lib.setPrio") {
+		t.Errorf("no package module expected when all tiers empty:\n%s", content)
 	}
 }
 
@@ -755,7 +589,7 @@ func TestGenerateFlakeNix_NixPackagesWithModules(t *testing.T) {
 	if !strings.Contains(content, "devcell.modules.electronics") {
 		t.Errorf("expected modules still present:\n%s", content)
 	}
-	if !strings.Contains(content, "map lib.hiPrio (with pkgs; [ cowsay ])") {
+	if !strings.Contains(content, "map (lib.setPrio (-10)) (with pkgs; [ cowsay ])") {
 		t.Errorf("expected hiPri stable packages alongside modules:\n%s", content)
 	}
 }
@@ -766,131 +600,6 @@ func TestGenerateFlakeNixWithMcp_EmptyNoMcpBlock(t *testing.T) {
 	content := scaffold.GenerateFlakeNixWithMcp("go", nil, "v1.0.0", false, nil)
 	if strings.Contains(content, "managedMcp") {
 		t.Errorf("no MCP block expected when enabled list is nil:\n%s", content)
-	}
-}
-
-// TestGenerateDockerfile_UsesLocalProfile — must reference devcell-local, not devcell-ultimate.
-func TestGenerateDockerfile_UsesLocalProfile(t *testing.T) {
-	content := scaffold.GenerateDockerfile("")
-	if !strings.Contains(content, "devcell-local${ARCH_SUFFIX}") {
-		t.Errorf("expected devcell-local profile reference:\n%s", content)
-	}
-	if strings.Contains(content, "devcell-ultimate") {
-		t.Errorf("should not reference devcell-ultimate:\n%s", content)
-	}
-}
-
-// TestGenerateDockerfile_ConditionalNpmLayer — npm install guarded by `which npm`.
-func TestGenerateDockerfile_ConditionalNpmLayer(t *testing.T) {
-	content := scaffold.GenerateDockerfile("")
-	if !strings.Contains(content, "which npm") {
-		t.Errorf("expected conditional npm layer with 'which npm':\n%s", content)
-	}
-}
-
-// TestGenerateDockerfile_ConditionalPythonLayer — uv sync guarded by `which uv`.
-func TestGenerateDockerfile_ConditionalPythonLayer(t *testing.T) {
-	content := scaffold.GenerateDockerfile("")
-	if !strings.Contains(content, "which uv") {
-		t.Errorf("expected conditional python layer with 'which uv':\n%s", content)
-	}
-}
-
-// TestGenerateDockerfile_StartsWithFROM — base image line.
-func TestGenerateDockerfile_StartsWithFROM(t *testing.T) {
-	content := scaffold.GenerateDockerfile("")
-	if !strings.HasPrefix(strings.TrimSpace(content), "FROM ") {
-		t.Errorf("Dockerfile should start with FROM:\n%s", content)
-	}
-}
-
-// TestGenerateDockerfile_BaseImageOverride — custom base image.
-func TestGenerateDockerfile_BaseImageOverride(t *testing.T) {
-	content := scaffold.GenerateDockerfile("myregistry.io/devcell:custom")
-	if !strings.HasPrefix(strings.TrimSpace(content), "FROM myregistry.io/devcell:custom") {
-		t.Errorf("expected custom base image:\n%s", content)
-	}
-}
-
-// TestGenerateDockerfile_DefaultBaseImage — uses runner.BaseImageTag when no override.
-func TestGenerateDockerfile_DefaultBaseImage(t *testing.T) {
-	t.Setenv("DEVCELL_BASE_IMAGE", "")
-	content := scaffold.GenerateDockerfile("")
-	want := "FROM " + runner.BaseImageTag()
-	if !strings.HasPrefix(strings.TrimSpace(content), want) {
-		t.Errorf("expected %s, got:\n%s", want, content)
-	}
-}
-
-// TestGenerateDockerfile_HomeManagerSwitch — must run home-manager switch.
-func TestGenerateDockerfile_HomeManagerSwitch(t *testing.T) {
-	content := scaffold.GenerateDockerfile("")
-	if !strings.Contains(content, "home-manager switch") {
-		t.Errorf("expected home-manager switch:\n%s", content)
-	}
-}
-
-// TestGenerateDockerfile_NixhomeCopyWhenPathSet — COPY nixhome/ line when nixhomePath active.
-func TestGenerateDockerfile_NixhomeCopyWhenPathSet(t *testing.T) {
-	content := scaffold.GenerateDockerfileWithNixhome("", true, "base", nil)
-	if !strings.Contains(content, "COPY --chown=devcell:usergroup nixhome/") {
-		t.Errorf("expected COPY nixhome/ when nixhomePath set:\n%s", content)
-	}
-}
-
-// TestGenerateDockerfile_NoNixhomeCopyByDefault — no COPY nixhome/ when no nixhomePath.
-func TestGenerateDockerfile_NoNixhomeCopyByDefault(t *testing.T) {
-	content := scaffold.GenerateDockerfile("")
-	if strings.Contains(content, "nixhome/") {
-		t.Errorf("should not COPY nixhome/ by default:\n%s", content)
-	}
-}
-
-// --- Metadata ARGs in generated Dockerfile ---
-
-// TestGenerateDockerfile_HasMetadataARGs — generated Dockerfile must declare
-// DEVCELL_BASE_IMAGE, DEVCELL_STACK, DEVCELL_MODULES ARGs for metadata.json.
-func TestGenerateDockerfile_HasMetadataARGs(t *testing.T) {
-	content := scaffold.GenerateDockerfileWithNixhome("ghcr.io/test:core", false, "go", []string{"desktop", "infra"})
-	for _, arg := range []string{
-		`ARG DEVCELL_BASE_IMAGE="ghcr.io/test:core"`,
-		`ARG DEVCELL_STACK="go"`,
-		`ARG DEVCELL_MODULES="desktop,infra"`,
-	} {
-		if !strings.Contains(content, arg) {
-			t.Errorf("expected %q in Dockerfile:\n%s", arg, content)
-		}
-	}
-}
-
-// TestGenerateDockerfile_MetadataARGsEmptyModules — empty modules produces empty string.
-func TestGenerateDockerfile_MetadataARGsEmptyModules(t *testing.T) {
-	content := scaffold.GenerateDockerfileWithNixhome("", false, "base", nil)
-	if !strings.Contains(content, `ARG DEVCELL_MODULES=""`) {
-		t.Errorf("expected empty DEVCELL_MODULES ARG:\n%s", content)
-	}
-}
-
-// TestGenerateDockerfile_NoMetadataJSONRunStep — metadata.json is written by nix
-// activation (base.nix), NOT a Docker RUN step. The Dockerfile should only have
-// the ARGs that propagate through home-manager switch to the nix activation script.
-func TestGenerateDockerfile_NoMetadataJSONRunStep(t *testing.T) {
-	content := scaffold.GenerateDockerfileWithNixhome("", false, "go", nil)
-	// Must NOT have a RUN step writing metadata.json — nix owns this now.
-	if strings.Contains(content, "tee /etc/devcell/metadata.json") {
-		t.Errorf("Dockerfile should NOT write metadata.json (nix activation handles it):\n%s", content)
-	}
-	// ARGs must still be present (they propagate to nix via home-manager switch env).
-	if !strings.Contains(content, "ARG DEVCELL_STACK=") {
-		t.Errorf("expected DEVCELL_STACK ARG (propagates to nix activation):\n%s", content)
-	}
-}
-
-// TestGenerateDockerfile_NoUserImageVersion — old user-image-version stamp is removed.
-func TestGenerateDockerfile_NoUserImageVersion(t *testing.T) {
-	content := scaffold.GenerateDockerfileWithNixhome("", false, "go", nil)
-	if strings.Contains(content, "user-image-version") {
-		t.Errorf("user-image-version should be replaced by metadata.json:\n%s", content)
 	}
 }
 
@@ -921,207 +630,6 @@ func TestSyncNixhome_OverwritesExisting(t *testing.T) {
 	}
 }
 
-// --- RegenerateBuildContext ---
-
-// TestRegenerateBuildContext_WritesFlakeAndDockerfile — regenerates all build artifacts.
-func TestRegenerateBuildContext_WritesFlakeAndDockerfile(t *testing.T) {
-	dir := t.TempDir()
-	// Scaffold initial config so devcell.toml exists (needed for package files).
-	if err := scaffold.Scaffold(dir, "", "", false, "go"); err != nil {
-		t.Fatal(err)
-	}
-
-	// Read back config and change stack to python.
-	cfg := cfg.CellConfig{
-		Cell: cfg.CellSection{Stack: "python"},
-		Packages: cfg.PackagesSection{
-			Npm:    map[string]string{"codex": "^1.0.0"},
-			Python: map[string]string{"httpie": "*"},
-		},
-	}
-
-	if err := scaffold.RegenerateBuildContext(dir, cfg); err != nil {
-		t.Fatal(err)
-	}
-
-	// flake.nix should reference python stack.
-	flake, _ := os.ReadFile(filepath.Join(dir, "flake.nix"))
-	if !strings.Contains(string(flake), "devcell.stacks.python") {
-		t.Errorf("flake.nix should reference devcell.stacks.python:\n%s", string(flake))
-	}
-
-	// Dockerfile should reference devcell-local, not devcell-ultimate.
-	df, _ := os.ReadFile(filepath.Join(dir, "Dockerfile"))
-	if !strings.Contains(string(df), "devcell-local") {
-		t.Errorf("Dockerfile should reference devcell-local:\n%s", string(df))
-	}
-	if strings.Contains(string(df), "devcell-ultimate") {
-		t.Errorf("Dockerfile should NOT reference devcell-ultimate:\n%s", string(df))
-	}
-}
-
-// TestRegenerateBuildContext_IncludesModules — modules are appended in flake.nix.
-func TestRegenerateBuildContext_IncludesModules(t *testing.T) {
-	dir := t.TempDir()
-	if err := scaffold.Scaffold(dir, "", "", false, "go"); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg := cfg.CellConfig{
-		Cell: cfg.CellSection{
-			Stack:   "go",
-			Modules: []string{"electronics", "desktop"},
-		},
-	}
-
-	if err := scaffold.RegenerateBuildContext(dir, cfg); err != nil {
-		t.Fatal(err)
-	}
-
-	flake, _ := os.ReadFile(filepath.Join(dir, "flake.nix"))
-	for _, mod := range []string{"devcell.stacks.go", "devcell.modules.electronics", "devcell.modules.desktop"} {
-		if !strings.Contains(string(flake), mod) {
-			t.Errorf("flake.nix should contain %s:\n%s", mod, string(flake))
-		}
-	}
-}
-
-// TestRegenerateBuildContext_DefaultStack — empty stack defaults to base.
-func TestRegenerateBuildContext_DefaultStack(t *testing.T) {
-	dir := t.TempDir()
-	if err := scaffold.Scaffold(dir, "", "", false, "base"); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg := cfg.CellConfig{
-		Cell: cfg.CellSection{}, // Stack empty → ResolvedStack() returns "base"
-	}
-
-	if err := scaffold.RegenerateBuildContext(dir, cfg); err != nil {
-		t.Fatal(err)
-	}
-
-	flake, _ := os.ReadFile(filepath.Join(dir, "flake.nix"))
-	if !strings.Contains(string(flake), "devcell.stacks.base") {
-		t.Errorf("empty stack should default to base:\n%s", string(flake))
-	}
-}
-
-// --- resolveBaseImage (via RegenerateBuildContext) ---
-
-// TestRegenerateBuildContext_BaseStackUsesCore — base stack doesn't attempt
-// pre-built cache, always uses the core image.
-func TestRegenerateBuildContext_BaseStackUsesCore(t *testing.T) {
-	dir := t.TempDir()
-	if err := scaffold.Scaffold(dir, "", "", false, "base"); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("DEVCELL_BASE_IMAGE", "")
-
-	c := cfg.CellConfig{
-		Cell: cfg.CellSection{Stack: "base"},
-	}
-	if err := scaffold.RegenerateBuildContext(dir, c); err != nil {
-		t.Fatal(err)
-	}
-
-	df, _ := os.ReadFile(filepath.Join(dir, "Dockerfile"))
-	if !strings.HasPrefix(string(df), "FROM ghcr.io/devcell-sh/devcell:v0.0.0-core") {
-		t.Errorf("base stack should use core image, got:\n%s", strings.SplitN(string(df), "\n", 2)[0])
-	}
-}
-
-// TestRegenerateBuildContext_EnvOverrideWinsOverCache — DEVCELL_BASE_IMAGE
-// takes precedence over pre-built stack cache.
-func TestRegenerateBuildContext_EnvOverrideWinsOverCache(t *testing.T) {
-	dir := t.TempDir()
-	if err := scaffold.Scaffold(dir, "", "", false, "go"); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("DEVCELL_BASE_IMAGE", "my-custom:image")
-
-	c := cfg.CellConfig{
-		Cell: cfg.CellSection{Stack: "go"},
-	}
-	if err := scaffold.RegenerateBuildContext(dir, c); err != nil {
-		t.Fatal(err)
-	}
-
-	df, _ := os.ReadFile(filepath.Join(dir, "Dockerfile"))
-	if !strings.HasPrefix(string(df), "FROM my-custom:image") {
-		t.Errorf("DEVCELL_BASE_IMAGE should override cache, got:\n%s", strings.SplitN(string(df), "\n", 2)[0])
-	}
-}
-
-// TestRegenerateBuildContext_NonBaseStackFallsBackToCore — when pre-built
-// stack image is not available, falls back to core.
-func TestRegenerateBuildContext_NonBaseStackFallsBackToCore(t *testing.T) {
-	dir := t.TempDir()
-	if err := scaffold.Scaffold(dir, "", "", false, "go"); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("DEVCELL_BASE_IMAGE", "")
-
-	c := cfg.CellConfig{
-		Cell: cfg.CellSection{Stack: "go"},
-	}
-	if err := scaffold.RegenerateBuildContext(dir, c); err != nil {
-		t.Fatal(err)
-	}
-
-	// In test env, docker images aren't available — should fall back to core.
-	df, _ := os.ReadFile(filepath.Join(dir, "Dockerfile"))
-	fromLine := strings.SplitN(string(df), "\n", 2)[0]
-	if !strings.HasPrefix(fromLine, "FROM ghcr.io/devcell-sh/devcell:v0.0.0-core") {
-		t.Errorf("should fall back to core when pre-built not available, got:\n%s", fromLine)
-	}
-}
-
-// --- RegenerateBuildContext detects nixhome on disk ---
-
-func TestRegenerateBuildContext_DetectsNixhomeOnDisk(t *testing.T) {
-	dir := t.TempDir()
-	// Create nixhome/ directory to simulate SyncNixhome having run.
-	os.MkdirAll(filepath.Join(dir, "nixhome"), 0755)
-
-	cellCfg := cfg.CellConfig{Cell: cfg.CellSection{Stack: "go"}}
-	if err := scaffold.RegenerateBuildContext(dir, cellCfg); err != nil {
-		t.Fatal(err)
-	}
-
-	// flake.nix should use path:./nixhome (not github:)
-	flake, _ := os.ReadFile(filepath.Join(dir, "flake.nix"))
-	if !strings.Contains(string(flake), `path:./nixhome`) {
-		t.Errorf("flake.nix should use path:./nixhome when nixhome/ exists on disk:\n%s", string(flake))
-	}
-	// Dockerfile should COPY nixhome/
-	df, _ := os.ReadFile(filepath.Join(dir, "Dockerfile"))
-	if !strings.Contains(string(df), "COPY") || !strings.Contains(string(df), "nixhome/") {
-		t.Errorf("Dockerfile should COPY nixhome/ when it exists on disk:\n%s", string(df))
-	}
-}
-
-func TestRegenerateBuildContext_NoNixhomeOnDisk(t *testing.T) {
-	dir := t.TempDir()
-	// No nixhome/ directory — should use github URL.
-	cellCfg := cfg.CellConfig{Cell: cfg.CellSection{Stack: "go"}}
-	if err := scaffold.RegenerateBuildContext(dir, cellCfg); err != nil {
-		t.Fatal(err)
-	}
-
-	flake, _ := os.ReadFile(filepath.Join(dir, "flake.nix"))
-	if !strings.Contains(string(flake), "github:") {
-		t.Errorf("flake.nix should use github: when nixhome/ doesn't exist:\n%s", string(flake))
-	}
-	if strings.Contains(string(flake), "path:./nixhome") {
-		t.Errorf("flake.nix should NOT use path:./nixhome:\n%s", string(flake))
-	}
-	df, _ := os.ReadFile(filepath.Join(dir, "Dockerfile"))
-	if strings.Contains(string(df), "nixhome/") {
-		t.Errorf("Dockerfile should NOT COPY nixhome/ when it doesn't exist:\n%s", string(df))
-	}
-}
-
 // --- Scaffold local-first ---
 
 func TestScaffold_WritesDotDevcellToml(t *testing.T) {
@@ -1139,10 +647,16 @@ func TestScaffold_BuildArtifactsInDotDevcellDir(t *testing.T) {
 	if err := scaffold.Scaffold(dir, "", "", false); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"Dockerfile", "flake.nix", "package.json", "pyproject.toml"} {
+	for _, name := range []string{"flake.nix"} {
 		path := filepath.Join(dir, ".devcell", name)
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("expected %s in .devcell/ subdir: %v", name, err)
+		}
+	}
+	for _, name := range []string{"Dockerfile", "package.json", "pyproject.toml"} {
+		path := filepath.Join(dir, ".devcell", name)
+		if _, err := os.Stat(path); err == nil {
+			t.Errorf("%s should NOT be generated by scaffold anymore", name)
 		}
 	}
 }
@@ -1204,5 +718,14 @@ func TestIsInitialized_FalseWhenOnlyGlobalTomlExists(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "devcell.toml"), []byte("[cell]\n"), 0644)
 	if scaffold.IsInitialized(dir) {
 		t.Error("IsInitialized should return false for old-style devcell.toml (without dot)")
+	}
+}
+
+// A package listed in two channels is emitted only in the newest one.
+func TestGenerateFlakeNix_NewerChannelWins(t *testing.T) {
+	content := scaffold.GenerateFlakeNix("base", nil, "v1.0.0", false,
+		cfg.NixPackages{Stable: []string{"jq", "uv"}, Unstable: []string{"uv"}})
+	if !strings.Contains(content, "(with pkgs; [ jq ])") || !strings.Contains(content, "(with pkgsUnstable; [ uv ])") {
+		t.Errorf("uv must come only from unstable:\n%s", content)
 	}
 }

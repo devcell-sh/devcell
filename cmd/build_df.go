@@ -7,7 +7,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/DimmKirr/devcell/internal/runner"
+	"github.com/DimmKirr/devcell/internal/engine/docker"
 	"github.com/DimmKirr/devcell/internal/telemetry"
 	"github.com/spf13/cobra"
 )
@@ -56,10 +56,10 @@ func runBuildDf(cmd *cobra.Command, _ []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	return runner.RunDF(runner.RunDFArgs{
+	return docker.RunDF(docker.RunDFArgs{
 		Ctx:       ctx,
-		Collector: runner.ExecCollector{},
-		Opts: runner.DFOpts{
+		Collector: docker.ExecCollector{},
+		Opts: docker.DFOpts{
 			TopN:  topN,
 			Kinds: toEntryKinds(kinds),
 			JSON:  jsonOut,
@@ -72,14 +72,14 @@ func runBuildDf(cmd *cobra.Command, _ []string) error {
 // plural ("images, containers, volumes, cache") but internal EntryKind
 // constants are singular. Strip a trailing 's' so both forms work and
 // nothing silently produces zero rows.
-func toEntryKinds(in []string) []runner.EntryKind {
+func toEntryKinds(in []string) []docker.EntryKind {
 	if len(in) == 0 {
 		return nil
 	}
-	out := make([]runner.EntryKind, 0, len(in))
+	out := make([]docker.EntryKind, 0, len(in))
 	for _, s := range in {
 		s = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(s)), "s")
-		out = append(out, runner.EntryKind(s))
+		out = append(out, docker.EntryKind(s))
 	}
 	return out
 }

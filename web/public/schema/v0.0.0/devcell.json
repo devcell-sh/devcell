@@ -1,0 +1,702 @@
+{
+  "$id": "https://devcell.sh/schema/v0.0.0/devcell.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "devcell project configuration (.devcell.toml) and global defaults (~/.config/devcell/devcell.toml). Generated from internal/cfg.CellConfig; do not edit.",
+  "properties": {
+    "aws": {
+      "additionalProperties": false,
+      "properties": {
+        "read_only": {
+          "description": "default: false (nil = not set → full access)",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "build": {
+      "additionalProperties": false,
+      "properties": {
+        "cores": {
+          "description": "nix cores (make -j per job); 0 = derived; env: DEVCELL_NIX_CORES",
+          "type": "integer"
+        },
+        "cpus": {
+          "description": "docker --cpus quota (e.g. \"8\"); \"0\" = no quota; env: DEVCELL_BUILD_CPUS",
+          "type": "string"
+        },
+        "max_jobs": {
+          "description": "nix max-jobs; 0 = derived from ceiling; env: DEVCELL_NIX_MAX_JOBS",
+          "type": "integer"
+        },
+        "memory": {
+          "description": "docker --memory ceiling (e.g. \"16g\"); \"0\" = uncapped; env: DEVCELL_BUILD_MEMORY",
+          "type": "string"
+        },
+        "threads": {
+          "description": "nix download threads (max-substitution-jobs + http-connections); 0 = 128; env: DEVCELL_BUILD_THREADS",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "cell": {
+      "additionalProperties": false,
+      "properties": {
+        "background": {
+          "description": "keep VM/container running after shell exit; default: false; env: DEVCELL_BACKGROUND",
+          "type": "boolean"
+        },
+        "default_command": {
+          "description": "subcommand to run when `cell` is invoked with no args; env: DEVCELL_DEFAULT_COMMAND",
+          "type": "string"
+        },
+        "engine": {
+          "description": "execution engine: \"docker\" (default), \"tart\" or \"winkit\"",
+          "type": "string"
+        },
+        "flake": {
+          "description": "enable project-level flake.nix install; default: false (opt-in); env: DEVCELL_FLAKE",
+          "type": "boolean"
+        },
+        "gui": {
+          "deprecated": true,
+          "description": "default: true (nil = not set → true). Deprecated: use [gui] enabled = false instead (replacement: [gui] enabled)",
+          "type": "boolean"
+        },
+        "hostname": {
+          "description": "override container hostname; default: computed \"cell-\u003cbasename\u003e-\u003cbunk\u003e\"; env: DEVCELL_HOSTNAME",
+          "type": "string"
+        },
+        "image_tag": {
+          "type": "string"
+        },
+        "kvm": {
+          "description": "pass the daemon host's /dev/kvm into the container so QEMU gets hardware accel instead of TCG; default: false; env: DEVCELL_KVM",
+          "type": "boolean"
+        },
+        "libvirt_path_map": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "deprecated": true,
+          "description": "container prefix -\u003e host prefix rewrites for domain XML paths (CELL-375); empty = CLI runs on the host. Deprecated: remove it; the libvirt engine was retired, run `cell --engine winkit` on the macOS host instead",
+          "type": "object"
+        },
+        "libvirt_uri": {
+          "deprecated": true,
+          "description": "retired libvirt engine; parsed only so the deprecation warning fires. Deprecated: remove it; the libvirt engine was retired, run `cell --engine winkit` on the macOS host instead",
+          "type": "string"
+        },
+        "locale": {
+          "description": "POSIX locale (e.g. \"en_US.UTF-8\"); default: \"en_US.UTF-8\"",
+          "type": "string"
+        },
+        "mac_address": {
+          "description": "MAC for the container's NIC (XX:XX:XX:XX:XX:XX); pinned across restarts for infra-side identity persistence. Honored on user-defined bridge networks (devcell uses --network devcell-network). Empty → docker auto-assigns a random MAC per launch.",
+          "type": "string"
+        },
+        "mcps": {
+          "description": "shorthand MCP servers to enable: [\"playwright\", \"aws-api\"] (merged into [mcp] enabled)",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "modules": {
+          "description": "extra nix modules to compose on top of stack",
+          "items": {
+            "examples": [
+              "android",
+              "any-chat",
+              "apple",
+              "build",
+              "desktop",
+              "electronics",
+              "financial",
+              "go",
+              "graphics",
+              "infra",
+              "news",
+              "nixos",
+              "node",
+              "plex",
+              "postgresql",
+              "project-management",
+              "publishing",
+              "python",
+              "qa-tools",
+              "scraping",
+              "security",
+              "social",
+              "travel",
+              "vm",
+              "wine",
+              "wireguard"
+            ],
+            "type": "string"
+          },
+          "type": "array",
+          "x-taplo": {
+            "links": {
+              "key": "https://devcell.sh/schema/v0.0.0/devcell-sh/home/modules.json"
+            }
+          }
+        },
+        "nixhome": {
+          "deprecated": true,
+          "description": "deprecated: use [nix] nixhome instead. Deprecated: use [nix] nixhome = \"~/dev/home\" instead (replacement: [nix] nixhome)",
+          "type": "string"
+        },
+        "os": {
+          "description": "guest OS: \"linux\" (default), \"macos\", \"windows\" or \"winpe\"; derives engine when [cell].engine is unset",
+          "type": "string"
+        },
+        "packages": {
+          "description": "nix packages from the stable channel, baked into the image at build time",
+          "items": {
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$",
+            "type": "string"
+          },
+          "type": "array",
+          "x-taplo": {
+            "links": {
+              "key": "https://search.nixos.org/packages"
+            }
+          }
+        },
+        "per_cell_image": {
+          "description": "tag user image per cell instead of per stack; default: false",
+          "type": "boolean"
+        },
+        "ports": {
+          "description": "shorthand port forwards: \"3000\", \"8080:3000\" (merged into [ports] forward)",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "qemu_cpus": {
+          "deprecated": true,
+          "description": "deprecated spelling of winkit_cpus; merged into it by LoadFile. Deprecated: use [cell] winkit_cpus = 4 instead (replacement: [cell] winkit_cpus)",
+          "type": "integer"
+        },
+        "qemu_disk_size_gb": {
+          "deprecated": true,
+          "description": "no effect; parsed only so the deprecation warning fires. Deprecated: remove it; it has no effect",
+          "type": "integer"
+        },
+        "qemu_display": {
+          "deprecated": true,
+          "description": "deprecated, no effect; parsed only so the deprecation warning fires. Deprecated: remove it; it has no effect",
+          "type": "string"
+        },
+        "qemu_memory_gb": {
+          "deprecated": true,
+          "description": "deprecated spelling of winkit_memory_gb; merged into it by LoadFile. Deprecated: use [cell] winkit_memory_gb = 8 instead (replacement: [cell] winkit_memory_gb)",
+          "type": "integer"
+        },
+        "qemu_project_sync": {
+          "deprecated": true,
+          "description": "retired with the libvirt engine; parsed only so the deprecation warning fires. Deprecated: remove it; the libvirt engine was retired and it was the only engine that synced the project",
+          "type": "string"
+        },
+        "qemu_ssh_host": {
+          "deprecated": true,
+          "description": "deprecated, no effect; parsed only so the deprecation warning fires. Deprecated: remove it; it has no effect",
+          "type": "string"
+        },
+        "qemu_ssh_port": {
+          "deprecated": true,
+          "description": "deprecated spelling of winkit_ssh_port; merged into it by LoadFile. Deprecated: use [cell] winkit_ssh_port = 2222 instead (replacement: [cell] winkit_ssh_port)",
+          "type": "integer"
+        },
+        "qemu_windows_iso": {
+          "deprecated": true,
+          "description": "deprecated spelling of winkit_windows_iso; merged into it by LoadFile. Deprecated: use [cell] winkit_windows_iso = \"~/Downloads/Win11_ARM64.iso\" instead (replacement: [cell] winkit_windows_iso)",
+          "type": "string"
+        },
+        "registry": {
+          "description": "container registry; default: DefaultRegistry; env: DEVCELL_REGISTRY",
+          "type": "string"
+        },
+        "stack": {
+          "description": "nix stack name (e.g. \"go\", \"python\"); default: \"base\" (see ResolvedStack)",
+          "examples": [
+            "base",
+            "bbb",
+            "core",
+            "dev",
+            "electronics",
+            "fullstack",
+            "go",
+            "node",
+            "python",
+            "ultimate"
+          ],
+          "type": "string",
+          "x-taplo": {
+            "links": {
+              "key": "https://devcell.sh/schema/v0.0.0/devcell-sh/home/stacks.json"
+            }
+          }
+        },
+        "stale_warning": {
+          "description": "CELL-391 \"cell is behind — parallel reality\" nudge at start; default: true; env: DEVCELL_STALE_WARN",
+          "type": "boolean"
+        },
+        "tart_oci_image": {
+          "description": "OCI base image for tart VMs; default: DefaultTartOCIImage; env: DEVCELL_TART_OCI_IMAGE",
+          "type": "string"
+        },
+        "tart_ssh_host": {
+          "description": "SSH host for tart engine; default: \"localhost\"; env: DEVCELL_TART_SSH_HOST",
+          "type": "string"
+        },
+        "tart_ssh_key": {
+          "description": "path to SSH private key for tart; env: DEVCELL_TART_SSH_KEY",
+          "type": "string"
+        },
+        "tart_ssh_port": {
+          "description": "SSH port for tart engine; default: 22; env: DEVCELL_TART_SSH_PORT",
+          "type": "integer"
+        },
+        "tart_ssh_user": {
+          "description": "SSH user for tart engine; default: \"admin\"; env: DEVCELL_TART_SSH_USER",
+          "type": "string"
+        },
+        "thin": {
+          "deprecated": true,
+          "description": "thin image mode; default: true; disable with thin=false or DEVCELL_THIN=0. Deprecated: remove it; thin is the only build mode",
+          "type": "boolean"
+        },
+        "timezone": {
+          "description": "IANA tz (e.g. \"Europe/Prague\"); default: host $TZ",
+          "type": "string"
+        },
+        "vagrant_box": {
+          "deprecated": true,
+          "description": "retired vagrant engine; parsed only so the deprecation warning fires. Deprecated: remove it; the vagrant engine was removed, use [cell] os = \"macos\" for a Tart VM",
+          "type": "string"
+        },
+        "vagrant_provider": {
+          "deprecated": true,
+          "description": "retired vagrant engine; parsed only so the deprecation warning fires. Deprecated: remove it; the vagrant engine was removed, use [cell] os = \"macos\" for a Tart VM",
+          "type": "string"
+        },
+        "volumes": {
+          "description": "shorthand volume list: \"/path\", \"/host:/container\", \"/host:/container:ro\"",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "winkit_cpus": {
+          "description": "winkit VM vCPUs; default: 4; env: DEVCELL_WINKIT_CPUS",
+          "type": "integer"
+        },
+        "winkit_memory_gb": {
+          "description": "winkit VM RAM in GB; default: 4; env: DEVCELL_WINKIT_MEMORY_GB",
+          "type": "integer"
+        },
+        "winkit_ssh_port": {
+          "description": "SSH port for winkit engine; default: allocated per bunk; env: DEVCELL_WINKIT_SSH_PORT",
+          "type": "integer"
+        },
+        "winkit_windows_iso": {
+          "description": "path to Windows ARM64 ISO for winkit engine; env: DEVCELL_WINKIT_WINDOWS_ISO",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "docker": {
+      "additionalProperties": false,
+      "properties": {
+        "cap_add": {
+          "description": "extra Linux capabilities (e.g. [\"SYS_ADMIN\"]); default: none",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "cpu_limit": {
+          "description": "docker --cpus quota (e.g. \"2\"); \"0\" = no quota; env: DEVCELL_DOCKER_CPU_LIMIT",
+          "type": "string"
+        },
+        "mem_limit": {
+          "description": "docker --memory ceiling (e.g. \"4g\"); \"0\" = uncapped; env: DEVCELL_DOCKER_MEM_LIMIT",
+          "type": "string"
+        },
+        "privileged": {
+          "description": "run container with --privileged; default: false",
+          "type": "boolean"
+        },
+        "shm_size": {
+          "description": "docker --shm-size (e.g. \"1g\"); env: DEVCELL_DOCKER_SHM_SIZE",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "env": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "git": {
+      "additionalProperties": false,
+      "properties": {
+        "author_email": {
+          "type": "string"
+        },
+        "author_name": {
+          "type": "string"
+        },
+        "committer_email": {
+          "type": "string"
+        },
+        "committer_name": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "gui": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "description": "default: true (nil = not set → true)",
+          "type": "boolean"
+        },
+        "resolution": {
+          "description": "logical resolution; default: \"1920x1080x24\"",
+          "type": "string"
+        },
+        "scale": {
+          "description": "display scale factor (1=96dpi, 2=192dpi HiDPI); default: 1",
+          "type": "integer"
+        },
+        "wm": {
+          "description": "\"icewm\" (default) or \"fluxbox\"",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "llm": {
+      "additionalProperties": false,
+      "properties": {
+        "append_system_prompt": {
+          "type": "string"
+        },
+        "append_system_prompt_file": {
+          "type": "string"
+        },
+        "model": {
+          "description": "the provider's own model ID, no prefix",
+          "type": "string"
+        },
+        "models": {
+          "additionalProperties": false,
+          "properties": {
+            "default": {
+              "deprecated": true,
+              "description": "Deprecated: use [llm] provider = \"openrouter\" and model = \"deepseek/deepseek-v4-pro\" instead (replacement: [llm] model)",
+              "type": "string"
+            },
+            "providers": {
+              "additionalProperties": {
+                "additionalProperties": false,
+                "properties": {
+                  "base_url": {
+                    "type": "string"
+                  },
+                  "models": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              },
+              "deprecated": true,
+              "description": "Deprecated: use [llm.providers.ollama] models = [\"qwen3:8b\"] instead (replacement: [llm.providers])",
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "provider": {
+          "description": "default | ollama | openrouter",
+          "type": "string"
+        },
+        "providers": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "properties": {
+              "base_url": {
+                "type": "string"
+              },
+              "models": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "description": "per-provider base_url + models",
+          "type": "object"
+        },
+        "system_prompt": {
+          "type": "string"
+        },
+        "system_prompt_file": {
+          "type": "string"
+        },
+        "use_ollama": {
+          "deprecated": true,
+          "description": "Deprecated keys, migrated into the fields above by migrateLLM.. Deprecated: use [llm] provider = \"ollama\" instead (replacement: [llm] provider)",
+          "type": "boolean"
+        },
+        "use_openrouter": {
+          "deprecated": true,
+          "description": "Deprecated: use [llm] provider = \"openrouter\" instead (replacement: [llm] provider)",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "mcp": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "deprecated": true,
+          "description": "MCP server names to enable (e.g. [\"aws-api\", \"terraform\"]). Deprecated: use [cell] mcps = [\"playwright\"] instead (replacement: [cell] mcps)",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "mise": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "[mise] — keys map to MISE_\u003cUPPER_KEY\u003e env vars",
+      "type": "object"
+    },
+    "nix": {
+      "additionalProperties": false,
+      "properties": {
+        "image": {
+          "description": "nix core image for thin builds; default: DefaultNixImage; env: DEVCELL_NIX_IMAGE",
+          "type": "string"
+        },
+        "nixhome": {
+          "description": "local nixhome path; overridden by DEVCELL_NIXHOME_PATH env",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "op": {
+      "additionalProperties": false,
+      "deprecated": true,
+      "description": "Deprecated: use [secrets.onepassword] documents = [\"prod-api-keys\"] instead (replacement: [secrets.onepassword])",
+      "properties": {
+        "documents": {
+          "description": "1Password document names to resolve via `op item get`",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "items": {
+          "description": "deprecated: use documents (kept for backwards compat)",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "packages": {
+      "additionalProperties": false,
+      "properties": {
+        "nix": {
+          "additionalProperties": false,
+          "properties": {
+            "edge": {
+              "items": {
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$",
+                "type": "string"
+              },
+              "type": "array",
+              "x-taplo": {
+                "links": {
+                  "key": "https://search.nixos.org/packages"
+                }
+              }
+            },
+            "stable": {
+              "deprecated": true,
+              "description": "Deprecated: use [cell] packages = [\"htop\"] instead (replacement: [cell] packages)",
+              "items": {
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$",
+                "type": "string"
+              },
+              "type": "array",
+              "x-taplo": {
+                "links": {
+                  "key": "https://search.nixos.org/packages"
+                }
+              }
+            },
+            "unstable": {
+              "items": {
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$",
+                "type": "string"
+              },
+              "type": "array",
+              "x-taplo": {
+                "links": {
+                  "key": "https://search.nixos.org/packages"
+                }
+              }
+            }
+          },
+          "type": "object"
+        },
+        "node": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "name → npm version or range; \"*\" = latest",
+          "type": "object"
+        },
+        "npm": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "deprecated": true,
+          "description": "Deprecated [packages.npm], merged into Node by mergePackagesNode.. Deprecated: use [packages.node] \"prettier\" = \"^3\" instead (replacement: [packages.node])",
+          "type": "object"
+        },
+        "python": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "name → mise version: \"latest\", \"0.6\", \"0.6.9\"; \"*\" = latest",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "ports": {
+      "additionalProperties": false,
+      "properties": {
+        "forward": {
+          "deprecated": true,
+          "description": "port mappings: \"3000\", \"8080:3000\". Deprecated: use [cell] ports = [\"3000\", \"8080:3000\"] instead (replacement: [cell] ports)",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "publish_ip": {
+          "description": "host interface for `docker run -p`; default \"0.0.0.0\". Applies to VNC, RDP, and all forward entries.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "secrets": {
+      "additionalProperties": false,
+      "properties": {
+        "onepassword": {
+          "additionalProperties": false,
+          "properties": {
+            "documents": {
+              "description": "1Password document names to resolve via `op item get`",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        },
+        "op": {
+          "additionalProperties": false,
+          "description": "alias for [secrets.onepassword]; TOML-only, not a nix option",
+          "properties": {
+            "documents": {
+              "description": "1Password document names to resolve via `op item get`",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "stealth": {
+      "additionalProperties": false,
+      "properties": {
+        "arch": {
+          "type": "string"
+        },
+        "platform": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "volumes": {
+      "deprecated": true,
+      "description": "Deprecated: use [cell] volumes = [\"/host:/container:ro\"] instead (replacement: [cell] volumes)",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "mount": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "wireguard": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "config": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "title": "devcell.toml",
+  "type": "object",
+  "version": "v0.0.0"
+}

@@ -1,0 +1,81 @@
+package nixhome
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"os/exec"
+	"strings"
+)
+
+// PreflightPlatformCheck runs `nix eval` on the flake's platformStrictCheck
+// attribute to verify that all packages (including transitive dependencies)
+// are compatible with the target system. Returns nil on success.
+//
+// Skips gracefully (returns nil) when nix is not in PATH — this allows the
+// thin Docker build path to work on hosts without nix installed.
+//
+// targetSystem is a nix system string like "aarch64-linux" or "aarch64-darwin".
+func PreflightPlatformCheck(ctx context.Context, nixhomeFlakeRef, targetSystem string) error {
+	return PreflightPlatformCheckWithLookPath(ctx, nixhomeFlakeRef, targetSystem, exec.LookPath)
+}
+
+// PreflightPlatformCheckWithLookPath is the testable seam — tests inject a
+// custom lookPath to simulate nix-not-found without modifying PATH.
+func PreflightPlatformCheckWithLookPath(ctx context.Context, nixhomeFlakeRef, targetSystem string, lookPath func(string) (string, error)) error {
+	nixBin, err := lookPath("nix")
+	if err != nil {
+		return nil
+	}
+
+	attr := fmt.Sprintf("%s#platformStrictCheck.%s", nixhomeFlakeRef, targetSystem)
+	cmd := exec.CommandContext(ctx, nixBin, "eval", attr, "--json")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		stderrStr := stderr.String()
+		if isAttributeMissing(stderrStr) {
+			return nil
+		}
+		if isStoreUnreachable(stderrStr) {
+			return fmt.Errorf("platform compatibility check could not reach the nix daemon:\n%s\n\nFix: check that nix-daemon is running and listening on its socket (nix store info)",
+				extractNixErrors(stderrStr))
+		}
+		errLines := extractNixErrors(stderrStr)
+		return fmt.Errorf("platform compatibility check failed for %s:\n%s\n\nFix: move the incompatible package behind a platform guard (lib.optionals pkgs.stdenv.isLinux/isDarwin) in its nixhome module",
+			targetSystem, errLines)
+	}
+	return nil
+}
+
+// isAttributeMissing detects nix errors indicating the queried attribute
+// doesn't exist in the flake (e.g. platformStrictCheck has no key for
+// the target system). Nix says "does not provide attribute" when the
+// flake output path is valid but the specific key is absent.
+func isAttributeMissing(stderr string) bool {
+	return strings.Contains(stderr, "does not provide attribute")
+}
+
+// isStoreUnreachable detects nix failing to talk to its store daemon, which
+// says nothing about the flake's platform compatibility.
+func isStoreUnreachable(stderr string) bool {
+	return strings.Contains(stderr, "cannot connect to socket")
+}
+
+func extractNixErrors(stderr string) string {
+	var lines []string
+	for _, line := range strings.Split(stderr, "\n") {
+		if strings.Contains(line, "error:") || strings.Contains(line, "is not supported on") {
+			lines = append(lines, strings.TrimSpace(line))
+		}
+	}
+	if len(lines) == 0 {
+		return strings.TrimSpace(stderr)
+	}
+	if len(lines) > 5 {
+		lines = lines[:5]
+	}
+	return strings.Join(lines, "\n")
+}

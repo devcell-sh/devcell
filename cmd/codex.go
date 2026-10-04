@@ -17,10 +17,11 @@ var codexCmd = &cobra.Command{
 The current working directory is mounted as /workspace. All additional
 args are forwarded to the codex binary unchanged.
 
-When use_ollama = true in the [llm] section of devcell.toml (or --ollama
+When provider = "ollama" in the [llm] section of devcell.toml (or --ollama
 is passed), Codex is started with --oss --local-provider ollama and
-CODEX_OSS_BASE_URL pointing at the host ollama instance. The model from
-llm.models.default is also passed when set.
+CODEX_OSS_BASE_URL pointing at the host ollama instance. The [llm] model
+is also passed when set. A flag overrides [llm] provider for that run.
+[llm.providers.<name>] base_url overrides the built-in endpoint.
 
 Without ollama configured, Codex runs normally against the cloud provider
 (requires OPENAI_API_KEY or equivalent).
@@ -60,31 +61,26 @@ func init() {
 }
 
 // codexProviderConfig returns extra CLI flags and env vars for the active
-// provider mode. OpenRouter (--openrouter or use_openrouter=true) wins over
-// ollama; with neither configured Codex runs normally against the cloud
+// provider mode: --ollama / --openrouter, else [llm] provider. OpenRouter wins
+// if both flags are passed; with neither configured Codex runs normally against the cloud
 // provider. Returns nil, nil in that default case.
 func codexProviderConfig() (flags []string, env map[string]string) {
 	dbg := scanFlag("--debug")
 	useOllama := scanFlag("--ollama")
 	useOpenRouter := scanFlag("--openrouter")
 
-	var model string
-	var models cfg.LLMModelsSection
+	var llm cfg.LLMSection
 	c, err := config.LoadFromOS()
 	if err == nil {
-		cellCfg := cfg.LoadFromOS(c.ConfigDir, c.BaseDir)
-		if !useOllama {
-			useOllama = cellCfg.LLM.UseOllama
+		llm = cfg.LoadFromOS(c.ConfigDir, c.BaseDir).LLM
+		if !useOllama && !useOpenRouter {
+			useOllama = llm.Provider == cfg.LLMProviderOllama
+			useOpenRouter = llm.Provider == cfg.LLMProviderOpenRouter
 		}
-		if !useOpenRouter {
-			useOpenRouter = cellCfg.LLM.UseOpenRouter
-		}
-		model = cellCfg.LLM.Models.Default
-		models = cellCfg.LLM.Models
 	}
 
 	if useOpenRouter {
-		return codexOpenRouterConfig(model, models, dbg)
+		return codexOpenRouterConfig(llm, dbg)
 	}
 
 	if !useOllama {
@@ -96,12 +92,12 @@ func codexProviderConfig() (flags []string, env map[string]string) {
 	}
 
 	flags = []string{"--oss", "--local-provider", "ollama"}
-	if model != "" {
+	if model := llm.ModelFor(cfg.LLMProviderOllama); model != "" {
 		flags = append(flags, "--model", model)
 	}
 
 	return flags, map[string]string{
-		"CODEX_OSS_BASE_URL": "http://host.docker.internal:11434/v1",
+		"CODEX_OSS_BASE_URL": llmBaseURL(llm, cfg.LLMProviderOllama) + "/v1",
 	}
 }
 
@@ -109,8 +105,8 @@ func codexProviderConfig() (flags []string, env map[string]string) {
 // OpenRouter's OpenAI-compat endpoint. Codex needs wire_api=responses —
 // OpenRouter translates to Chat Completions for models that lack native
 // Responses support. The API key is resolved lazily (after 1Password) via
-// FillOpenRouterKey, requested by the empty OPENROUTER_API_KEY placeholder.
-func codexOpenRouterConfig(configModel string, models cfg.LLMModelsSection, dbg bool) (flags []string, env map[string]string) {
+// cell.FillOpenRouterKey, requested by the empty OPENROUTER_API_KEY placeholder.
+func codexOpenRouterConfig(llm cfg.LLMSection, dbg bool) (flags []string, env map[string]string) {
 	if dbg {
 		fmt.Fprintf(os.Stderr, " codex: openrouter mode enabled\n")
 	}
@@ -118,11 +114,11 @@ func codexOpenRouterConfig(configModel string, models cfg.LLMModelsSection, dbg 
 	flags = []string{
 		"-c", "model_provider=openrouter",
 		"-c", "model_providers.openrouter.name=OpenRouter",
-		"-c", "model_providers.openrouter.base_url=" + openRouterOpenAIBaseURL,
+		"-c", "model_providers.openrouter.base_url=" + llmBaseURL(llm, cfg.LLMProviderOpenRouter) + "/v1",
 		"-c", "model_providers.openrouter.env_key=OPENROUTER_API_KEY",
 		"-c", "model_providers.openrouter.wire_api=responses",
 	}
-	if model := resolveOpenRouterModel(configModel, models, dbg); model != "" {
+	if model := resolveOpenRouterModel(llm, dbg); model != "" {
 		flags = append(flags, "--model", model)
 	}
 

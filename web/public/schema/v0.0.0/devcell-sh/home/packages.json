@@ -1,0 +1,2236 @@
+{
+  "7zz": {
+    "version": "25.01",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "Iosevka-bin": {
+    "version": "33.3.4",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "OVMF": {
+    "version": "202508.01",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "android-tools": {
+    "version": "35.0.2",
+    "stacks": [
+      "bbb",
+      "dev",
+      "fullstack",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "antigravity-cli": {
+    "version": "1.2.9",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "any-chat-completions-mcp": {
+    "version": "0.1.1-unstable-2026-08-30",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "apfs-fuse": {
+    "version": "0-unstable-2023-03-12",
+    "stacks": [
+      "bbb",
+      "fullstack",
+      "go"
+    ]
+  },
+  "apfsprogs": {
+    "version": "0.2.1",
+    "stacks": [
+      "bbb",
+      "fullstack",
+      "go"
+    ]
+  },
+  "apkeep": {
+    "version": "0.17.0",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "aria2": {
+    "version": "1.37.0",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "arjun": {
+    "version": "2.2.7",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "atkinson-hyperlegible": {
+    "version": "0-unstable-2021-04-29",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "aws-api-mcp-server": {
+    "version": "",
+    "stacks": [
+      "bbb",
+      "dev",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "aws-readonly-cred-process": {
+    "version": "",
+    "stacks": [
+      "bbb",
+      "dev",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "awscli2": {
+    "version": "2.31.39",
+    "stacks": [
+      "bbb",
+      "dev",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "barlow": {
+    "version": "1.422",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "biber": {
+    "version": "2.20",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "bind": {
+    "version": "9.20.23",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "binwalk": {
+    "version": "3.1.0",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "bison": {
+    "version": "3.8.2",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "boringtun": {
+    "version": "0.6.0",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "bubblewrap": {
+    "version": "0.11.0",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "cabextract": {
+    "version": "1.11",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "cabin": {
+    "version": "1.005",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "cairo": {
+    "version": "1.18.4",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "cantarell-fonts": {
+    "version": "0.303.1",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "capstone": {
+    "version": "5.0.7",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "cascadia-code": {
+    "version": "2407.24",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "cdrkit": {
+    "version": "1.1.11-4",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "chromium": {
+    "version": "",
+    "stacks": [
+      "bbb",
+      "dev",
+      "fullstack",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "clang": {
+    "version": "21.1.7",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "clang-wrapper": {
+    "version": "21.1.7",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "claude-code": {
+    "version": "2.1.283",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "cloudwatch-mcp-server": {
+    "version": "",
+    "stacks": [
+      "bbb",
+      "dev",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "cmake": {
+    "version": "4.1.2",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "codex": {
+    "version": "0.157.0",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "comic-neue": {
+    "version": "2.51",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "corefonts": {
+    "version": "1",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "curl": {
+    "version": "8.20.0",
+    "stacks": [
+      "core"
+    ]
+  },
+  "dalfox": {
+    "version": "2.12.0",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "dasel": {
+    "version": "2.8.1",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "dbus": {
+    "version": "1.14.10",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "deadnix": {
+    "version": "1.3.1",
+    "stacks": [
+      "bbb",
+      "ultimate"
+    ]
+  },
+  "dejavu-fonts": {
+    "version": "2.37",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "detect-it-easy": {
+    "version": "3.10",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "dm-sans": {
+    "version": "1.002",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "drawio-headless-29.0.3": {
+    "version": "",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "dummy-fc-dir1": {
+    "version": "",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "dummy-fc-dir2": {
+    "version": "",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "esphome": {
+    "version": "2025.11.5",
+    "stacks": [
+      "bbb",
+      "electronics"
+    ]
+  },
+  "expect": {
+    "version": "5.45.4",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "feh": {
+    "version": "3.11.2",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "ffmpeg": {
+    "version": "8.0",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "ffuf": {
+    "version": "2.1.0",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "fira-code": {
+    "version": "6.2",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "fira-sans": {
+    "version": "4.301",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "flex": {
+    "version": "2.6.4",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "fontconfig": {
+    "version": "2.17.1",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "foremost": {
+    "version": "1.5.7",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "fraunces": {
+    "version": "1.000",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "freerdp": {
+    "version": "3.23.0",
+    "stacks": [
+      "bbb",
+      "electronics"
+    ]
+  },
+  "freetype": {
+    "version": "2.13.3",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "fuse": {
+    "version": "3.17.4",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "gawk": {
+    "version": "5.3.2",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "gdk-pixbuf": {
+    "version": "2.44.6",
+    "stacks": [
+      "bbb",
+      "electronics"
+    ]
+  },
+  "gemini-cli": {
+    "version": "0.47.0",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "gentium": {
+    "version": "7.000",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "ghidra": {
+    "version": "11.4.2",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "ghostscript-with-X": {
+    "version": "10.06.0",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "gimp": {
+    "version": "3.0.4",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "gimp-mcp": {
+    "version": "0.1.0",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "git": {
+    "version": "2.51.2",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "git-lfs": {
+    "version": "3.7.1",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "gitleaks": {
+    "version": "8.28.0",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "glew": {
+    "version": "2.2.0",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "glib": {
+    "version": "2.86.3",
+    "stacks": [
+      "bbb",
+      "electronics"
+    ]
+  },
+  "glibc-locales": {
+    "version": "2.40",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "glu": {
+    "version": "9.0.3",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "gnugrep": {
+    "version": "3.12",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "gnumake": {
+    "version": "4.4.1",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "gnupg": {
+    "version": "2.4.9",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "gnused": {
+    "version": "4.9",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "gnutar": {
+    "version": "1.35",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "go-swag": {
+    "version": "1.16.6",
+    "stacks": [
+      "bbb",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "go-task": {
+    "version": "3.45.5",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "gobuster": {
+    "version": "3.8.2",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "golangci-lint": {
+    "version": "2.6.2",
+    "stacks": [
+      "bbb",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "gopls": {
+    "version": "0.20.0",
+    "stacks": [
+      "bbb",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "gotools": {
+    "version": "0.34.0",
+    "stacks": [
+      "bbb",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "graphene": {
+    "version": "1.10.8",
+    "stacks": [
+      "bbb",
+      "electronics"
+    ]
+  },
+  "gtk4": {
+    "version": "4.20.3",
+    "stacks": [
+      "bbb",
+      "electronics"
+    ]
+  },
+  "harfbuzz": {
+    "version": "12.1.0",
+    "stacks": [
+      "bbb",
+      "electronics"
+    ]
+  },
+  "hexedit": {
+    "version": "1.6",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "home-manager": {
+    "version": "",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "httpx": {
+    "version": "1.7.2",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "hubstaff-mcp": {
+    "version": "0.1.3-unstable-2026-03-27",
+    "stacks": [
+      "bbb",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "hugo": {
+    "version": "0.152.2",
+    "stacks": [
+      "bbb",
+      "fullstack",
+      "node",
+      "ultimate"
+    ]
+  },
+  "hurl": {
+    "version": "7.1.0",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "ibm-plex": {
+    "version": "1.1.0",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "icewm": {
+    "version": "3.8.2",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "imagemagick": {
+    "version": "7.1.2-23",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "inkscape": {
+    "version": "1.4.2",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "inkscape-mcp": {
+    "version": "0.1.0",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "inoreader-mcp": {
+    "version": "0.1.0-unstable-2026-03-20",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "inter": {
+    "version": "4.1",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "jadx": {
+    "version": "1.5.0",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "jq": {
+    "version": "1.8.1",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "karla": {
+    "version": "2.004",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "katana": {
+    "version": "1.2.2",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "kicad-mcp": {
+    "version": "0-unstable-2025-02-24",
+    "stacks": [
+      "bbb",
+      "electronics"
+    ]
+  },
+  "kicad-small": {
+    "version": "9.0.6",
+    "stacks": [
+      "bbb",
+      "electronics"
+    ]
+  },
+  "kitty": {
+    "version": "0.44.0",
+    "stacks": [
+      "bbb",
+      "electronics"
+    ]
+  },
+  "kubectl": {
+    "version": "1.34.3",
+    "stacks": [
+      "bbb",
+      "dev",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "kubernetes-helm": {
+    "version": "3.19.1",
+    "stacks": [
+      "bbb",
+      "dev",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "lato": {
+    "version": "2.0",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "lexend": {
+    "version": "0.pre+date=2022-09-22",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "libepoxy": {
+    "version": "1.5.10",
+    "stacks": [
+      "bbb",
+      "electronics"
+    ]
+  },
+  "liberation-fonts": {
+    "version": "2.1.5",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "libglvnd": {
+    "version": "1.7.0",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "librsvg": {
+    "version": "2.61.3",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "libsoup": {
+    "version": "3.6.6",
+    "stacks": [
+      "bbb",
+      "electronics"
+    ]
+  },
+  "libspnav": {
+    "version": "1.2",
+    "stacks": [
+      "bbb",
+      "electronics"
+    ]
+  },
+  "libtiff": {
+    "version": "4.7.1",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "libx11": {
+    "version": "1.8.12",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "libxcursor": {
+    "version": "1.2.3",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "libxi": {
+    "version": "1.8.2",
+    "stacks": [
+      "bbb",
+      "electronics"
+    ]
+  },
+  "libxkbcommon": {
+    "version": "1.11.0",
+    "stacks": [
+      "bbb",
+      "electronics"
+    ]
+  },
+  "libxkbfile": {
+    "version": "1.1.3",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "libxrandr": {
+    "version": "1.5.4",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "libxslt": {
+    "version": "1.1.45",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "lld": {
+    "version": "21.1.7",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "llvm": {
+    "version": "21.1.7",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "mailslurp-mcp": {
+    "version": "0.1.0",
+    "stacks": [
+      "bbb",
+      "fullstack"
+    ]
+  },
+  "man-db": {
+    "version": "2.13.1",
+    "stacks": [
+      "base",
+      "bbb",
+      "core",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "marp-cli": {
+    "version": "4.2.3",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "mastodon-mcp-server": {
+    "version": "1.0.1-unstable-2026-07-03",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "mcp-google-map": {
+    "version": "0.0.47",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "mcp-server-patchright": {
+    "version": "0.0.68-pr1.60.2",
+    "stacks": [
+      "bbb",
+      "dev",
+      "fullstack",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "mesa": {
+    "version": "25.2.6",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "mise": {
+    "version": "2026.8.6",
+    "stacks": [
+      "bbb",
+      "dev",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "montserrat": {
+    "version": "9.000",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "msitools": {
+    "version": "0.106",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "n8n-mcp-server": {
+    "version": "0.1.8",
+    "stacks": [
+      "bbb",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "nerd-fonts-jetbrains-mono": {
+    "version": "3.4.0+2.304",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "ngspice": {
+    "version": "45",
+    "stacks": [
+      "bbb",
+      "electronics"
+    ]
+  },
+  "nikto": {
+    "version": "2.5.0",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "nix-diff": {
+    "version": "1.0.21",
+    "stacks": [
+      "bbb",
+      "ultimate"
+    ]
+  },
+  "nix-ld": {
+    "version": "2.0.6",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "nix-output-monitor": {
+    "version": "2.1.8",
+    "stacks": [
+      "bbb",
+      "ultimate"
+    ]
+  },
+  "nix-prefetch-github": {
+    "version": "7.1.0",
+    "stacks": [
+      "bbb",
+      "ultimate"
+    ]
+  },
+  "nix-tree": {
+    "version": "0.7.0",
+    "stacks": [
+      "bbb",
+      "ultimate"
+    ]
+  },
+  "nix-update": {
+    "version": "1.14.0",
+    "stacks": [
+      "bbb",
+      "ultimate"
+    ]
+  },
+  "nix-zsh-completions": {
+    "version": "0.5.1",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "nixfmt": {
+    "version": "1.3.1",
+    "stacks": [
+      "bbb",
+      "ultimate"
+    ]
+  },
+  "nmap": {
+    "version": "7.98",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "notion-mcp-server": {
+    "version": "",
+    "stacks": [
+      "bbb",
+      "dev",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "noto-fonts": {
+    "version": "2025.11.01",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "noto-fonts-cjk-sans": {
+    "version": "2.004",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "noto-fonts-color-emoji": {
+    "version": "2.051",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "nuclei": {
+    "version": "3.8.0",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "nuclei-templates": {
+    "version": "10.3.2",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "open-sans": {
+    "version": "1.11",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "opencode": {
+    "version": "1.18.31",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "opentofu-mcp-server": {
+    "version": "1.0.0",
+    "stacks": [
+      "bbb",
+      "dev",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "osslsigncode": {
+    "version": "2.12",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "p7zip": {
+    "version": "17.06",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "packer": {
+    "version": "1.14.2",
+    "stacks": [
+      "bbb",
+      "dev",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "pandoc-cli": {
+    "version": "3.7.0.2",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "pango": {
+    "version": "1.57.0",
+    "stacks": [
+      "bbb",
+      "electronics"
+    ]
+  },
+  "paratype-pt-sans": {
+    "version": "2.005",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "patchright-mcp-cell": {
+    "version": "",
+    "stacks": [
+      "bbb",
+      "dev",
+      "fullstack",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "pev": {
+    "version": "0-unstable-2020-05-23",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "pkg-config-wrapper": {
+    "version": "0.29.2",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "platformio": {
+    "version": "6.1.18",
+    "stacks": [
+      "bbb",
+      "electronics"
+    ]
+  },
+  "plex-mcp-server": {
+    "version": "1.1.7-unstable-2026-05-23",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "poppins": {
+    "version": "4.003",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "poppler-utils": {
+    "version": "25.10.0",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "porter": {
+    "version": "0.68.11",
+    "stacks": [
+      "bbb",
+      "dev",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "potrace": {
+    "version": "1.16",
+    "stacks": [
+      "bbb",
+      "ultimate"
+    ]
+  },
+  "powershell": {
+    "version": "7.5.4",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "pre-commit": {
+    "version": "4.3.0",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "pulseaudio": {
+    "version": "17.0",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "pulseaudio-module-xrdp": {
+    "version": "0.8",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "python3": {
+    "version": "3.13.12",
+    "stacks": [
+      "bbb",
+      "fullstack",
+      "python",
+      "ultimate"
+    ]
+  },
+  "qemu": {
+    "version": "10.1.5",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "quicksand": {
+    "version": "2.0-unstable-2021-01-15",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "radare2": {
+    "version": "6.1.2",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "raleway": {
+    "version": "4.101",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "ripgrep": {
+    "version": "15.1.0",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "rizin": {
+    "version": "0.8.2",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "roboto": {
+    "version": "3.012",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "ropper": {
+    "version": "1.13.13",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "rsync": {
+    "version": "3.4.1",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "rubik": {
+    "version": "2.200",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "shared-mime-info": {
+    "version": "2.4",
+    "stacks": [
+      "base",
+      "bbb",
+      "core",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "sleuthkit": {
+    "version": "4.14.0",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "snixembed": {
+    "version": "0.3.3",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "source-sans": {
+    "version": "3.052",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "source-serif": {
+    "version": "4.005",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "sox": {
+    "version": "unstable-2021-05-09",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "sqlite": {
+    "version": "3.50.4",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "sqlmap": {
+    "version": "1.9.11",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "starship": {
+    "version": "1.24.2",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "statix": {
+    "version": "0.5.8",
+    "stacks": [
+      "bbb",
+      "ultimate"
+    ]
+  },
+  "subfinder": {
+    "version": "2.10.0",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "swift-wrapper": {
+    "version": "5.10.1",
+    "stacks": [
+      "bbb",
+      "fullstack",
+      "go"
+    ]
+  },
+  "swtpm": {
+    "version": "0.10.1",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "tectonic-wrapped-0.15.0": {
+    "version": "",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "terraform-docs": {
+    "version": "0.20.0",
+    "stacks": [
+      "bbb",
+      "dev",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "terraform-plugin-docs": {
+    "version": "0.24.0",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "texlive-combined-medium-2025.20250703": {
+    "version": "",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "tini": {
+    "version": "0.19.0",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "tinyxxd": {
+    "version": "1.3.7",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "tmux": {
+    "version": "3.6a",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "tmuxp": {
+    "version": "1.56.0",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "tree": {
+    "version": "2.2.1",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "tripit-mcp": {
+    "version": "0.1.0",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "typst": {
+    "version": "0.14.2",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "ubuntu-sans": {
+    "version": "1.006",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "unzip": {
+    "version": "6.0",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "upx": {
+    "version": "5.0.2",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "uv": {
+    "version": "0.9.30",
+    "stacks": [
+      "bbb",
+      "fullstack",
+      "python",
+      "ultimate"
+    ]
+  },
+  "virtiofsd": {
+    "version": "1.13.2",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "vollkorn": {
+    "version": "4.105",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "vulkan-loader": {
+    "version": "1.4.328.0",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "wafw00f": {
+    "version": "2.3.2",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "wappalyzergo": {
+    "version": "0.2.73",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "wayland": {
+    "version": "1.24.0",
+    "stacks": [
+      "bbb",
+      "electronics"
+    ]
+  },
+  "webkitgtk": {
+    "version": "2.52.4",
+    "stacks": [
+      "bbb",
+      "electronics"
+    ]
+  },
+  "wget": {
+    "version": "1.25.0",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "whatweb": {
+    "version": "0.6.2",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "wimlib": {
+    "version": "1.14.4",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "fullstack",
+      "go",
+      "ultimate"
+    ]
+  },
+  "wine64-staging": {
+    "version": "11.9",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "winetricks": {
+    "version": "20260125",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "wireguard-tools": {
+    "version": "1.0.20250521",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "wokwi-cli": {
+    "version": "0.26.1",
+    "stacks": [
+      "bbb",
+      "electronics"
+    ]
+  },
+  "work-sans": {
+    "version": "2.010",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "wxwidgets": {
+    "version": "3.2.8.1",
+    "stacks": [
+      "bbb",
+      "electronics"
+    ]
+  },
+  "x11vnc": {
+    "version": "0.9.17",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "xclip": {
+    "version": "0.13",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "xdg-utils": {
+    "version": "1.2.1",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "xdotool": {
+    "version": "3.20211022.1",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "xorg-server": {
+    "version": "21.1.23",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "xorgproto": {
+    "version": "2024.1",
+    "stacks": [
+      "bbb",
+      "electronics"
+    ]
+  },
+  "xrandr": {
+    "version": "1.5.3",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "xrdb": {
+    "version": "1.2.2",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "xrdp": {
+    "version": "0.10.6",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "xset": {
+    "version": "1.2.5",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "xsetroot": {
+    "version": "1.1.3",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "xterm": {
+    "version": "403",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "yara": {
+    "version": "4.5.5",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "yq-go": {
+    "version": "4.50.1",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  },
+  "yt-dlp": {
+    "version": "2026.08.19",
+    "stacks": [
+      "bbb"
+    ]
+  },
+  "zilla-slab": {
+    "version": "1.002",
+    "stacks": [
+      "bbb",
+      "electronics",
+      "ultimate"
+    ]
+  },
+  "zsh": {
+    "version": "5.9",
+    "stacks": [
+      "base",
+      "bbb",
+      "dev",
+      "electronics",
+      "fullstack",
+      "go",
+      "node",
+      "python",
+      "ultimate"
+    ]
+  }
+}

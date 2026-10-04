@@ -70,11 +70,6 @@ func (s *Server) SetAPIKey(key string) {
 	s.apiKey = key
 }
 
-// APIKey returns the configured API key.
-func (s *Server) APIKey() string {
-	return s.apiKey
-}
-
 // SetLogPrompts enables or disables full prompt + response body logging.
 //
 // When true, /v1/chat/completions and /v1/responses handlers log the

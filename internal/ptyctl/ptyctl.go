@@ -24,72 +24,6 @@ type Terminal struct {
 	outBuf []byte
 }
 
-func Start(ctx context.Context, name string, args ...string) (*Terminal, error) {
-	const (
-		width  = 120
-		height = 40
-	)
-
-	pty, err := xpty.NewPty(width, height)
-	if err != nil {
-		return nil, fmt.Errorf("create pty: %w", err)
-	}
-
-	emu := vt.NewSafeEmulator(width, height)
-
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Env = append(cmd.Environ(), "TERM=xterm-256color")
-	if err := pty.Start(cmd); err != nil {
-		pty.Close()
-		return nil, fmt.Errorf("start %s: %w", name, err)
-	}
-
-	t := &Terminal{
-		pty:  pty,
-		emu:  emu,
-		cmd:  cmd,
-		done: make(chan error, 1),
-	}
-
-	// pump pty output → emulator + output buffer
-	go func() {
-		buf := make([]byte, 4096)
-		for {
-			n, err := pty.Read(buf)
-			if n > 0 {
-				emu.Write(buf[:n])
-				t.outMu.Lock()
-				t.outBuf = append(t.outBuf, buf[:n]...)
-				t.outMu.Unlock()
-			}
-			if err != nil {
-				break
-			}
-		}
-	}()
-
-	// pump emulator responses → pty input (terminal query answers)
-	go func() {
-		buf := make([]byte, 256)
-		for {
-			n, err := emu.Read(buf)
-			if n > 0 {
-				pty.Write(buf[:n])
-			}
-			if err != nil {
-				break
-			}
-		}
-	}()
-
-	// wait for process exit
-	go func() {
-		t.done <- xpty.WaitProcess(ctx, cmd)
-	}()
-
-	return t, nil
-}
-
 // Screen returns the current text content of the virtual terminal.
 func (t *Terminal) Screen() string {
 	return t.emu.String()
@@ -196,31 +130,25 @@ func (t *Terminal) ReadOutput(p []byte) (int, error) {
 	return t.pty.Read(p)
 }
 
-// Cmd returns the underlying exec.Cmd for env/dir configuration before Start.
-// Only useful when building a Terminal manually; Start() already configures it.
+// Cmd returns the underlying exec.Cmd. StartWithOptions has already
+// configured and started it.
 func (t *Terminal) Cmd() *exec.Cmd {
 	return t.cmd
 }
 
-// WithEnv returns a StartOption that adds environment variables.
+// StartOption configures StartWithOptions.
 type StartOption func(*startConfig)
 
 type startConfig struct {
 	env    []string
-	dir    string
 	width  int
 	height int
 }
 
+// WithEnv returns a StartOption that adds environment variables.
 func WithEnv(env ...string) StartOption {
 	return func(c *startConfig) {
 		c.env = append(c.env, env...)
-	}
-}
-
-func WithDir(dir string) StartOption {
-	return func(c *startConfig) {
-		c.dir = dir
 	}
 }
 
@@ -249,9 +177,6 @@ func StartWithOptions(ctx context.Context, opts []StartOption, name string, args
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = append(cmd.Environ(), "TERM=xterm-256color")
 	cmd.Env = append(cmd.Env, cfg.env...)
-	if cfg.dir != "" {
-		cmd.Dir = cfg.dir
-	}
 	if err := pty.Start(cmd); err != nil {
 		pty.Close()
 		return nil, fmt.Errorf("start %s: %w", name, err)
@@ -321,8 +246,5 @@ func (t *Terminal) OutputSince(from int) []byte {
 	copy(out, t.outBuf[from:])
 	return out
 }
-
-// Ignore makes io.Copy-style helpers discard errors (used for pump goroutines).
-func ignore(_ int, _ error) {}
 
 var _ io.Closer = (*Terminal)(nil)

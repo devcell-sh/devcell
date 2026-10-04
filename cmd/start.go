@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/DimmKirr/devcell/internal/config"
-	"github.com/DimmKirr/devcell/internal/runner"
+	"github.com/DimmKirr/devcell/internal/engine/docker"
 	"github.com/spf13/cobra"
 )
 
@@ -22,7 +22,7 @@ Use 'cell shell' to attach, 'cell stop' to shut it down.`,
 		if err != nil {
 			return fmt.Errorf("load config: %w", err)
 		}
-		if runner.ContainerRunning(context.Background(), c.ContainerName) {
+		if docker.ContainerRunning(context.Background(), c.ContainerName) {
 			fmt.Printf("Container %s is already running\n", c.ContainerName)
 			return nil
 		}

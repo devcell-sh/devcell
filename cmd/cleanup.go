@@ -6,7 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/DimmKirr/devcell/internal/runner"
+	"github.com/DimmKirr/devcell/internal/engine/docker"
 	"github.com/DimmKirr/devcell/internal/telemetry"
 	"github.com/DimmKirr/devcell/internal/ux"
 	"github.com/mattn/go-isatty"
@@ -45,10 +45,10 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	closures, err := runner.CollectLiveClosures(
-		func() ([]string, error) { return runner.DockerRunningDevcellContainers(ctx) },
+	closures, err := docker.CollectLiveClosures(
+		func() ([]string, error) { return docker.DockerRunningDevcellContainers(ctx) },
 		func(container, link string) (string, error) {
-			return runner.DockerResolveContainerLink(ctx, container, link)
+			return docker.DockerResolveContainerLink(ctx, container, link)
 		},
 		ux.Debugf,
 	)
@@ -56,9 +56,9 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	return runner.RunCleanup(runner.RunCleanupArgs{
+	return docker.RunCleanup(docker.RunCleanupArgs{
 		Closures: closures,
-		Exec:     func(step runner.PruneStep) error { return execStep(ctx, step) },
+		Exec:     func(step docker.PruneStep) error { return execStep(ctx, step) },
 		Out:      os.Stdout,
 		In:       os.Stdin,
 		SkipYes:  yes,
