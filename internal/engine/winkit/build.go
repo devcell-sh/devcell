@@ -35,13 +35,19 @@ const legacyPEArtifactName = "winkit-core.qcow2"
 // buildOpts selects winkit's build stage for g, both with a nix WSL1
 // distro: pe-wsl for WindowsPE, full-wsl for WindowsFull.
 func buildOpts(g guest, nixHome string) *buildopts.BuildOpts {
-	return &buildopts.BuildOpts{
+	opts := &buildopts.BuildOpts{
 		PE: !g.full,
 		WSL: &buildopts.WSLConfig{
 			Image:   "nix",
 			NixHome: nixHome,
 		},
 	}
+	if png, err := RenderWallpaper(nixHome, ""); err == nil && len(png) > 0 {
+		opts.WallpaperName = wallpaperPNGName
+		opts.WallpaperData = png
+		ux.Debugf("wallpaper: rendered static PNG (%d bytes)", len(png))
+	}
+	return opts
 }
 
 // artifactPath is where a build of g writes its image, named the way
@@ -56,12 +62,16 @@ func artifactPath(home string, g guest, stack string, modules []string) string {
 // buildConfig assembles a go-winkit build.Config for guest g of cell c.
 // windowsISO and virtioISO are resolved paths passed in by the caller.
 func buildConfig(c engine.Cell, g guest, windowsISO, virtioISO string) build.Config {
+	opts := buildOpts(g, os.Getenv("DEVCELL_NIXHOME"))
+	if c.Name != "" {
+		opts.Hostname = c.Name
+	}
 	return build.Config{
 		Dest:       artifactPath(c.HostHome, g, c.Stack, c.Modules),
 		CacheDir:   CacheDir(c.HostHome),
 		WindowsISO: windowsISO,
 		VirtIOISO:  virtioISO,
-		Opts:       buildOpts(g, os.Getenv("DEVCELL_NIXHOME")),
+		Opts:       opts,
 	}
 }
 

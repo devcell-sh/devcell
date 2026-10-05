@@ -178,6 +178,10 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	}
 	logf("guest SSH ready")
 
+	if g.full {
+		setRuntimeWallpaper(ctx, ch, c.Name, logf)
+	}
+
 	return execInGuest(ctx, ch, cmd, logf)
 }
 

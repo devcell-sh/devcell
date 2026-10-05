@@ -49,6 +49,8 @@ func TestRunBuildQemu_CallsBuildWithCorrectConfig(t *testing.T) {
 	assert.Equal(t, "nix", capturedCfg.Opts.WSL.Image)
 	assert.Equal(t, "/fake/nixhome", capturedCfg.Opts.WSL.NixHome)
 	assert.Equal(t, imagePath(tmpHome, guestPE, "base", nil), capturedCfg.Dest)
+	assert.Equal(t, "test-cell", capturedCfg.Opts.Hostname,
+		"Hostname must be set from cell name")
 }
 
 // --stack builds that stack's image instead of the cell's resolved one.
