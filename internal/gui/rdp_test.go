@@ -12,15 +12,23 @@ import (
 )
 
 func TestRDPUrl(t *testing.T) {
-	got := gui.RDPUrl("389")
+	got := gui.RDPUrl("127.0.0.1", "389")
 	want := "rdp://full%20address=s%3A127.0.0.1%3A389"
 	if got != want {
 		t.Errorf("want %q, got %q", want, got)
 	}
 }
 
+func TestRDPUrl_NonLocalhost(t *testing.T) {
+	got := gui.RDPUrl("192.168.64.5", "3389")
+	want := "rdp://full%20address=s%3A192.168.64.5%3A3389"
+	if got != want {
+		t.Errorf("want %q, got %q", want, got)
+	}
+}
+
 func TestRoyalTSXUrl(t *testing.T) {
-	got := gui.RoyalTSXUrl("389", "dmitry", "rdp")
+	got := gui.RoyalTSXUrl("127.0.0.1", "389", "dmitry", "rdp")
 	want := "rtsx://rdp://dmitry:rdp@127.0.0.1:389"
 	if got != want {
 		t.Errorf("want %q, got %q", want, got)

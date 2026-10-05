@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -291,109 +292,135 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 			logf("VM already running (not managed by this session)")
 		}
 
+		// --- Helper: run a script in the VM with PhaseRunner visibility ---
+		// When --debug is active, output streams live to the terminal.
+		tartExec := func(script string) (string, string, error) {
+			var stdout, stderr strings.Builder
+			cmd := exec.CommandContext(ctx, "tart", "exec", instanceName, "bash", "-l", "-c", script)
+			if ux.Verbose {
+				cmd.Stdout = io.MultiWriter(os.Stdout, &stdout)
+				cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
+			} else {
+				cmd.Stdout = &stdout
+				cmd.Stderr = &stderr
+			}
+			err := cmd.Run()
+			return strings.TrimSpace(stdout.String()), strings.TrimSpace(stderr.String()), err
+		}
+
+		var pr ux.PhaseRunner
+
 		// Verify provisioning completed — retry a few times as tart exec
 		// may fail immediately after boot while the guest agent starts.
-		diagScript := `echo "whoami=$(whoami) home=$HOME"; ls -la /private/var/devcell-provisioned 2>&1; test -f /private/var/devcell-provisioned`
-		var checkErr error
-		for attempt := 1; attempt <= 10; attempt++ {
-			checkCmd := exec.CommandContext(ctx, "tart", "exec", instanceName, "bash", "-l", "-c", diagScript)
-			var checkOut, checkStderr strings.Builder
-			checkCmd.Stdout = &checkOut
-			checkCmd.Stderr = &checkStderr
-			checkErr = checkCmd.Run()
-			if checkErr == nil {
-				logf("provisioned marker check attempt %d/10: OK (stdout: %s)", attempt, strings.TrimSpace(checkOut.String()))
-				break
+		if err := pr.Phase("Verifying provisioned marker", func() error {
+			diagScript := `echo "whoami=$(whoami) home=$HOME"; ls -la /private/var/devcell-provisioned 2>&1; test -f /private/var/devcell-provisioned`
+			var checkErr error
+			for attempt := 1; attempt <= 10; attempt++ {
+				out, errOut, err := tartExec(diagScript)
+				checkErr = err
+				if checkErr == nil {
+					logf("provisioned marker check attempt %d/10: OK (stdout: %s)", attempt, out)
+					break
+				}
+				logf("provisioned marker check attempt %d/10 failed: %v (stdout: %s) (stderr: %s)", attempt, checkErr, out, errOut)
+				time.Sleep(3 * time.Second)
 			}
-			logf("provisioned marker check attempt %d/10 failed: %v (stdout: %s) (stderr: %s)", attempt, checkErr, strings.TrimSpace(checkOut.String()), strings.TrimSpace(checkStderr.String()))
-			time.Sleep(3 * time.Second)
+			if checkErr != nil {
+				return fmt.Errorf("VM %s exists but provisioning is incomplete — run `cell build --engine=tart --force`", instanceName)
+			}
+			return nil
+		}); err != nil {
+			return err
 		}
-		if checkErr != nil {
-			return fmt.Errorf("VM %s exists but provisioning is incomplete — run `cell build --engine=tart --force`", instanceName)
+
+		// Set hostname to cell name so `hostname -s` returns it (used by
+		// the nix home-manager set-wallpaper activation for CELL_ID).
+		if err := pr.Phase("Set hostname", func() error {
+			script := GenerateSetHostnameScript(cellName)
+			out, errOut, err := tartExec(script)
+			if err != nil {
+				logf("set hostname failed: %v (stdout: %s) (stderr: %s)", err, out, errOut)
+			} else {
+				logf("hostname: %s", out)
+			}
+			return nil
+		}); err != nil {
+			return err
 		}
-		logf("provisioned marker verified")
 
 		// Create the cell user matching host's $USER (like Docker's HOST_USER)
-		logf("session user: %s", cellUser)
-
 		if cellUser != "admin" {
-			createUserScript := GenerateCreateSessionUserScript(cellUser)
-			logf("creating session user %s in VM", cellUser)
-			var cuOut, cuErr strings.Builder
-			cuCmd := exec.CommandContext(ctx, "tart", "exec", instanceName, "bash", "-l", "-c", createUserScript)
-			cuCmd.Stdout = &cuOut
-			cuCmd.Stderr = &cuErr
-			if err := cuCmd.Run(); err != nil {
-				logf("session user creation failed: %v (stdout: %s) (stderr: %s)", err, strings.TrimSpace(cuOut.String()), strings.TrimSpace(cuErr.String()))
-				return fmt.Errorf("creating session user %s in VM: %w", cellUser, err)
-			}
-			logf("session user setup: %s", strings.TrimSpace(cuOut.String()))
+			if err := pr.Phase("Session user setup", func() error {
+				logf("session user: %s", cellUser)
+				createUserScript := GenerateCreateSessionUserScript(cellUser)
+				out, errOut, err := tartExec(createUserScript)
+				if err != nil {
+					logf("session user creation failed: %v (stdout: %s) (stderr: %s)", err, out, errOut)
+					return fmt.Errorf("creating session user %s in VM: %w", cellUser, err)
+				}
+				logf("session user setup: %s", out)
 
-			setupHomeScript := GenerateSetupSessionHomeScript(cellUser)
-			var shOut, shErr strings.Builder
-			shCmd := exec.CommandContext(ctx, "tart", "exec", instanceName, "bash", "-l", "-c", setupHomeScript)
-			shCmd.Stdout = &shOut
-			shCmd.Stderr = &shErr
-			if err := shCmd.Run(); err != nil {
-				logf("session home setup failed: %v (stdout: %s) (stderr: %s)", err, strings.TrimSpace(shOut.String()), strings.TrimSpace(shErr.String()))
-			} else {
-				logf("session home: %s", strings.TrimSpace(shOut.String()))
+				setupHomeScript := GenerateSetupSessionHomeScript(cellUser)
+				out, errOut, err = tartExec(setupHomeScript)
+				if err != nil {
+					logf("session home setup failed: %v (stdout: %s) (stderr: %s)", err, out, errOut)
+				} else {
+					logf("session home: %s", out)
+				}
+				return nil
+			}); err != nil {
+				return err
 			}
 		}
 
-		// --- Repair /nix shadow mount (pre-fix templates) ---
+		// Repair /nix shadow mount (pre-fix templates).
 		// The installer's darwin-store daemon can mount its tiny APFS volume
 		// over the JHFS+ nix disk at clone boot, hiding the nix-darwin system
 		// profile and s6. Detect and repair before anything touches /nix.
-		{
+		if err := pr.Phase("Nix shadow repair", func() error {
 			repairScript := GenerateNixShadowRepairScript()
-			var repOut, repErr strings.Builder
-			repCmd := exec.CommandContext(ctx, "tart", "exec", instanceName, "bash", "-l", "-c", repairScript)
-			repCmd.Stdout = &repOut
-			repCmd.Stderr = &repErr
-			if err := repCmd.Run(); err != nil {
-				logf("nix shadow repair failed: %v\nstdout: %s\nstderr: %s", err, strings.TrimSpace(repOut.String()), strings.TrimSpace(repErr.String()))
+			out, errOut, err := tartExec(repairScript)
+			if err != nil {
+				logf("nix shadow repair failed: %v\nstdout: %s\nstderr: %s", err, out, errOut)
 			} else {
-				logf("nix shadow: %s", strings.TrimSpace(repOut.String()))
+				logf("nix shadow: %s", out)
 			}
+			return nil
+		}); err != nil {
+			return err
 		}
 
-		// --- Activate s6 services for the cell user ---
+		// Activate s6 services for the cell user.
 		// Runs s6 oneshot services (shell-rc, claude-config, etc.) that set up
 		// the cell user's environment.
-		{
+		if err := pr.Phase("Activate s6 session services", func() error {
 			s6Script := GenerateS6SessionActivateScript(cellUser)
 			logf("activating s6 session services for %s (envDir=%s svcDir=%s)", cellUser, S6EnvDir, S6ServicesDir)
 			logf("s6 script:\n%s", s6Script)
-			var s6Out, s6Err strings.Builder
-			s6Cmd := exec.CommandContext(ctx, "tart", "exec", instanceName, "bash", "-l", "-c", s6Script)
-			s6Cmd.Stdout = &s6Out
-			s6Cmd.Stderr = &s6Err
-			if err := s6Cmd.Run(); err != nil {
-				logf("s6 session activation failed: %v\nstdout: %s\nstderr: %s", err, strings.TrimSpace(s6Out.String()), strings.TrimSpace(s6Err.String()))
+			out, errOut, err := tartExec(s6Script)
+			if err != nil {
+				logf("s6 session activation failed: %v\nstdout: %s\nstderr: %s", err, out, errOut)
 			} else {
-				logf("s6 session: %s", strings.TrimSpace(s6Out.String()))
+				logf("s6 session: %s", out)
 			}
+			return nil
+		}); err != nil {
+			return err
 		}
 
-		// --- Re-activate nix-darwin if /run/current-system is missing ---
+		// Re-activate nix-darwin if /run/current-system is missing.
 		// nix-darwin's boot activation (org.nixos.activate-system) may not
 		// have run yet, or may fail if the nix disk wasn't mounted in time.
-		// The system profile at /nix/var/nix/profiles/system/activate is the
-		// canonical way to re-trigger activation.
-		{
+		if err := pr.PhaseDetailed("Activate nix-darwin", func() (string, error) {
 			checkScript := `echo "nix_mounted=$(mount | grep /nix | head -1 || echo NONE)"
 echo "system_profile=$(ls -la /nix/var/nix/profiles/system 2>/dev/null || echo MISSING)"
 echo "activate_bin=$(test -x /nix/var/nix/profiles/system/activate && echo EXISTS || echo MISSING)"
 test -e /run/current-system && echo "RESULT=OK" || echo "RESULT=MISSING"`
-			var checkOut strings.Builder
-			checkCmd := exec.CommandContext(ctx, "tart", "exec", instanceName, "bash", "-l", "-c", checkScript)
-			checkCmd.Stdout = &checkOut
-			checkErr := checkCmd.Run()
+			checkOut, _, checkErr := tartExec(checkScript)
 			if checkErr == nil {
-				logf("nix-darwin preflight: %s", strings.TrimSpace(checkOut.String()))
+				logf("nix-darwin preflight: %s", checkOut)
 			}
-			if checkErr == nil && strings.Contains(checkOut.String(), "RESULT=MISSING") {
+			if checkErr == nil && strings.Contains(checkOut, "RESULT=MISSING") {
 				logf("nix-darwin: /run/current-system missing — re-activating system profile")
 				activateScript := `set -e
 if [ -x /nix/var/nix/profiles/system/activate ]; then
@@ -405,22 +432,24 @@ else
   echo "NO_PROFILE"
   ls -la /nix/var/nix/profiles/ 2>&1
 fi`
-				var actOut, actErr strings.Builder
-				actCmd := exec.CommandContext(ctx, "tart", "exec", instanceName, "bash", "-l", "-c", activateScript)
-				actCmd.Stdout = &actOut
-				actCmd.Stderr = &actErr
-				if err := actCmd.Run(); err != nil {
-					logf("nix-darwin activation failed: %v\nstdout: %s\nstderr: %s", err, strings.TrimSpace(actOut.String()), strings.TrimSpace(actErr.String()))
+				out, errOut, err := tartExec(activateScript)
+				if err != nil {
+					logf("nix-darwin activation failed: %v\nstdout: %s\nstderr: %s", err, out, errOut)
 				} else {
-					logf("nix-darwin activation: %s", strings.TrimSpace(actOut.String()))
+					logf("nix-darwin activation: %s", out)
 				}
+				return "re-activated", nil
 			} else if checkErr == nil {
 				logf("nix-darwin: /run/current-system present — system already activated")
+				return "already active", nil
 			}
+			return "", nil
+		}); err != nil {
+			return err
 		}
 
-		// --- Diagnostic: verify nix-darwin and home-manager paths ---
-		{
+		// Diagnostic: verify nix-darwin and home-manager paths.
+		if err := pr.Phase("VM diagnostics", func() error {
 			diagScript := fmt.Sprintf(`echo "=== VM PATH DIAGNOSTICS ==="
 
 echo "--- nix-daemon profile ---"
@@ -474,32 +503,32 @@ echo "$PATH"
 echo "=== END DIAGNOSTICS ==="`,
 				DarwinVMUser,
 				cellUser)
-			var diagOut, diagErr strings.Builder
-			diagCmd := exec.CommandContext(ctx, "tart", "exec", instanceName, "bash", "-l", "-c", diagScript)
-			diagCmd.Stdout = &diagOut
-			diagCmd.Stderr = &diagErr
-			if err := diagCmd.Run(); err != nil {
-				logf("VM diagnostics failed: %v\nstderr: %s", err, strings.TrimSpace(diagErr.String()))
+			out, errOut, err := tartExec(diagScript)
+			if err != nil {
+				logf("VM diagnostics failed: %v\nstderr: %s", err, errOut)
 			} else {
-				logf("VM diagnostics:\n%s", diagOut.String())
+				logf("VM diagnostics:\n%s", out)
 			}
+			return nil
+		}); err != nil {
+			return err
 		}
 
-		// Mount project directory inside the VM at the mirrored host path
-		// (e.g. /Users/dmitry/dev/acme/proj on the host appears at the same
-		// path in the VM), falling back to ~/<basename> for projects outside
-		// the host home.
+		// Mount project directory inside the VM at the mirrored host path.
 		projectPathVM := ProjectPathInVM(hostHome, baseDir, cellUser)
-		mountScript := GenerateProjectMountScript("project", cellUser, projectPathVM)
-		logf("mounting project dir: tag=project user=%s target=%s", cellUser, projectPathVM)
-		var mountStderr strings.Builder
-		mountCmd := exec.CommandContext(ctx, "tart", "exec", instanceName, "bash", "-l", "-c", mountScript)
-		mountCmd.Stderr = &mountStderr
-		if err := mountCmd.Run(); err != nil {
-			logf("project mount failed: %v (stderr: %s)", err, strings.TrimSpace(mountStderr.String()))
-			return fmt.Errorf("mounting project directory in VM: %w (stderr: %s)", err, strings.TrimSpace(mountStderr.String()))
+		if err := pr.PhaseDetailed("Mount project directory", func() (string, error) {
+			mountScript := GenerateProjectMountScript("project", cellUser, projectPathVM)
+			logf("mounting project dir: tag=project user=%s target=%s", cellUser, projectPathVM)
+			_, errOut, err := tartExec(mountScript)
+			if err != nil {
+				logf("project mount failed: %v (stderr: %s)", err, errOut)
+				return "", fmt.Errorf("mounting project directory in VM: %w (stderr: %s)", err, errOut)
+			}
+			logf("project directory mounted at %s", projectPathVM)
+			return projectPathVM, nil
+		}); err != nil {
+			return err
 		}
-		logf("project directory mounted at %s", projectPathVM)
 	}
 
 	// --- lifecycle: simulated VM start (mock only) ---

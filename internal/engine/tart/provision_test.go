@@ -5,6 +5,19 @@ import (
 	"testing"
 )
 
+func TestSetHostnameScript(t *testing.T) {
+	script := GenerateSetHostnameScript("work")
+	for _, want := range []string{
+		`scutil --set HostName "work"`,
+		`scutil --set ComputerName "work"`,
+		`scutil --set LocalHostName "work"`,
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("hostname script should contain %q", want)
+		}
+	}
+}
+
 func TestSSHEnablementScript(t *testing.T) {
 	script := GenerateSSHEnablementScript()
 	if !strings.Contains(script, "systemsetup -setremotelogin on") {

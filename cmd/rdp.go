@@ -52,11 +52,16 @@ func runRDP(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	port, err := cellPort(gui.RDP, args, rdpGlobal, loadedConfig(c))
+	ep, err := cellEndpoint(gui.RDP, args, rdpGlobal, loadedConfig(c))
 	if err != nil {
 		return err
 	}
-	return openRDP(c, port)
+	// Tart macOS VMs have no xrdp: fall back to VNC.
+	if ep.Engine == "tart" {
+		fmt.Fprintf(os.Stderr, "macOS cell %q has no RDP — opening VNC instead.\n", ep.Addr())
+		return openVNC(ep)
+	}
+	return openRDP(c, ep)
 }
 
 var (
@@ -67,27 +72,27 @@ var (
 
 // openRDP dispatches to the selected viewer.
 // Default: FreeRDP → macOS Windows App fallback (darwin only).
-func openRDP(c config.Config, port string) error {
+func openRDP(c config.Config, ep gui.CellEndpoint) error {
 	switch rdpViewer {
 	case "macrdp":
-		return openMacRDP(port)
+		return openMacRDP(ep)
 	case "royaltsx":
-		return openRoyalTSX(c, port)
+		return openRoyalTSX(c, ep)
 	case "freerdp":
-		return openFreeRDP(c, port)
+		return openFreeRDP(c, ep)
 	case "":
 		// Auto: Royal TSX (darwin) → FreeRDP → macOS Windows App (darwin)
 		if runtime.GOOS == "darwin" && gui.HasRoyalTSX() {
 			guiDebug(gui.RDP, "auto-detected Royal TSX")
-			return openRoyalTSX(c, port)
+			return openRoyalTSX(c, ep)
 		}
 		if client, found := gui.FindClient(); found {
-			return openFreeRDPWith(c, port, client)
+			return openFreeRDPWith(c, ep, client)
 		}
 		if runtime.GOOS == "darwin" {
 			guiDebug(gui.RDP, "no Royal TSX or FreeRDP found, falling back to macOS Windows App")
 			fmt.Fprintf(os.Stderr, "Tip: install Royal TSX or FreeRDP for a better experience:\n  brew install freerdp\n\n")
-			return openMacRDP(port)
+			return openMacRDP(ep)
 		}
 		return fmt.Errorf("%s", gui.InstallHint())
 	default:
@@ -96,19 +101,19 @@ func openRDP(c config.Config, port string) error {
 }
 
 // openFreeRDP connects via FreeRDP (auto-login, clipboard, cert verification).
-func openFreeRDP(c config.Config, port string) error {
+func openFreeRDP(c config.Config, ep gui.CellEndpoint) error {
 	client, found := gui.FindClient()
 	if !found {
 		return fmt.Errorf("%s", gui.InstallHint())
 	}
-	return openFreeRDPWith(c, port, client)
+	return openFreeRDPWith(c, ep, client)
 }
 
-func openFreeRDPWith(c config.Config, port string, client gui.ClientBinary) error {
+func openFreeRDPWith(c config.Config, ep gui.CellEndpoint, client gui.ClientBinary) error {
 	certFlag := gui.CertFlag(c.ConfigDir)
 	guiDebug(gui.RDP, "using %s (%s), cert: %s", client.Name, client.Path, certFlag)
 	args := []string{
-		"/v:127.0.0.1:" + port,
+		"/v:" + ep.Addr(),
 		"/u:" + c.HostUser,
 		"/p:rdp",
 		"/admin",
@@ -132,16 +137,16 @@ func openFreeRDPWith(c config.Config, port string, client gui.ClientBinary) erro
 }
 
 // openMacRDP opens the connection via macOS Windows App (rdp:// URI).
-func openMacRDP(port string) error {
+func openMacRDP(ep gui.CellEndpoint) error {
 	if runtime.GOOS != "darwin" {
 		return fmt.Errorf("macrdp viewer is only available on macOS")
 	}
-	guiDebug(gui.RDP, "opening macOS Windows App for port %s", port)
-	return openURL(gui.RDPUrl(port))
+	guiDebug(gui.RDP, "opening macOS Windows App for %s", ep.Addr())
+	return openURL(gui.RDPUrl(ep.Host, ep.Port))
 }
 
 // openRoyalTSX opens the connection via Royal TSX (rtsx:// URI).
-func openRoyalTSX(c config.Config, port string) error {
-	guiDebug(gui.RDP, "opening Royal TSX for port %s", port)
-	return openURL(gui.RoyalTSXUrl(port, c.HostUser, "rdp"))
+func openRoyalTSX(c config.Config, ep gui.CellEndpoint) error {
+	guiDebug(gui.RDP, "opening Royal TSX for %s", ep.Addr())
+	return openURL(gui.RoyalTSXUrl(ep.Host, ep.Port, c.HostUser, "rdp"))
 }

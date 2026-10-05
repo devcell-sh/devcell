@@ -20,16 +20,26 @@ const (
 	VNC Protocol = "vnc"
 )
 
+// CellEndpoint is the address of a running cell's remote-desktop server.
+type CellEndpoint struct {
+	Host   string // "127.0.0.1" for Docker/WinKit, VM IP for Tart
+	Port   string
+	Engine string // "docker", "winkit", "tart"
+	User   string // ARD auth user for tart (host $USER); empty for other engines
+}
+
+// Addr returns "host:port".
+func (e CellEndpoint) Addr() string { return e.Host + ":" + e.Port }
+
 // protocolSpec is everything that differs between the protocols at this layer.
 type protocolSpec struct {
-	containerPort string                   // port the server listens on inside the cell
-	portEnv       string                   // env var holding the published host port
-	url           func(port string) string // URL shown by `--list`
+	containerPort string // port the server listens on inside the cell
+	portEnv       string // env var holding the published host port
 }
 
 var specs = map[Protocol]protocolSpec{
-	RDP: {containerPort: "3389", portEnv: "EXT_RDP_PORT", url: RDPUrl},
-	VNC: {containerPort: "5900", portEnv: "EXT_VNC_PORT", url: VNCUrl},
+	RDP: {containerPort: "3389", portEnv: "EXT_RDP_PORT"},
+	VNC: {containerPort: "5900", portEnv: "EXT_VNC_PORT"},
 }
 
 // ContainerPort returns the port the protocol's server listens on inside a
@@ -43,8 +53,29 @@ func (p Protocol) PortEnv() string { return specs[p].portEnv }
 // Label returns the protocol name as users see it: "RDP" or "VNC".
 func (p Protocol) Label() string { return strings.ToUpper(string(p)) }
 
-// URL returns the connection URL for a cell published on the given host port.
-func (p Protocol) URL(port string) string { return specs[p].url(port) }
+// TartVNCPassword is the macOS user password set for ARD Screen Sharing
+// auth in Tart VMs. Matches the password set by GenerateCreateSessionUserScript
+// (provision.go) and hosts/macos/default.nix.
+const TartVNCPassword = "admin"
+
+// URL returns the connection URL for a cell endpoint.
+// Tart macOS VMs use ARD auth (ep.User:admin); other engines use legacy VNC.
+func (p Protocol) URL(ep CellEndpoint) string {
+	switch p {
+	case RDP:
+		return RDPUrl(ep.Host, ep.Port)
+	case VNC:
+		if ep.Engine == "tart" {
+			user := ep.User
+			if user == "" {
+				user = "admin"
+			}
+			return VNCUrl(ep.Host, ep.Port, user, TartVNCPassword)
+		}
+		return VNCUrl(ep.Host, ep.Port, "", "vnc")
+	}
+	return ""
+}
 
 // ParseDockerPS parses the output of:
 //

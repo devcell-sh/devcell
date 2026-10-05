@@ -45,11 +45,11 @@ func runVNC(cmd *cobra.Command, args []string) error {
 		return listCells(gui.VNC, vncGlobal)
 	}
 	// The VNC viewers need no config; it is read only to find the cell.
-	port, err := cellPort(gui.VNC, args, vncGlobal, config.LoadFromOS)
+	ep, err := cellEndpoint(gui.VNC, args, vncGlobal, config.LoadFromOS)
 	if err != nil {
 		return err
 	}
-	return openVNC(port)
+	return openVNC(ep)
 }
 
 var vncGlobal bool // set by --global flag
@@ -59,30 +59,32 @@ var vncViewer string
 
 // openVNC dispatches to the selected VNC viewer.
 // Default: Royal TSX (darwin) → TigerVNC → macOS Screen Sharing (darwin).
-func openVNC(port string) error {
+func openVNC(ep gui.CellEndpoint) error {
 	switch vncViewer {
 	case "royaltsx":
-		return openVNCRoyalTSX(port)
+		return openVNCRoyalTSX(ep)
 	case "tigervnc":
-		return openVNCTigerVNC(port)
+		return openVNCTigerVNC(ep)
 	case "screensharing":
-		return openVNCScreenSharing(port)
+		return openVNCScreenSharing(ep)
 	case "":
-		// Auto: Royal TSX → TigerVNC → Screen Sharing
+		// Auto: Royal TSX → TigerVNC (non-tart only) → Screen Sharing
 		if runtime.GOOS == "darwin" && gui.HasRoyalTSX() {
 			guiDebug(gui.VNC, "auto-detected Royal TSX")
-			return openVNCRoyalTSX(port)
+			return openVNCRoyalTSX(ep)
 		}
-		if path, err := exec.LookPath("vncviewer"); err == nil {
-			guiDebug(gui.VNC, "auto-detected TigerVNC at %s", path)
-			return openVNCTigerVNC(port)
+		if ep.Engine != "tart" {
+			if path, err := exec.LookPath("vncviewer"); err == nil {
+				guiDebug(gui.VNC, "auto-detected TigerVNC at %s", path)
+				return openVNCTigerVNC(ep)
+			}
 		}
 		if runtime.GOOS == "darwin" {
 			guiDebug(gui.VNC, "falling back to macOS Screen Sharing")
 			fmt.Fprintf(os.Stderr, "Tip: for a better VNC experience, install one of:\n"+
 				"  1. Royal TSX  — https://royalapps.com/ts/mac\n"+
 				"  2. TigerVNC   — brew install tiger-vnc\n\n")
-			return openVNCScreenSharing(port)
+			return openVNCScreenSharing(ep)
 		}
 		return fmt.Errorf("no VNC viewer found — install one of:\n\n" +
 			"  TigerVNC:\n" +
@@ -94,24 +96,42 @@ func openVNC(port string) error {
 	}
 }
 
-func openVNCRoyalTSX(port string) error {
-	guiDebug(gui.VNC, "opening Royal TSX VNC for port %s", port)
-	return openURL(gui.RoyalTSXVNCUrl(port))
+// vncCredentials returns (user, password) for VNC auth.
+// Tart macOS VMs use ARD auth ($USER:admin); others use VNC legacy ("":vnc).
+func vncCredentials(ep gui.CellEndpoint) (string, string) {
+	if ep.Engine == "tart" {
+		user := ep.User
+		if user == "" {
+			user = "admin"
+		}
+		return user, gui.TartVNCPassword
+	}
+	return "", "vnc"
 }
 
-func openVNCTigerVNC(port string) error {
-	guiDebug(gui.VNC, "opening TigerVNC for port %s", port)
-	cmd := exec.Command("vncviewer", "-passwd", gui.VNCPasswdFile(), "127.0.0.1:"+port)
+func openVNCRoyalTSX(ep gui.CellEndpoint) error {
+	guiDebug(gui.VNC, "opening Royal TSX VNC for %s", ep.Addr())
+	user, pass := vncCredentials(ep)
+	return openURL(gui.RoyalTSXVNCUrl(ep.Host, ep.Port, user, pass))
+}
+
+func openVNCTigerVNC(ep gui.CellEndpoint) error {
+	if ep.Engine == "tart" {
+		return fmt.Errorf("TigerVNC does not support ARD auth — use screensharing or royaltsx for macOS cells")
+	}
+	guiDebug(gui.VNC, "opening TigerVNC for %s", ep.Addr())
+	cmd := exec.Command("vncviewer", "-passwd", gui.VNCPasswdFile(), ep.Addr())
 	if runtime.GOOS == "darwin" {
 		return cmd.Start()
 	}
 	return cmd.Run()
 }
 
-func openVNCScreenSharing(port string) error {
+func openVNCScreenSharing(ep gui.CellEndpoint) error {
 	if runtime.GOOS != "darwin" {
 		return fmt.Errorf("screensharing viewer is only available on macOS")
 	}
-	guiDebug(gui.VNC, "opening macOS Screen Sharing for port %s", port)
-	return openURL(gui.VNCUrl(port))
+	guiDebug(gui.VNC, "opening macOS Screen Sharing for %s", ep.Addr())
+	user, pass := vncCredentials(ep)
+	return openURL(gui.VNCUrl(ep.Host, ep.Port, user, pass))
 }

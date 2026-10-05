@@ -6,6 +6,16 @@ import (
 	"strings"
 )
 
+// GenerateSetHostnameScript returns a script that sets the macOS hostname to
+// cellName via scutil, so `hostname -s` returns the cell name. This lets the
+// nix home-manager set-wallpaper activation read the cell name from the OS.
+func GenerateSetHostnameScript(cellName string) string {
+	return fmt.Sprintf(`sudo scutil --set HostName %q
+sudo scutil --set ComputerName %q
+sudo scutil --set LocalHostName %q
+echo "hostname set to %s"`, cellName, cellName, cellName, cellName)
+}
+
 // GenerateSSHEnablementScript returns a shell script to enable SSH on macOS.
 func GenerateSSHEnablementScript() string {
 	return "sudo systemsetup -setremotelogin on && sudo launchctl load -w /System/Library/LaunchDaemons/ssh.plist"
@@ -519,6 +529,7 @@ sudo dscl . -create /Users/"$USERNAME" NFSHomeDirectory /Users/"$USERNAME"
 sudo mkdir -p /Users/"$USERNAME"
 sudo chown "$USERNAME":staff /Users/"$USERNAME"
 sudo dseditgroup -o edit -a "$USERNAME" -t user admin
+sudo dscl . -passwd /Users/"$USERNAME" admin
 echo "$USERNAME ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/"$USERNAME" > /dev/null
 sudo chmod 440 /etc/sudoers.d/"$USERNAME"
 echo "cell user $USERNAME created (uid=$NEXT_UID)"`, username)

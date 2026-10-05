@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/DimmKirr/devcell/internal/gui"
 	"github.com/DimmKirr/devcell/internal/ux"
 	"github.com/spf13/cobra"
 )
@@ -56,9 +57,9 @@ func parseContainerNames(output string) []string {
 	return names
 }
 
-// selectCell shows an interactive picker when multiple cells are running.
-// Labels show "<name>  docker". Returns the selected key.
-func selectCell(apps map[string]string) (string, error) {
+// selectCellEndpoint shows an interactive picker when multiple cells are running.
+// Labels show "<name>  <engine>". Returns the selected key.
+func selectCellEndpoint(apps map[string]gui.CellEndpoint) (string, error) {
 	var keys []string
 	for key := range apps {
 		keys = append(keys, key)
@@ -66,8 +67,9 @@ func selectCell(apps map[string]string) (string, error) {
 	sort.Strings(keys)
 	opts := make([]ux.SelectOption, len(keys))
 	for i, key := range keys {
+		ep := apps[key]
 		opts[i] = ux.SelectOption{
-			Label: fmt.Sprintf("%-28s %s", key, "docker"),
+			Label: fmt.Sprintf("%-28s %-8s %s", key, ep.Engine, ep.Addr()),
 			Value: key,
 		}
 	}

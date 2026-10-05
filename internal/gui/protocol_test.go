@@ -7,14 +7,29 @@ import (
 	"github.com/DimmKirr/devcell/internal/gui"
 )
 
+func TestCellEndpoint_Addr(t *testing.T) {
+	for _, tc := range []struct {
+		e    gui.CellEndpoint
+		want string
+	}{
+		{gui.CellEndpoint{Host: "127.0.0.1", Port: "389", Engine: "docker"}, "127.0.0.1:389"},
+		{gui.CellEndpoint{Host: "192.168.64.5", Port: "5900", Engine: "tart"}, "192.168.64.5:5900"},
+	} {
+		if got := tc.e.Addr(); got != tc.want {
+			t.Errorf("Addr() = %q, want %q", got, tc.want)
+		}
+	}
+}
+
 func TestProtocol_Spec(t *testing.T) {
+	dockerEP := gui.CellEndpoint{Host: "127.0.0.1", Port: "389", Engine: "docker"}
 	for _, tc := range []struct {
 		p                     gui.Protocol
 		containerPort, env    string
 		label, url, urlPrefix string
 	}{
-		{gui.RDP, "3389", "EXT_RDP_PORT", "RDP", gui.RDPUrl("389"), "rdp://"},
-		{gui.VNC, "5900", "EXT_VNC_PORT", "VNC", gui.VNCUrl("389"), "vnc://"},
+		{gui.RDP, "3389", "EXT_RDP_PORT", "RDP", gui.RDPUrl("127.0.0.1", "389"), "rdp://"},
+		{gui.VNC, "5900", "EXT_VNC_PORT", "VNC", gui.VNCUrl("127.0.0.1", "389", "", "vnc"), "vnc://"},
 	} {
 		t.Run(string(tc.p), func(t *testing.T) {
 			if got := tc.p.ContainerPort(); got != tc.containerPort {
@@ -26,14 +41,43 @@ func TestProtocol_Spec(t *testing.T) {
 			if got := tc.p.Label(); got != tc.label {
 				t.Errorf("Label() = %q, want %q", got, tc.label)
 			}
-			got := tc.p.URL("389")
+			got := tc.p.URL(dockerEP)
 			if got != tc.url {
-				t.Errorf("URL(389) = %q, want %q", got, tc.url)
+				t.Errorf("URL(docker) = %q, want %q", got, tc.url)
 			}
 			if !strings.HasPrefix(got, tc.urlPrefix) {
-				t.Errorf("URL(389) = %q, want prefix %q", got, tc.urlPrefix)
+				t.Errorf("URL(docker) = %q, want prefix %q", got, tc.urlPrefix)
 			}
 		})
+	}
+}
+
+func TestURL_TartVNCUsesARDAuth(t *testing.T) {
+	tartEP := gui.CellEndpoint{Host: "192.168.64.5", Port: "5900", Engine: "tart", User: "dmitry"}
+	got := gui.VNC.URL(tartEP)
+	want := "vnc://dmitry:admin@192.168.64.5:5900"
+	if got != want {
+		t.Errorf("VNC URL for tart = %q, want %q", got, want)
+	}
+}
+
+func TestURL_TartVNCFallsBackToAdmin(t *testing.T) {
+	tartEP := gui.CellEndpoint{Host: "192.168.64.5", Port: "5900", Engine: "tart"}
+	got := gui.VNC.URL(tartEP)
+	want := "vnc://admin:admin@192.168.64.5:5900"
+	if got != want {
+		t.Errorf("VNC URL for tart (no user) = %q, want %q", got, want)
+	}
+}
+
+func TestURL_DockerVNCUsesLegacyAuth(t *testing.T) {
+	dockerEP := gui.CellEndpoint{Host: "127.0.0.1", Port: "389", Engine: "docker"}
+	got := gui.VNC.URL(dockerEP)
+	if strings.Contains(got, "devcell") {
+		t.Errorf("docker VNC URL should not contain username, got %q", got)
+	}
+	if !strings.HasPrefix(got, "vnc://") {
+		t.Errorf("docker VNC URL should start with vnc://, got %q", got)
 	}
 }
 

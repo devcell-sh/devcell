@@ -20,11 +20,18 @@ func VNCPasswdFile() string {
 }
 
 // VNCUrl returns a VNC URL for macOS Screen Sharing.
-func VNCUrl(port string) string {
-	return "vnc://:vnc@127.0.0.1:" + port
+// user="" uses VNC legacy auth (password only); non-empty uses ARD auth.
+func VNCUrl(host, port, user, password string) string {
+	if user != "" {
+		return "vnc://" + user + ":" + password + "@" + host + ":" + port
+	}
+	return "vnc://:" + password + "@" + host + ":" + port
 }
 
 // RoyalTSXVNCUrl returns a Royal TSX URI for a VNC connection.
-func RoyalTSXVNCUrl(port string) string {
-	return "rtsx://vnc://:vnc@127.0.0.1:" + port
+func RoyalTSXVNCUrl(host, port, user, password string) string {
+	if user != "" {
+		return "rtsx://vnc://" + user + ":" + password + "@" + host + ":" + port
+	}
+	return "rtsx://vnc://:" + password + "@" + host + ":" + port
 }

@@ -12,19 +12,19 @@ import (
 	"strings"
 )
 
-// RDPUrl returns an RDP URL for the given port.
+// RDPUrl returns an RDP URL for the given host and port.
 // Uses percent-encoded format required by macOS Sonoma+ Windows App:
 //
-//	rdp://full%20address=s%3A127.0.0.1%3A<port>
-func RDPUrl(port string) string {
-	return "rdp://full%20address=s%3A127.0.0.1%3A" + port
+//	rdp://full%20address=s%3A<host>%3A<port>
+func RDPUrl(host, port string) string {
+	return "rdp://full%20address=s%3A" + host + "%3A" + port
 }
 
-// RoyalTSXUrl returns a Royal TSX URI for the given port and credentials.
+// RoyalTSXUrl returns a Royal TSX URI for the given host, port and credentials.
 // Note: macOS Royal TSX does not support property_* query params in adhoc URIs.
 // Retina must be enabled via Application → Default Settings → Remote Desktop → Display.
-func RoyalTSXUrl(port, user, password string) string {
-	return "rtsx://rdp://" + user + ":" + password + "@127.0.0.1:" + port
+func RoyalTSXUrl(host, port, user, password string) string {
+	return "rtsx://rdp://" + user + ":" + password + "@" + host + ":" + port
 }
 
 // HasRoyalTSX checks if Royal TSX is installed on macOS.

@@ -363,7 +363,7 @@ echo "=== END GUEST DIAGNOSTICS ==="`
 		stepIdx := i
 		stepCmd := step.Command
 		label := fmt.Sprintf("Provisioning (%d/%d): %s", stepIdx+1, len(steps), stepName)
-		streamOutput := ux.Verbose && strings.HasPrefix(stepName, "Activate nix-darwin")
+		streamOutput := ux.Verbose
 		var reformatVolLabel string // set by callback if volume needs reformatting
 		err := pr.PhaseDetailed(label, func() (string, error) {
 			ux.Debugf("provision [%d/%d] %s", stepIdx+1, len(steps), stepName)
@@ -418,8 +418,13 @@ echo "=== END GUEST DIAGNOSTICS ==="`
 				reformatCmd := "export DEVCELL_ALLOW_REFORMAT=1; " + stepCmd
 				cmd2 := exec.CommandContext(ctx, "tart", "exec", buildVM, "bash", "-l", "-c", reformatCmd)
 				var stdout2, stderr2 strings.Builder
-				cmd2.Stdout = &stdout2
-				cmd2.Stderr = &stderr2
+				if ux.Verbose {
+					cmd2.Stdout = io.MultiWriter(os.Stdout, &stdout2)
+					cmd2.Stderr = io.MultiWriter(os.Stderr, &stderr2)
+				} else {
+					cmd2.Stdout = &stdout2
+					cmd2.Stderr = &stderr2
+				}
 				if err2 := cmd2.Run(); err2 != nil {
 					ux.Debugf("provision [%d/%d] %s reformat FAILED: %v\nstdout: %s\nstderr: %s",
 						stepIdx+1, len(steps), stepName, err2,
@@ -450,8 +455,13 @@ echo "=== END GUEST DIAGNOSTICS ==="`
 		ux.Debugf("marker script: %s", markerScript)
 		var stdout, stderr strings.Builder
 		cmd := exec.CommandContext(ctx, "tart", "exec", buildVM, "bash", "-l", "-c", markerScript)
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
+		if ux.Verbose {
+			cmd.Stdout = io.MultiWriter(os.Stdout, &stdout)
+			cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
+		} else {
+			cmd.Stdout = &stdout
+			cmd.Stderr = &stderr
+		}
 		if err := cmd.Run(); err != nil {
 			ux.Debugf("failed to stamp provisioned marker: %v (stdout: %s) (stderr: %s)",
 				err, strings.TrimSpace(stdout.String()), strings.TrimSpace(stderr.String()))
@@ -471,8 +481,13 @@ echo "=== END GUEST DIAGNOSTICS ==="`
 		ux.Debugf("verify script: %s", verifyScript)
 		var stdout, stderr strings.Builder
 		cmd := exec.CommandContext(ctx, "tart", "exec", buildVM, "bash", "-l", "-c", verifyScript)
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
+		if ux.Verbose {
+			cmd.Stdout = io.MultiWriter(os.Stdout, &stdout)
+			cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
+		} else {
+			cmd.Stdout = &stdout
+			cmd.Stderr = &stderr
+		}
 		if err := cmd.Run(); err != nil {
 			ux.Debugf("marker verification FAILED: %v (stdout: %s) (stderr: %s)",
 				err, strings.TrimSpace(stdout.String()), strings.TrimSpace(stderr.String()))
