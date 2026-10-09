@@ -177,25 +177,39 @@ func plural(n int, word string) string {
 	return fmt.Sprintf("%d %ss", n, word)
 }
 
-// Summary renders the one-line non-debug UX for the "Nix store" phase row.
-// The bool return signals whether the result is a warning (should render ⚠
-// instead of ✓).
-func (h NixStoreHealth) Summary() (string, bool) {
+// Summary returns a short tag for the phase row, a longer diagnostic detail
+// for debug output, and whether the result is a warning. The tag is what
+// users see next to the dot; the detail carries counts and remediation hints.
+func (h NixStoreHealth) Summary() (tag, detail string, warn bool) {
 	hashPart := plural(h.ProfileHashes, "profile hash")
 	if h.StaleRoots == 0 && h.OrphanedGenerations == 0 && h.ProfileHashes <= 1 {
-		return fmt.Sprintf("clean — %s, %s", plural(h.TotalRoots, "root"), hashPart), false
+		detail = fmt.Sprintf("%s, %s", plural(h.TotalRoots, "root"), hashPart)
+		return "clean", detail, false
 	}
-	var parts []string
+
+	var findings []string
 	if h.StaleRoots > 0 {
-		parts = append(parts, plural(h.StaleRoots, "stale root"))
+		findings = append(findings, plural(h.StaleRoots, "stale root"))
 	}
 	if h.OrphanedGenerations > 0 {
-		parts = append(parts, plural(h.OrphanedGenerations, "orphaned generation"))
+		findings = append(findings, plural(h.OrphanedGenerations, "orphaned generation"))
 	}
 	if h.ProfileHashes > 1 {
-		parts = append(parts, hashPart+" (drift)")
+		findings = append(findings, hashPart+" (drift)")
 	}
-	s := strings.Join(parts, ", ")
-	s += " — run: cell build prune --pure"
-	return s, true
+	detail = strings.Join(findings, ", ") + " — run: cell build prune --pure"
+
+	switch {
+	case h.ProfileHashes > 1:
+		tag = "drifted"
+	case h.StaleRoots > 0 && h.OrphanedGenerations > 0:
+		tag = "unhealthy"
+	case h.StaleRoots > 0:
+		tag = "stale"
+	case h.OrphanedGenerations > 0:
+		tag = "orphaned"
+	default:
+		tag = "unhealthy"
+	}
+	return tag, detail, true
 }

@@ -28,6 +28,10 @@ import (
 const (
 	// DefaultRegistry is the fallback registry prefix for devcell images.
 	DefaultRegistry = "ghcr.io/devcell-sh/devcell"
+
+	// BootContainerPath is the container-side path where the host boot
+	// directory is bind-mounted. The Go-generated init script lives here.
+	BootContainerPath = "/tmp/devcell-boot"
 )
 
 // Registry is the active container registry. Set via cfg.ResolvedRegistry()
@@ -216,16 +220,16 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	}
 
 	dockerRunFlags := []string{"--rm", "--shm-size=" + spec.CellCfg.Docker.ResolvedShmSize(), "--device=/dev/fuse"}
+	if spec.Detach {
+		dockerRunFlags = append(dockerRunFlags, "-d")
+	} else if spec.TTY {
+		dockerRunFlags = append(dockerRunFlags, "-it")
+	}
 	if mem := spec.CellCfg.Docker.ResolvedMemLimit(); mem != "0" {
 		dockerRunFlags = append(dockerRunFlags, "--memory="+mem)
 	}
 	if cpu := spec.CellCfg.Docker.ResolvedCPULimit(); cpu != "0" {
 		dockerRunFlags = append(dockerRunFlags, "--cpus="+cpu)
-	}
-	if spec.Detach {
-		dockerRunFlags = append(dockerRunFlags, "-d")
-	} else if spec.TTY {
-		dockerRunFlags = append(dockerRunFlags, "-it")
 	}
 	// KVM passthrough for QEMU guests (Windows cells). Must be --device, not
 	// a -v bind-mount: the mount creates the node but the cgroup device
@@ -421,14 +425,11 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 		v(ThinStoreVolume() + ":/nix")
 	}
 
-	// In-container boot progress dir bind-mount (CELL-264). Container's
-	// 00-notify.sh helper writes sentinel files into /tmp/devcell-boot/;
-	// host's BootDirWatcher reads them via fsnotify on the bind-mount
-	// counterpart. Empty BootDir → no mount → fragments no-op the helper.
+	// Boot dir bind-mount: hosts the Go-generated init script AND
+	// in-container progress sentinel files (CELL-264).
 	if spec.BootDir != "" {
-		const bootContainerPath = "/tmp/devcell-boot"
-		v(spec.BootDir + ":" + bootContainerPath)
-		e("DEVCELL_BOOT_DIR", bootContainerPath)
+		v(spec.BootDir + ":" + BootContainerPath)
+		e("DEVCELL_BOOT_DIR", BootContainerPath)
 	}
 
 	// cfg [[volumes]] entries — skip any whose container path duplicates
@@ -507,6 +508,12 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	// Workdir
 	argv = append(argv, "--workdir", "/"+c.AppName)
 
+	// Go-generated entrypoint: s6 activation + gosu drop to user + exec CMD.
+	// The init script is written to bootDir by Run() before docker run.
+	if spec.BootDir != "" {
+		argv = append(argv, "--entrypoint", BootContainerPath+"/entrypoint.sh")
+	}
+
 	// Image — use pinned digest when available, fall back to mutable tag
 	image := spec.Image
 	if image == "" {
@@ -514,10 +521,12 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	}
 	argv = append(argv, image)
 
-	// Binary + flags + user args
-	argv = append(argv, spec.Binary)
-	argv = append(argv, spec.DefaultFlags...)
-	argv = append(argv, spec.UserArgs...)
+	// Binary and flags as CMD — the entrypoint execs into them via gosu.
+	if spec.Binary != "" {
+		argv = append(argv, spec.Binary)
+		argv = append(argv, spec.DefaultFlags...)
+		argv = append(argv, spec.UserArgs...)
+	}
 
 	return argv
 }
@@ -553,6 +562,8 @@ func ContainerRunning(ctx context.Context, name string) bool {
 // EnsureNetwork creates the devcell-network docker network if it doesn't exist.
 func EnsureNetwork(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, "docker", "network", "create", "devcell-network")
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
 	// Ignore error — network likely already exists.
 	_ = cmd.Run()
 	return nil

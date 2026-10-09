@@ -682,6 +682,51 @@ func TestArgv_WorkdirAndImage(t *testing.T) {
 	}
 }
 
+// --- Entrypoint from bootDir ---
+
+func TestArgv_EntrypointFromBootDir(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.BootDir = "/tmp/test-boot"
+	})
+	if !hasConsecutive(argv, "--entrypoint", docker.BootContainerPath+"/entrypoint.sh") {
+		t.Errorf("expected --entrypoint %s/entrypoint.sh when BootDir is set: %v", docker.BootContainerPath, argv)
+	}
+}
+
+func TestArgv_NoEntrypointWithoutBootDir(t *testing.T) {
+	argv := buildArgv(t)
+	for _, a := range argv {
+		if a == "--entrypoint" {
+			t.Errorf("--entrypoint should not be present without BootDir: %v", argv)
+		}
+	}
+}
+
+func TestArgv_InteractiveMode(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.TTY = true
+	})
+	if hasArg(argv, "-d") {
+		t.Error("interactive mode should not have -d")
+	}
+	if !hasArg(argv, "-it") {
+		t.Error("TTY=true should produce -it")
+	}
+}
+
+func TestArgv_DetachExcludesTTY(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.Detach = true
+		s.TTY = true
+	})
+	if !hasArg(argv, "-d") {
+		t.Error("detach mode must have -d")
+	}
+	if hasArg(argv, "-it") {
+		t.Error("detach mode must not have -it even when TTY=true")
+	}
+}
+
 // --- Binary and user args at end ---
 
 func TestArgv_BinaryAndDefaultFlagsAtEnd(t *testing.T) {

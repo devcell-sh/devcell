@@ -17,8 +17,8 @@ func TestBuildConfig_Defaults(t *testing.T) {
 	if c.CPUs != 4 {
 		t.Errorf("CPUs = %d, want 4", c.CPUs)
 	}
-	if c.MemoryGB != 4 {
-		t.Errorf("MemoryGB = %d, want 4", c.MemoryGB)
+	if c.MemoryGB != 8 {
+		t.Errorf("MemoryGB = %d, want 8", c.MemoryGB)
 	}
 	if c.SSHPort != 22 {
 		t.Errorf("SSHPort = %d, want 22", c.SSHPort)

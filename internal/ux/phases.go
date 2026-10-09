@@ -34,6 +34,18 @@
 // the `<detail>` slot verbatim.
 package ux
 
+// Phaser is the interface for sequential phase renderers. Both PhaseRunner
+// (scrolling log) and BootPanel (streak-chart dot panel) implement it.
+type Phaser interface {
+	Phase(name string, fn func() error) error
+	PhaseDetailed(name string, fn func() (detail string, err error)) error
+	PhaseDetailedWarn(name string, fn func() (detail string, warn bool, err error)) error
+	PhaseDetailedRunning(running, finalName string, fn func() (detail string, err error)) error
+	PhaseDetailedRunningWarn(running, finalName string, fn func() (detail string, warn bool, err error)) error
+	UpdateText(message string)
+	Seal(name string)
+}
+
 // PhaseRunner owns the sequential phase list above the resumed parent
 // spinner. Zero-value is usable; no constructor needed.
 type PhaseRunner struct {
@@ -125,6 +137,29 @@ func (p *PhaseRunner) PhaseDetailedRunning(running, finalName string, fn func() 
 		p.cur.Success(finalName)
 	} else {
 		p.cur.Success(finalName + " — " + detail)
+	}
+	p.cur = nil
+	return nil
+}
+
+// PhaseDetailedRunningWarn combines PhaseDetailedRunning and PhaseDetailedWarn:
+// a different label while running, and the callback can signal a warning.
+func (p *PhaseRunner) PhaseDetailedRunningWarn(running, finalName string, fn func() (detail string, warn bool, err error)) error {
+	p.cur = NewProgressSpinner(running)
+	detail, warn, err := fn()
+	if err != nil {
+		p.cur.Fail(finalName + " — " + err.Error())
+		p.cur = nil
+		return err
+	}
+	label := finalName
+	if detail != "" {
+		label = finalName + " — " + detail
+	}
+	if warn {
+		p.cur.Warn(label)
+	} else {
+		p.cur.Success(label)
 	}
 	p.cur = nil
 	return nil

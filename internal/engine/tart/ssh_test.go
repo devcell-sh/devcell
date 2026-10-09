@@ -59,6 +59,20 @@ func TestBuildExecCommand_DarwinHMProfileOnPath(t *testing.T) {
 	}
 }
 
+func TestBuildExecCommand_SessionUserPathsOnPath(t *testing.T) {
+	cmd := tart.BuildExecCommand(tart.ExecSpec{Binary: "claude", RunAsUser: "dmitry"})
+	for _, required := range []string{
+		"$HOME/go/bin",
+		"$HOME/.local/state/nix/profiles/profile/bin",
+		"$HOME/.local/share/mise/shims",
+		"$HOME/.local/bin",
+	} {
+		if !strings.Contains(cmd, required) {
+			t.Errorf("PATH must include session-user path %s, got: %q", required, cmd)
+		}
+	}
+}
+
 func TestBuildExecCommand_ProjectDirCd(t *testing.T) {
 	cmd := tart.BuildExecCommand(tart.ExecSpec{
 		Binary:     "claude",

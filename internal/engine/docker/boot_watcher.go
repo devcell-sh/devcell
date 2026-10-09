@@ -44,6 +44,8 @@ type BootEvent struct {
 var titles = map[string]string{
 	"container.ready":   "Container started",
 	"entrypoint.ready":  "Entrypoint ready",
+	"s6.starting":       "Activating session services",
+	"s6.ready":          "Session services ready",
 	"nix.starting":      "Configuring nix",
 	"nix.ready":         "Nix ready",
 	"shell.starting":    "Configuring shell",
@@ -68,9 +70,14 @@ var titles = map[string]string{
 	"opencode.ready":    "OpenCode ready",
 	"postgres.starting": "Starting PostgreSQL",
 	"postgres.ready":    "PostgreSQL ready",
-	"gui.starting":      "Starting GUI",
-	"gui.ready":         "GUI ready",
-	"boot.ready":        "", // sealing event — consumer treats as terminal, no row rendered
+	"gui.starting":            "Starting GUI",
+	"gui.ready":               "GUI ready",
+	"xvfb.ready":              "Display server ready",
+	"window-manager.ready":    "Window manager ready",
+	"xrdp.ready":              "Remote desktop ready",
+	"pulseaudio.ready":        "Audio server ready",
+	"dbus-session.ready":      "D-Bus session ready",
+	"boot.ready":              "", // sealing event — consumer treats as terminal, no row rendered
 }
 
 // titleFor looks up the human title for a sentinel. Returns "" for the
