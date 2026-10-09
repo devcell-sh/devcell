@@ -15,7 +15,7 @@ const DarwinVMUser = "devcell"
 // available in the exec shell. Sourcing nix-daemon.sh only yields nix itself;
 // the session user (host $USER) is not DarwinVMUser, so its per-user profile
 // and the nix-darwin system profile must be bridged onto PATH explicitly.
-const nixProfileSource = `. /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh 2>/dev/null || . "$HOME/.nix-profile/etc/profile.d/nix.sh" 2>/dev/null || true; export PATH="$HOME/go/bin:$HOME/.local/state/nix/profiles/profile/bin:$HOME/.local/share/mise/shims:$HOME/.local/bin:/etc/profiles/per-user/` + DarwinVMUser + `/bin:/run/current-system/sw/bin:$PATH"`
+const nixProfileSource = `. /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh 2>/dev/null || . "$HOME/.nix-profile/etc/profile.d/nix.sh" 2>/dev/null || true; export PATH="/etc/profiles/per-user/` + DarwinVMUser + `/bin:/run/current-system/sw/bin:$PATH"`
 
 // ExecSpec describes a command to run inside a tart VM via `tart exec`.
 type ExecSpec struct {

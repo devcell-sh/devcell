@@ -81,7 +81,7 @@ resolved:
 	}
 
 	// Start VM
-	vm, err := TartRun(ctx, in.VMName, in.SharedDirs, in.Disks, in.NoGraphics)
+	vm, err := TartRun(ctx, in.VMName, in.SharedDirs, in.Disks)
 	if err != nil {
 		return nil, fmt.Errorf("starting VM %s: %w", in.VMName, err)
 	}

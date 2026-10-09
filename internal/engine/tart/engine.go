@@ -15,7 +15,6 @@ import (
 	"github.com/DimmKirr/devcell/internal/cell"
 	"github.com/DimmKirr/devcell/internal/cfg"
 	"github.com/DimmKirr/devcell/internal/engine"
-	"github.com/DimmKirr/devcell/internal/s6"
 	"github.com/DimmKirr/devcell/internal/ux"
 )
 
@@ -259,7 +258,6 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 				"home":    cellHome,
 			},
 			Disks:      disks,
-			NoGraphics: !cellCfg.GUI.ResolvedEnabled(),
 			SSHTimeout: 120 * time.Second,
 			InitFunc: func() error {
 				logf("auto-build: VM not found — running build with stack=%q", stack)
@@ -392,10 +390,12 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 			return err
 		}
 
-		// Activate s6 services for the cell user via s6-rc.
+		// Activate s6 services for the cell user.
+		// Runs s6 oneshot services (shell-rc, claude-config, etc.) that set up
+		// the cell user's environment.
 		if err := pr.Phase("Activate s6 session services", func() error {
 			s6Script := GenerateS6SessionActivateScript(cellUser)
-			logf("activating s6 session services for %s (envDir=%s compiledDir=%s)", cellUser, s6.EnvDir, s6.CompiledDir)
+			logf("activating s6 session services for %s (envDir=%s svcDir=%s)", cellUser, S6EnvDir, S6ServicesDir)
 			logf("s6 script:\n%s", s6Script)
 			out, errOut, err := tartExec(s6Script)
 			if err != nil {

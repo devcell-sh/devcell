@@ -23,7 +23,7 @@ const DefaultRegistry = "ghcr.io/devcell-sh/devcell"
 const DefaultNixImage = "nixos/nix:2.34.7"
 
 // DefaultTartOCIImage is the default macOS base image for tart VMs.
-const DefaultTartOCIImage = "ghcr.io/cirruslabs/macos-tahoe-base:latest"
+const DefaultTartOCIImage = "ghcr.io/cirruslabs/macos-sequoia-base:latest"
 
 // CellSection holds [cell] config.
 type CellSection struct {

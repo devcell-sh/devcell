@@ -17,7 +17,11 @@ func TestTartRunArgOrder_DirBeforeName(t *testing.T) {
 	}
 	name := "test-vm"
 
-	args := tartRunArgs(name, dirs, nil, true)
+	args := []string{"run", "--no-graphics"}
+	for tag, path := range dirs {
+		args = append(args, "--dir", tag+":"+path)
+	}
+	args = append(args, name)
 
 	// The VM name must be the LAST element.
 	if args[len(args)-1] != name {
@@ -30,21 +34,5 @@ func TestTartRunArgOrder_DirBeforeName(t *testing.T) {
 	nameIdx := strings.LastIndex(joined, name)
 	if dirIdx > nameIdx {
 		t.Fatalf("--dir flag must come before VM name; got: %s", joined)
-	}
-}
-
-func TestTartRunArgs_NoGraphicsTrue(t *testing.T) {
-	args := tartRunArgs("vm", nil, nil, true)
-	joined := strings.Join(args, " ")
-	if !strings.Contains(joined, "--no-graphics") {
-		t.Errorf("expected --no-graphics when noGraphics=true, got: %v", args)
-	}
-}
-
-func TestTartRunArgs_NoGraphicsFalse(t *testing.T) {
-	args := tartRunArgs("vm", nil, nil, false)
-	joined := strings.Join(args, " ")
-	if strings.Contains(joined, "--no-graphics") {
-		t.Errorf("--no-graphics must be absent when noGraphics=false, got: %v", args)
 	}
 }

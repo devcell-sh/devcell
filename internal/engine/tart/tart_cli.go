@@ -20,13 +20,12 @@ type VM struct {
 	stderrBuf bytes.Buffer // captures tart run stderr for diagnostics
 }
 
-// tartRunArgs builds the argument list for `tart run`. Extracted so tests
-// can verify flag ordering without executing tart.
-func tartRunArgs(name string, dirs map[string]string, disks []string, noGraphics bool) []string {
-	args := []string{"run"}
-	if noGraphics {
-		args = append(args, "--no-graphics")
-	}
+// TartRun starts a VM headlessly via `tart run --no-graphics`.
+// dirs are VirtioFS shared directories (tag → host path).
+// disks are raw disk image paths attached as VirtIO block devices.
+// The returned VM holds the background process; the caller must call Stop().
+func TartRun(ctx context.Context, name string, dirs map[string]string, disks []string) (*VM, error) {
+	args := []string{"run", "--no-graphics"}
 	for tag, path := range dirs {
 		args = append(args, "--dir", fmt.Sprintf("%s:%s", tag, path))
 	}
@@ -34,17 +33,6 @@ func tartRunArgs(name string, dirs map[string]string, disks []string, noGraphics
 		args = append(args, "--disk", disk)
 	}
 	args = append(args, name)
-	return args
-}
-
-// TartRun starts a VM via `tart run`.
-// When noGraphics is true, --no-graphics is passed (headless).
-// When false, the native macOS display window is shown.
-// dirs are VirtioFS shared directories (tag -> host path).
-// disks are raw disk image paths attached as VirtIO block devices.
-// The returned VM holds the background process; the caller must call Stop().
-func TartRun(ctx context.Context, name string, dirs map[string]string, disks []string, noGraphics bool) (*VM, error) {
-	args := tartRunArgs(name, dirs, disks, noGraphics)
 	ux.Debugf("tart command: tart %s", strings.Join(args, " "))
 	vm := &VM{Name: name}
 	cmd := exec.CommandContext(ctx, "tart", args...)
