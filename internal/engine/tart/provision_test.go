@@ -3,6 +3,8 @@ package tart
 import (
 	"strings"
 	"testing"
+
+	"github.com/DimmKirr/devcell/internal/s6"
 )
 
 func TestSetHostnameScript(t *testing.T) {
@@ -568,16 +570,10 @@ func TestGenerateS6SessionActivateScript(t *testing.T) {
 	script := GenerateS6SessionActivateScript("dmitry")
 
 	if !strings.Contains(script, "s6-rc") {
-		t.Fatal("expected script to use s6-rc for session service activation")
+		t.Fatal("expected script to check for s6-rc availability")
 	}
 	if !strings.Contains(script, "dmitry") {
 		t.Fatal("expected script to reference the session user")
-	}
-	if !strings.Contains(script, "shell-rc") {
-		t.Fatal("expected script to activate shell-rc service")
-	}
-	if !strings.Contains(script, "claude-config") {
-		t.Fatal("expected script to activate claude-config service")
 	}
 	if !strings.Contains(script, "HOST_USER") {
 		t.Fatal("expected script to set HOST_USER env var for service scripts")
@@ -594,16 +590,24 @@ func TestGenerateS6SessionActivateScript(t *testing.T) {
 	if !strings.Contains(script, S6EnvDir) {
 		t.Fatalf("expected script to use S6EnvDir (%s)", S6EnvDir)
 	}
-	if !strings.Contains(script, S6ServicesDir) {
-		t.Fatalf("expected script to use S6ServicesDir (%s)", S6ServicesDir)
+	if !strings.Contains(script, s6.CompiledDir) {
+		t.Fatalf("expected script to reference CompiledDir (%s)", s6.CompiledDir)
 	}
 	if strings.Contains(script, "mkdir -p") && !strings.Contains(script, "sudo mkdir") {
-		t.Fatal("mkdir under /etc/s6/ requires sudo")
+		t.Fatal("mkdir under /etc requires sudo")
 	}
-	// tart exec runs as admin (uid 501) — service up scripts write to the
-	// session user's home and /nix/var, so they must run as root with the
-	// exported env (HOST_USER, SESSION_HOME, DEVCELL_HOME) preserved.
-	if !strings.Contains(script, `sudo -E "$S6_SVC/$svc/up"`) {
-		t.Fatal("service up scripts must run via sudo -E (admin can't write session-user home)")
+	// Must use s6-rc for service management (not manual loops)
+	if !strings.Contains(script, "s6-svscan") {
+		t.Fatal("must start s6-svscan supervision tree")
+	}
+	if !strings.Contains(script, "s6-rc-init") {
+		t.Fatal("must run s6-rc-init to initialize live state")
+	}
+	if !strings.Contains(script, "change user") {
+		t.Fatal("must use s6-rc change user to bring up services")
+	}
+	// tart exec runs as admin (uid 501) — s6 tools need root
+	if !strings.Contains(script, "sudo s6-svscan") {
+		t.Fatal("s6-svscan must run via sudo (admin can't supervise system services)")
 	}
 }
