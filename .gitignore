@@ -60,3 +60,4 @@ CLAUDE.local.md
 # local multi-repo workspace
 go.work
 go.work.sum
+.winkit
