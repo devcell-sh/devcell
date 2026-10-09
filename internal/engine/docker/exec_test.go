@@ -62,23 +62,3 @@ func TestBuildExecArgv_NoTTY(t *testing.T) {
 		}
 	}
 }
-
-func TestBuildExecArgv_WithUser(t *testing.T) {
-	argv := docker.BuildExecArgv(docker.ExecSpec{
-		ContainerName: "cell-foo-0-run",
-		User:          "dmitry",
-		Binary:        "claude",
-		TTY:           true,
-	})
-	// Must contain -u dmitry before the container name
-	found := false
-	for i, a := range argv {
-		if a == "-u" && i+1 < len(argv) && argv[i+1] == "dmitry" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("must contain -u dmitry, got %v", argv)
-	}
-}

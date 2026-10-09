@@ -12,6 +12,13 @@ type Observer interface {
 	Progress(fraction float64, message string)
 }
 
+// debugObserver logs events via ux.Debugf and prints progress to the
+// terminal. Used by Build's auto-download path.
+type debugObserver struct{}
+
+func (debugObserver) Logf(format string, args ...any) { fmt.Printf(format+"\n", args...) }
+func (debugObserver) Progress(_ float64, msg string)  { fmt.Printf("\r  %s", msg) }
+
 // NopObserver silently discards all events.
 type NopObserver struct{}
 

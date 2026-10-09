@@ -94,9 +94,9 @@ type RunOpts struct {
 	DryRun       bool              // print the commands instead of running them (--dry-run)
 	Debug        bool              // log every step (--debug)
 
-	// Detach starts the guest in the background running the agent and
-	// returns once it is up, instead of attaching the terminal (cell start).
-	// Docker only.
+	// Detach starts the guest in the background and returns once it is up,
+	// instead of attaching the terminal (cell start). Docker detaches the
+	// container; winkit detaches the QEMU process.
 	Detach bool
 	// NoSecrets skips 1Password: no document is read and the agent does not
 	// run under `op run` (--no-secrets, --skip-secrets, --no-1password).

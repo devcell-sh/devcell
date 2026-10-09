@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	streak "github.com/dimmkirr/go-streak-chart"
 	"github.com/mattn/go-isatty"
 
 	"github.com/DimmKirr/devcell/internal/backup"
@@ -22,7 +21,6 @@ import (
 	"github.com/DimmKirr/devcell/internal/config"
 	"github.com/DimmKirr/devcell/internal/engine"
 	"github.com/DimmKirr/devcell/internal/op"
-	"github.com/DimmKirr/devcell/internal/s6"
 	"github.com/DimmKirr/devcell/internal/telemetry"
 	"github.com/DimmKirr/devcell/internal/ux"
 )
@@ -95,8 +93,11 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		}
 	}
 
-	ux.SaveCursor()
-
+	// Cell-open banner — CELL-48. Always print the compact header so users
+	// see "which cell · which project · which pane" at every launch. The cell
+	// name is always shown (including the `main` default) — it's a real
+	// persistent identity with its own `~/.devcell/<name>/` home, not a
+	// placeholder, and surfacing it teaches the cell model.
 	project := filepath.Base(c.BaseDir)
 	fmt.Println(" " + ux.Banner(c.CellName, project, c.Bunk))
 
@@ -158,52 +159,51 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		fmt.Println()
 	}
 
-	// Build the 4-group streak-chart boot panel.
-	hasSecretsResolve := op.ShouldResolve(opts.NoSecrets, os.Getenv("DEVCELL_NO_SECRETS"), cellCfg.Op.ResolvedDocuments())
-	_, hasORKeyPlaceholder := extraEnv["OPENROUTER_API_KEY"]
-	gopts := groupOpts{
-		hasPackages:    ImageLabel(ctx, imageTag(), "devcell.packages") != "",
-		hasGitLookup:   cell.ResolveGitIdentity(os.Getenv, cellCfg.Git, nil).Source == cell.GitSourceDefault,
-		hasSecrets:     hasSecretsResolve,
-		hasAPIKeys:     hasORKeyPlaceholder && extraEnv["OPENROUTER_API_KEY"] == "",
-		hasWireGuard:   cfg.WireguardEnabled(cellCfg),
-		hasGUI:         cellCfg.GUI.ResolvedEnabled(),
-		hasMCP:         binary == "claude" || binary == "codex" || binary == "opencode",
-		hasNixPackages: opts.UseFlake || cellCfg.Cell.FlakeEnabled(),
-	}
-	groups := bootGroups(binary, gopts)
-	panel := ux.NewBootPanel(groups)
+	// CELL-262: cell-open phases as a permanent checklist via PhaseRunner.
+	// Each row lands as `✓ <name> [— <detail>] <elapsed>` and persists across
+	// the docker exec handoff, so the user sees the full boot story above
+	// claude's first prompt. Replaces the prior "Opening Cell" spinner +
+	// inline stderr warnings + silent successes mix.
+	//
+	// 7-phase set (Docker daemon and Volume hydrated stay as silent
+	// upstream gates — surfacing them as ✓ rows for work that already ran
+	// reads as noise). Non-fatal phases discard the returned error with `_ =`;
+	// fatal phases propagate via `if err := ...; err != nil { return err }`.
+	pr := &ux.PhaseRunner{}
 
-	// ── Group 1: Prepare ─────────────────────────────────────────────────
-	_ = panel.Phase("Docker", func() error { return nil }) // daemon already checked above
+	_ = pr.Phase("Network", func() error { return EnsureNetwork(ctx) })
 
-	_ = panel.Phase("Network", func() error { return EnsureNetwork(ctx) })
-
-	// Orphan cleanup: remove stopped containers. Running containers are
-	// left alone so we can attach to them via docker exec.
-	if err := panel.Phase("Orphan cleanup", func() error {
-		if ContainerRunning(ctx, c.ContainerName) {
-			return nil
-		}
+	if err := pr.Phase("Orphan check", func() error {
 		return RemoveOrphanedContainer(ctx, c.ContainerName)
 	}); err != nil {
 		return err
 	}
 
-	if err := nixStorePhase(ctx, panel, thin, c.BaseDir, cellCfg.Cell.StaleWarningEnabled(), opts.AutoCleanup); err != nil {
+	// CELL-390: read-only nix-store health report (thin mode only).
+	// Non-fatal; mutation only behind the explicit --auto-cleanup opt-in.
+	// CELL-391: may nudge when this cell's lock is behind the volume's
+	// newest — the only error path is the user explicitly answering "n".
+	if err := nixStorePhase(ctx, pr, thin, c.BaseDir, cellCfg.Cell.StaleWarningEnabled(), opts.AutoCleanup); err != nil {
 		return err
 	}
 
-	if err := closureCheckPhase(ctx, panel, thin, imageTag(), func() error {
+	// CELL-418: check that the thin image's baked-in nix closure is still
+	// alive on the shared volume. A dead closure means GC reaped the store
+	// paths — prompt for rebuild (auto-rebuild in non-TTY).
+	if err := closureCheckPhase(ctx, pr, thin, imageTag(), func() error {
 		return build(ctx, opts.Cell, autoBuildParams(opts.Cell))
 	}); err != nil {
 		return err
 	}
 
-	_ = panel.Phase("Backup", func() error { return backup.Backup(c.CellHome, time.Now()) })
+	_ = pr.Phase("Backup", func() error { return backup.Backup(c.CellHome, time.Now()) })
 
+	// Pin the container to the exact image ID so a concurrent `cell build`
+	// can't swap the tag under us mid-launch. Falls back to the mutable tag
+	// on failure (current behaviour) — kept silent inside the closure so the
+	// row stays a ✓ either way.
 	var imageID string
-	_ = panel.PhaseDetailed("Image pin", func() (string, error) {
+	_ = pr.PhaseDetailed("Image pin", func() (string, error) {
 		id, idErr := LocalImageIDFor(ctx, imageTag())
 		if idErr != nil {
 			imageID = imageTag()
@@ -211,15 +211,15 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		}
 		imageID = id
 		short := id
-		if len(short) > 19 {
+		if len(short) > 19 { // "sha256:abcdef012345" = 19 chars
 			short = short[:19]
 		}
 		return short, nil
 	})
-
-	// ── Group 2: Configure ───────────────────────────────────────────────
+	// Per-module package counts stamped on the image at build time
+	// (devcell.packages label). Older images have no label: no row.
 	if pkgs := ImageLabel(ctx, imageID, "devcell.packages"); pkgs != "" {
-		_ = panel.PhaseDetailed("Packages", func() (string, error) { return pkgs, nil })
+		_ = pr.PhaseDetailed("Packages", func() (string, error) { return pkgs, nil })
 	}
 	if ux.Verbose && !dryRun {
 		source := DockerHostPath(c.BaseDir)
@@ -244,7 +244,8 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	// for the source-precedence chains. Fatal: a bad prompt produces a broken
 	// claude session, fail loudly here.
 	if binary == "claude" {
-		if err := panel.PhaseDetailed("Prompt", func() (string, error) {
+		rowName, _ := systemPromptRow(ux.Verbose, "")
+		if err := pr.PhaseDetailed(rowName, func() (string, error) {
 			flags, spErr := cell.ClaudePromptFlags(c, cellCfg, cell.ResolveOpts{
 				EnvFile:         os.Getenv("DEVCELL_SYSTEM_PROMPT_FILE"),
 				EnvInline:       os.Getenv("DEVCELL_SYSTEM_PROMPT"),
@@ -257,17 +258,15 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 				return "", spErr
 			}
 			defaultFlags = append(defaultFlags, flags...)
-			if ux.Verbose {
-				return flags[len(flags)-1], nil
-			}
-			return "configured", nil
+			_, detail := systemPromptRow(ux.Verbose, flags[len(flags)-1])
+			return detail, nil
 		}); err != nil {
 			return fmt.Errorf("system prompt: %w", err)
 		}
 	}
 
 	if binary == "codex" {
-		if err := panel.PhaseDetailed("Prompt", func() (string, error) {
+		if err := pr.PhaseDetailed("System prompt", func() (string, error) {
 			flags, spErr := cell.CodexPromptFlags(c, cellCfg, cell.ResolveOpts{
 				AppendEnvFile:   os.Getenv("DEVCELL_APPEND_SYSTEM_PROMPT_FILE"),
 				AppendEnvInline: os.Getenv("DEVCELL_APPEND_SYSTEM_PROMPT"),
@@ -293,7 +292,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	// again. Non-fatal; row is "not configured" when both keys are absent.
 	gitConfig := cell.HostGitConfig
 	if cell.ResolveGitIdentity(os.Getenv, cellCfg.Git, nil).Source == cell.GitSourceDefault {
-		_ = panel.PhaseDetailed("Git", func() (string, error) {
+		_ = pr.PhaseDetailed("Git identity", func() (string, error) {
 			name, email := cell.HostGitConfig("user.name"), cell.HostGitConfig("user.email")
 			gitConfig = func(key string) string {
 				return map[string]string{"user.name": name, "user.email": email}[key]
@@ -325,9 +324,9 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	switch {
 	case op.ShouldResolve(skipSecrets, noSecretsEnv, opDocs):
 		ux.Debugf("1Password: resolving %d document(s): %v", len(opDocs), opDocs)
-		_ = panel.PhaseDetailedRunningWarn("Loading secrets (please authorize 1Password)", "Secrets", func() (string, bool, error) {
+		_ = pr.PhaseDetailedRunning("Loading secrets (please authorize 1Password)", "Loaded secrets", func() (string, error) {
 			if _, err := exec.LookPath("op"); err != nil {
-				return "", false, fmt.Errorf("1Password CLI not installed")
+				return "", fmt.Errorf("1Password CLI not installed")
 			}
 			resolved, errs := op.ResolveItems(opDocs)
 			for _, e := range errs {
@@ -342,14 +341,17 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 			}
 			ux.Debugf("1Password: resolved %d secret(s) from %d document(s) (%d failed): %v",
 				len(keys), len(opDocs)-len(errs), len(errs), keys)
+			// Total failure (every item errored, nothing resolved) is a real
+			// boot failure — surface it as ✗ instead of a green ✓ with a
+			// misleading "0 resolved" detail. Partial success still renders
+			// as ✓ because the cell can boot with whatever secrets landed.
 			if len(resolved) == 0 && len(errs) > 0 {
 				if len(opDocs) == 1 {
-					return "", false, fmt.Errorf("could not read %q from 1Password", opDocs[0])
+					return "", fmt.Errorf("could not read %q from 1Password", opDocs[0])
 				}
-				return "", false, fmt.Errorf("could not read any of %d 1Password documents", len(opDocs))
+				return "", fmt.Errorf("could not read any of %d 1Password documents", len(opDocs))
 			}
-			detail, warn := ux.FormatSecretsPhase(len(resolved), len(errs))
-			return detail, warn, nil
+			return ux.FormatSecretsPhase(len(resolved), len(errs)), nil
 		})
 	case len(opDocs) > 0 && (skipSecrets || noSecretsEnv != ""):
 		ux.Debugf("1Password: skipped (--no-secrets / DEVCELL_NO_SECRETS)")
@@ -357,21 +359,24 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 
 	// Resolve deferred API keys that depend on 1Password secrets.
 	if extraEnv != nil {
+		// Agents in openrouter mode set an empty placeholder to request the key.
 		if v, ok := extraEnv["OPENROUTER_API_KEY"]; ok && v == "" {
-			if err := panel.Phase("API keys", func() error {
-				if fillErr := cell.FillOpenRouterKey(extraEnv); fillErr != nil {
-					return fillErr
-				}
-				if t, ok := extraEnv["ANTHROPIC_AUTH_TOKEN"]; ok && t == "" {
-					extraEnv["ANTHROPIC_AUTH_TOKEN"] = extraEnv["OPENROUTER_API_KEY"]
-				}
-				return nil
-			}); err != nil {
+			if err := cell.FillOpenRouterKey(extraEnv); err != nil {
 				return err
+			}
+			// Claude Code authenticates to OpenRouter with the same key.
+			if t, ok := extraEnv["ANTHROPIC_AUTH_TOKEN"]; ok && t == "" {
+				extraEnv["ANTHROPIC_AUTH_TOKEN"] = extraEnv["OPENROUTER_API_KEY"]
 			}
 		}
 	}
 
+	// Inject a deterministic session ID so agents resume the same
+	// conversation when relaunched in the same tmux pane.
+	// Claude Code: CLAUDE_CODE_SESSION_ID env var names a new/existing session.
+	// OpenCode: --session requires an existing ID (no create-or-resume), so
+	// we skip it. OpenCode's --continue resumes the last session in the
+	// project directory, which the user can invoke manually.
 	if binary == "claude" {
 		sessID := cell.SessionID(c.AppName)
 		if extraEnv == nil {
@@ -380,39 +385,54 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		extraEnv["CLAUDE_CODE_SESSION_ID"] = sessID
 	}
 
+	// Expand [env] references after secret resolution:
+	//   ${VAR} / $VAR  — resolved against the host environment
+	//   ${secret:NAME} — resolved against 1Password secrets
 	if err := cfg.ExpandEnv(cellCfg.Env, os.LookupEnv, resolvedSecrets); err != nil {
 		return fmt.Errorf("%w", err)
 	}
 
+	// Validate and prepare WireGuard configs before docker run.
 	if cfg.WireguardEnabled(cellCfg) {
-		if err := panel.Phase("WireGuard", func() error {
-			if valErr := cfg.ValidateWireguard(cellCfg); valErr != nil {
-				return fmt.Errorf("wireguard config: %w", valErr)
-			}
-			return PrepareWireguard(c.CellHome, cellCfg)
-		}); err != nil {
-			return err
+		if err := cfg.ValidateWireguard(cellCfg); err != nil {
+			return fmt.Errorf("wireguard config: %w", err)
+		}
+		if err := PrepareWireguard(c.CellHome, cellCfg); err != nil {
+			return fmt.Errorf("wireguard prepare: %w", err)
 		}
 	}
 
-	// Boot dir: hosts the Go-generated entrypoint script and (for backward
-	// compat) sentinel files from the entrypoint's _notify. Boot progress
-	// is now consumed from docker logs (JSONL events from devcell-event and
-	// _notify), not from polling sentinel files.
+	// Final ✓ row before docker exec takes the TTY. The phase checklist
+	// stays on screen — the child TUI (claude, codex, …) draws on the row
+	// immediately below `✓ Cell ready`, so users keep the full boot story
+	// as scrollback above their session.
+	pr.Seal("Cell ready")
+
+	// CELL-264: in-container progress via fsnotify sentinel files. Start
+	// a BootDirWatcher on a per-cell directory BEFORE docker run so the
+	// container's entrypoint fragments can `touch $DEVCELL_BOOT_DIR/<name>`
+	// as they boot. Each file CREATE becomes a row on the host between
+	// Cell ready and the TTY handoff.
+	//
+	// Directory bind-mounts work universally on every Docker platform —
+	// Linux native, macOS/Windows Docker Desktop, Lima, OrbStack — which
+	// is why we ditched CELL-263 (sd_notify unix-socket bind-mounts had
+	// transport issues through Docker Desktop's virtiofs).
+	//
+	// Stale-state hygiene: wipe the dir at the start of each launch so
+	// leftover sentinels from a crashed prior run don't fire spurious
+	// "ready" events before the new boot starts emitting them.
 	bootDir := filepath.Join(c.CellHome, "boot")
 	_ = os.RemoveAll(bootDir)
-	if err := os.MkdirAll(bootDir, 0o755); err != nil {
-		ux.Debugf("boot dir: %v", err)
-	}
-
-	// Write the Go-generated init script into bootDir.
-	{
-		env := s6.LinuxSessionEnv(c.HostUser)
-		script := "#!/bin/bash\nset -e\n" + s6.EntrypointSnippet(env) + "\n"
-		initPath := filepath.Join(bootDir, "entrypoint.sh")
-		if err := os.WriteFile(initPath, []byte(script), 0o755); err != nil {
-			return fmt.Errorf("write init script: %w", err)
-		}
+	bootWatcher := &BootDirWatcher{}
+	var bootDirEnv string
+	var bootEvents <-chan BootEvent
+	if events, err := bootWatcher.Start(bootDir); err != nil {
+		ux.Debugf("boot watcher: %v (continuing without in-container progress)", err)
+	} else {
+		bootDirEnv = bootDir
+		bootEvents = events
+		defer bootWatcher.Close()
 	}
 
 	// CELL-447: detect project flake.nix and prompt for trust host-side.
@@ -430,20 +450,20 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	spec.Image = imageID
 	spec.GitConfig = gitConfig
 	spec.InheritEnv = inheritEnv
-	spec.BootDir = bootDir
+	spec.BootDir = bootDirEnv
 	spec.TTY = isatty.IsTerminal(os.Stdin.Fd())
+	argv := BuildArgv(spec, OsFS, exec.LookPath)
 
 	if dryRun {
-		argv := BuildArgv(spec, OsFS, exec.LookPath)
 		fmt.Println(cell.ShellJoin(argv))
 		return nil
 	}
 
+	cmd := exec.Command(argv[0], argv[1:]...)
+
 	if opts.Detach {
-		// cell start: detached with agent as CMD (unchanged).
-		spec.Detach = true
-		argv := BuildArgv(spec, OsFS, exec.LookPath)
-		cmd := exec.Command(argv[0], argv[1:]...)
+		// Detached: docker run -d prints container ID and exits.
+		// Suppress stdout (container ID) and only show errors.
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("start container: %w", err)
@@ -452,11 +472,9 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		return nil
 	}
 
-	// ── Interactive: detach + exec ────────────────────────────────────────
-	// The container runs detached with `sleep infinity` as CMD.
-	// Boot events (JSONL from devcell-event + _notify) flow through docker
-	// logs. Once boot is done, we docker exec into the agent binary.
-	// The container survives agent exit; `cell stop` tears it down.
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 
 	sess, sessErr := cellrun.Begin(c.BaseDir, binary, userArgs)
 	if sessErr != nil {
@@ -464,109 +482,32 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	}
 	startTime := time.Now()
 
-	alreadyRunning := ContainerRunning(ctx, c.ContainerName)
-
-	// ── Group 3: Boot ────────────────────────────────────────────────────
-	if !alreadyRunning {
-		panel.SetBoot("Boot", "Container", streak.Running, "Starting container")
-		startSpec := spec
-		startSpec.Detach = true
-		startSpec.Binary = "sleep"
-		startSpec.DefaultFlags = nil
-		startSpec.UserArgs = []string{"infinity"}
-		startSpec.TTY = false
-		if err := ensureRunning(c.ContainerName, 10*time.Second,
-			func() bool { return ContainerRunning(ctx, c.ContainerName) },
-			func() error {
-				startArgv := BuildArgv(startSpec, OsFS, exec.LookPath)
-				cmd := exec.CommandContext(ctx, startArgv[0], startArgv[1:]...)
-				cmd.Stderr = os.Stderr
-				return cmd.Run()
-			},
-		); err != nil {
-			panel.SetBoot("Boot", "Container", streak.Error, "start failed")
-			panel.FinishError("start failed")
-			if sess != nil {
-				_ = sess.Finish(c.BaseDir, err)
-			}
-			return err
-		}
-		panel.SetBoot("Boot", "Container", streak.Done, "Container started")
-
-		// Watch JSONL events from docker logs for boot progress.
-		logWatcher := NewContainerLogWatcher(ctx, c.ContainerName, startTime)
-		defer logWatcher.Close()
-
-		bootDone := make(chan bool, 1)
-		go func() {
-			bootDone <- ConsumeContainerEventsPanel(logWatcher.Events(), panel)
-		}()
-
-		select {
-		case ok := <-bootDone:
-			if !ok {
-				panel.FinishError("boot interrupted")
-				if sess != nil {
-					_ = sess.Finish(c.BaseDir, fmt.Errorf("boot interrupted"))
-				}
-				return fmt.Errorf("boot did not complete")
-			}
-		case <-time.After(90 * time.Second):
-			logWatcher.Close()
-			panel.FinishError("boot timed out")
-			if sess != nil {
-				_ = sess.Finish(c.BaseDir, fmt.Errorf("boot timed out"))
-			}
-			return fmt.Errorf("boot timed out after 90s")
-		}
-	} else {
-		panel.SetBoot("Boot", "Container", streak.Done, "Container running")
-		panel.Finish("Cell ready (attached)")
-	}
-	panel.ClearBelowGroups()
-
-	// ── Exec into container ─────────────────────────────────────────────
-	env := s6.LinuxSessionEnv(c.HostUser)
-	execEnv := map[string]string{
-		"PATH": s6.LinuxExecPATH(env),
-		"HOME": "/home/" + c.HostUser,
-		"TERM": os.Getenv("TERM"),
-	}
-	for k, v := range extraEnv {
-		execEnv[k] = v
-	}
-	execArgv := BuildExecArgv(ExecSpec{
-		ContainerName: c.ContainerName,
-		User:          c.HostUser,
-		Binary:        binary,
-		Args:          append(defaultFlags, userArgs...),
-		TTY:           isatty.IsTerminal(os.Stdin.Fd()),
-		Env:           execEnv,
-	})
-	cmd := exec.Command(execArgv[0], execArgv[1:]...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		for sig := range sigCh {
-			if cmd.Process != nil {
-				_ = cmd.Process.Signal(sig)
-			}
-		}
-	}()
-
 	if err := cmd.Start(); err != nil {
 		if sess != nil {
 			_ = sess.Finish(c.BaseDir, err)
 		}
-		return fmt.Errorf("exec %q: %w", binary, err)
+		return fmt.Errorf("start %q: %w", argv[0], err)
 	}
 
+	// CELL-264: consume in-container boot events. Each sentinel file
+	// CREATE opens or seals a row. Entrypoint is mostly quiet in non-debug
+	// mode, so host rows and container stdout rarely interleave during
+	// boot; once the entrypoint emits boot.ready and exec's into the
+	// binary (claude/zsh), the consumer returns and stops rendering.
+	if bootEvents != nil {
+		go ConsumeBootEvents(bootEvents)
+	}
+
+	// Forward signals to the child process.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		for sig := range sigCh {
+			_ = cmd.Process.Signal(sig)
+		}
+	}()
+
 	waitErr := cmd.Wait()
-	signal.Stop(sigCh)
 	telemetry.TrackCommandFinish(filepath.Base(binary), time.Since(startTime).Milliseconds(), waitErr == nil)
 	if sess != nil {
 		if err := sess.Finish(c.BaseDir, waitErr); err != nil {
@@ -604,35 +545,6 @@ func agentExit(err error) error {
 		return &engine.ExitError{Code: exitErr.ExitCode()}
 	}
 	return err
-}
-
-// ensureRunning starts the container if it's not already running.
-// checkRunning and start are injectable for testing.
-func ensureRunning(name string, timeout time.Duration, checkRunning func() bool, start func() error) error {
-	if checkRunning() {
-		return nil
-	}
-	if err := start(); err != nil {
-		return fmt.Errorf("start container: %w", err)
-	}
-	deadline := time.After(timeout)
-	for {
-		if checkRunning() {
-			return nil
-		}
-		select {
-		case <-deadline:
-			return fmt.Errorf("container %s did not start in time", name)
-		case <-time.After(100 * time.Millisecond):
-		}
-	}
-}
-
-// containerBooted checks if the container has completed boot by testing
-// for the session-ready file inside the container.
-func containerBooted(ctx context.Context, name string) bool {
-	err := exec.CommandContext(ctx, "docker", "exec", name, "test", "-f", "/run/devcell-session-ready").Run()
-	return err == nil
 }
 
 // resolveTrustFlake checks if the project has a flake.nix and whether the

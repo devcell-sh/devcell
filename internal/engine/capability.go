@@ -37,7 +37,7 @@ var capabilities = []struct {
 	{Docker, []Guest{Linux}},
 	// Linux guests on Tart are planned, not implemented.
 	{Tart, []Guest{MacOS}},
-	{Winkit, []Guest{WindowsPE, WindowsFull}},
+	{Winkit, []Guest{WindowsFull, WindowsPE}},
 }
 
 // defaults is the engine each guest runs on when only the guest is chosen.
@@ -69,17 +69,17 @@ const osValues = "linux, macos, windows, winpe"
 // GuestForOS maps an --os or [cell] os value to its guest, and reports
 // whether the value is known.
 //
-// The user has not picked the final CLI names for the two Windows guests
-// yet. Until then "windows" keeps meaning the PE guest (the behavior before
-// the rename), "winpe" is its explicit spelling, and WindowsFull has no CLI
-// value. Keep osValues in step with this switch.
+// "windows" is the full Windows install (the default winkit guest).
+// "winpe" is the PE boot volume (opt-in, lighter, no persistent Windows state).
 func GuestForOS(v string) (Guest, bool) {
 	switch v {
 	case "linux":
 		return Linux, true
 	case "macos":
 		return MacOS, true
-	case "windows", "winpe":
+	case "windows":
+		return WindowsFull, true
+	case "winpe":
 		return WindowsPE, true
 	}
 	return "", false

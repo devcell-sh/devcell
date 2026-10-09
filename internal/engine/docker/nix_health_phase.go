@@ -20,7 +20,7 @@ import (
 // Every datapoint and decision is mirrored to ux.Debugf so `--debug` shows
 // the full check: volume, argv, raw probe output, parsed counts, cleanup
 // closures, and reap results. autoCleanup is --auto-cleanup.
-func nixStorePhase(ctx context.Context, pr ux.Phaser, thin bool, baseDir string, staleWarn, autoCleanup bool) error {
+func nixStorePhase(ctx context.Context, pr *ux.PhaseRunner, thin bool, baseDir string, staleWarn, autoCleanup bool) error {
 	if !thin {
 		ux.Debugf("nix health: skipped (not thin mode — no store volume)")
 		return nil
@@ -53,13 +53,11 @@ func nixStorePhase(ctx context.Context, pr ux.Phaser, thin bool, baseDir string,
 			h.DistinctRevs, h.NewestRev, h.NewestProjects)
 		health, probed = h, true
 
-		tag, detail, warn := h.Summary()
-		ux.Debugf("nix health: tag=%s detail=%s", tag, detail)
-		rowDetail := tag + " — " + detail
+		detail, warn := h.Summary()
 		if autoCleanup {
-			rowDetail += "; " + autoCleanupDetail(ctx)
+			detail += "; " + autoCleanupDetail(ctx)
 		}
-		return rowDetail, warn, nil
+		return detail, warn, nil
 	})
 
 	return staleCellNudge(baseDir, health, probed, staleWarn)
@@ -103,7 +101,7 @@ func staleCellNudge(baseDir string, h NixStoreHealth, probed, staleWarn bool) er
 // exists on the shared nix-store volume. A dead closure means the image
 // will boot silently broken — no nix-daemon, no shell setup, no tools.
 // Prompts for rebuild on TTY; auto-rebuilds on non-TTY.
-func closureCheckPhase(ctx context.Context, pr ux.Phaser, thin bool, imageTag string, rebuild func() error) error {
+func closureCheckPhase(ctx context.Context, pr *ux.PhaseRunner, thin bool, imageTag string, rebuild func() error) error {
 	if !thin {
 		ux.Debugf("closure check: skipped (not thin mode)")
 		return nil

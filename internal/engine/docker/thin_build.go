@@ -484,15 +484,13 @@ echo "Running home-manager switch (nix store on volume)..."
 home-manager switch --flake %s#devcell-%s%s
 
 # Capture the just-switched home-manager-path as an immutable /nix/store
-# realpath. home-manager's installPackages writes to the nix-profile-daemon
-# profile at ~/.local/state/nix/profiles/profile (nix 2.4+ path), while the
-# legacy /nix/var/nix/profiles/per-user/root/profile on the shared volume may
-# be stale from a different stack's build. Prefer the home-manager path; fall
-# back to the volume slot for older nix versions.
-HM_PROFILE=$(readlink -f /opt/devcell/.local/state/nix/profiles/profile 2>/dev/null)
-if [ -z "$HM_PROFILE" ] || [ ! -d "$HM_PROFILE" ]; then
-  HM_PROFILE=$(readlink -f /nix/var/nix/profiles/per-user/root/profile)
-fi
+# realpath. /nix/var/nix/profiles/per-user/root/profile is a mutable slot on
+# the shared devcell-nix-store docker volume — any later home-manager switch
+# from another container rewrites it, and every image whose profile symlink
+# went through that slot would silently lose packages (see CELL-322: a leaner
+# stack build clobbered chromium/patchright out of an ultimate container
+# PATH). Resolve once here and bake the resulting store path.
+HM_PROFILE=$(readlink -f /nix/var/nix/profiles/per-user/root/profile)
 if [ -z "$HM_PROFILE" ] || [ ! -d "$HM_PROFILE" ]; then
   echo "ERROR: could not resolve home-manager profile realpath" >&2
   exit 1
@@ -565,7 +563,6 @@ cp -a /etc/claude-code/ "$CTX/etc_claude_code/" 2>/dev/null || mkdir -p "$CTX/et
 cp -a /etc/codex/ "$CTX/etc_codex/" 2>/dev/null || mkdir -p "$CTX/etc_codex/"
 cp -a /etc/opencode/ "$CTX/etc_opencode/" 2>/dev/null || mkdir -p "$CTX/etc_opencode/"
 cp -a /etc/gemini/ "$CTX/etc_gemini/" 2>/dev/null || mkdir -p "$CTX/etc_gemini/"
-cp -a /etc/s6-rc/ "$CTX/etc_s6_rc/" 2>/dev/null || mkdir -p "$CTX/etc_s6_rc/"
 cp /opt/nixhome/entrypoint.sh "$CTX/entrypoint.sh" 2>/dev/null || true
 
 # Inner Dockerfile: minimal config image. All tools live on the /nix volume.
@@ -598,7 +595,6 @@ COPY etc_claude_code/ /etc/claude-code/
 COPY etc_codex/ /etc/codex/
 COPY etc_opencode/ /etc/opencode/
 COPY etc_gemini/ /etc/gemini/
-COPY etc_s6_rc/ /etc/s6-rc/
 COPY entrypoint.sh /opt/devcell/.local/bin/entrypoint.sh
 ENV HOME=/opt/devcell
 ENV USER=devcell

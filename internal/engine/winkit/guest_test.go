@@ -22,7 +22,7 @@ import (
 
 func TestGuestFor(t *testing.T) {
 	for in, want := range map[engine.Guest]guest{
-		"":                 guestPE,
+		"":                 guestFull,
 		engine.WindowsPE:   guestPE,
 		engine.WindowsFull: guestFull,
 	} {
@@ -65,7 +65,7 @@ func TestEngine_UnknownGuestErrors(t *testing.T) {
 // --- WindowsFull: winkit stage full-wsl ---
 
 func TestBuildConfig_FullIsNotPE(t *testing.T) {
-	c := buildConfig(peCell("/home/u"), guestFull, "/fake/w.iso", "/fake/v.iso")
+	c := buildConfig(peCell("/home/u"), guestFull, "/fake/w.iso", "/fake/v.iso", nil)
 
 	require.NotNil(t, c.Opts)
 	assert.False(t, c.Opts.PE, "the full guest is a full Windows install, not a PE boot volume")
@@ -76,7 +76,7 @@ func TestBuildConfig_FullIsNotPE(t *testing.T) {
 
 func TestBuildConfig_FullNixHomeFromEnv(t *testing.T) {
 	t.Setenv("DEVCELL_NIXHOME", "/path/to/nixhome")
-	c := buildConfig(peCell("/home/u"), guestFull, "/fake/w.iso", "/fake/v.iso")
+	c := buildConfig(peCell("/home/u"), guestFull, "/fake/w.iso", "/fake/v.iso", nil)
 
 	assert.Equal(t, "/path/to/nixhome", c.Opts.WSL.NixHome)
 }
@@ -130,6 +130,12 @@ func TestBuild_FullGuestBuildsFullWSLStage(t *testing.T) {
 	var got build.Config
 	stubBuild(t, func(_ context.Context, c build.Config) error {
 		got = c
+		// Create a sparse file >4 GB so the disk sanity check passes.
+		require.NoError(t, os.MkdirAll(filepath.Dir(c.Dest), 0o755))
+		f, fErr := os.Create(c.Dest)
+		require.NoError(t, fErr)
+		require.NoError(t, f.Truncate(5*1024*1024*1024))
+		require.NoError(t, f.Close())
 		return nil
 	})
 

@@ -311,13 +311,11 @@ func TestGuestValues(t *testing.T) {
 	assert.Equal(t, engine.Name("winkit"), engine.Winkit)
 }
 
-// "windows" keeps meaning the PE guest until the final CLI names are
-// chosen; the full Windows guest has no CLI spelling yet.
 func TestGuestForOS(t *testing.T) {
 	for os, want := range map[string]engine.Guest{
 		"linux":   engine.Linux,
 		"macos":   engine.MacOS,
-		"windows": engine.WindowsPE,
+		"windows": engine.WindowsFull,
 		"winpe":   engine.WindowsPE,
 	} {
 		got, ok := engine.GuestForOS(os)

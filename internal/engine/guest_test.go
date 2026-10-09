@@ -12,7 +12,7 @@ func TestDefaultGuest(t *testing.T) {
 	for n, want := range map[engine.Name]engine.Guest{
 		engine.Docker: engine.Linux,
 		engine.Tart:   engine.MacOS,
-		engine.Winkit: engine.WindowsPE,
+		engine.Winkit: engine.WindowsFull,
 	} {
 		got, ok := engine.DefaultGuest(n)
 		assert.True(t, ok, n)
@@ -33,11 +33,12 @@ func TestGuestFor(t *testing.T) {
 		osValues []string
 		want     engine.Guest
 	}{
-		{"no os: engine default", engine.Winkit, []string{"", ""}, engine.WindowsPE},
+		{"no os: engine default", engine.Winkit, []string{"", ""}, engine.WindowsFull},
 		{"no values at all: engine default", engine.Tart, nil, engine.MacOS},
-		{"--os value", engine.Winkit, []string{"winpe", ""}, engine.WindowsPE},
+		{"--os=windows is full", engine.Winkit, []string{"windows", ""}, engine.WindowsFull},
+		{"--os=winpe is PE", engine.Winkit, []string{"winpe", ""}, engine.WindowsPE},
 		{"[cell] os value", engine.Tart, []string{"", "macos"}, engine.MacOS},
-		{"os the engine cannot run is skipped", engine.Winkit, []string{"", "linux"}, engine.WindowsPE},
+		{"os the engine cannot run is skipped", engine.Winkit, []string{"", "linux"}, engine.WindowsFull},
 		{"first supported value wins", engine.Docker, []string{"macos", "linux"}, engine.Linux},
 		{"unknown os is skipped", engine.Docker, []string{"freebsd"}, engine.Linux},
 		{"unknown engine", "hyperv", []string{"linux"}, ""},

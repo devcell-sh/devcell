@@ -133,8 +133,8 @@ func TestInit_StackOverridesCellStack(t *testing.T) {
 	c := engine.Cell{Name: "main", HostHome: home, Stack: "base"}
 	require.NoError(t, Engine{}.Init(context.Background(), engine.InitOpts{Cell: c, Stack: "go"}))
 
-	assert.DirExists(t, templateDir(home, guestPE, "go", nil))
-	assert.NoDirExists(t, templateDir(home, guestPE, "base", nil))
+	assert.DirExists(t, templateDir(home, guestFull, "go", nil))
+	assert.NoDirExists(t, templateDir(home, guestFull, "base", nil))
 }
 
 // stubInitMedia serves Init's downloads from a planted cache: a cached

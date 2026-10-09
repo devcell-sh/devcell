@@ -13,11 +13,14 @@ import (
 
 	gowinkit "github.com/devcell-sh/go-winkit"
 	"github.com/devcell-sh/go-winkit/gosshd"
+	"github.com/devcell-sh/go-winkit/sftpshare"
+	"github.com/devcell-sh/go-winkit/vm/vmstate"
 
 	"github.com/DimmKirr/devcell/internal/cell"
 	"github.com/DimmKirr/devcell/internal/cfg"
 	"github.com/DimmKirr/devcell/internal/config"
 	"github.com/DimmKirr/devcell/internal/engine"
+	"github.com/DimmKirr/devcell/internal/s6"
 	"github.com/DimmKirr/devcell/internal/ux"
 )
 
@@ -104,6 +107,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	// --- env var assembly ---
 	logf("assembling env vars to forward into VM")
 	envVars := guestEnvVars(c.Config, c.Name)
+	envVars = append(envVars, "PATH="+s6.WSL1ExecPATH(s6.WSL1SessionEnv(c.HostUser)))
 	for _, kv := range envVars {
 		logf("  env: %s", kv)
 	}
@@ -150,6 +154,23 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		return err
 	}
 
+	if opts.Detach {
+		return detachVM(ctx, c, g, sshPort, rdpPort, vncPort, logf)
+	}
+
+	// --- SFTP share: serve project dir to the guest ---
+	// The baked rclone-mount s6 service connects to 10.0.2.2:<port> on boot;
+	// start the host SFTP server before the VM so the mount succeeds immediately.
+	if c.BaseDir != "" {
+		sftpSrv, sftpErr := startSFTPShareForRun(c.BaseDir)
+		if sftpErr != nil {
+			return fmt.Errorf("starting SFTP share for %s: %w", c.BaseDir, sftpErr)
+		}
+		defer sftpSrv.Close()
+		logf("sftp: sharing %s on port %d (guest reaches 10.0.2.2:%d as W:)",
+			c.BaseDir, sftpSrv.Port(), sftpSrv.Port())
+	}
+
 	so := startOpts(c, g, sshPort, rdpPort, vncPort)
 	so.Accel = cfg.Getenv("DEVCELL_WINKIT_ACCEL")
 	logf("starting %s VM: image=%s cpus=%d mem=%dGB ssh=%d rdp=%d vnc=%d state=%s", g.label(), so.Image, so.CPUs, so.MemoryGB, so.SSHPort, so.RDPPort, so.VNCPort, so.StateDir)
@@ -182,7 +203,55 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		setRuntimeWallpaper(ctx, ch, c.Name, logf)
 	}
 
+	activateS6Session(ctx, ch, c.HostUser, logf)
+
 	return execInGuest(ctx, ch, cmd, logf)
+}
+
+// activateS6Session writes s6 envdir vars and runs oneshot services inside
+// the WSL1 distro, over SSH. Best-effort: logs failures but never returns
+// an error. Same pattern as setRuntimeWallpaper.
+func activateS6Session(ctx context.Context, ch sshChannel, hostUser string, logf func(string, ...any)) {
+	script := s6.ActivateScript(s6.WSL1SessionEnv(hostUser))
+	cmd := "wsl -d winkit -- bash -c " + cell.ShellQuote(script)
+
+	logf("s6: activating session services for %q in WSL1", hostUser)
+	sess, err := dialGuest(ctx, ch)
+	if err != nil {
+		logf("s6: SSH dial failed: %v", err)
+		return
+	}
+	defer sess.Close()
+
+	exitCode, err := sess.RunStream(ctx, cmd, io.Discard, io.Discard)
+	if err != nil {
+		logf("s6: activation command failed: %v", err)
+		return
+	}
+	if exitCode != 0 {
+		logf("s6: activation exited %d (non-fatal)", exitCode)
+		return
+	}
+	logf("s6: session services activated for %q", hostUser)
+}
+
+// startSFTPShareForRun starts a loopback SFTP server rooted at dir on the
+// default port (9844). The guest's baked rclone-mount s6 service connects
+// to 10.0.2.2:<port> on boot. Seam var for test replacement.
+var startSFTPShareForRun = defaultStartSFTPShareForRun
+
+func defaultStartSFTPShareForRun(dir string) (*sftpshare.Server, error) {
+	srv, err := sftpshare.New(sftpshare.Config{
+		Root: dir,
+		Port: sftpshare.DefaultPort,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := srv.Start(); err != nil {
+		return nil, err
+	}
+	return srv, nil
 }
 
 // takeRunArgs takes the args that belong to cell out of an agent's args:
@@ -267,6 +336,114 @@ func execInGuest(ctx context.Context, ch sshChannel, cmd string, logf func(strin
 		return &engine.ExitError{Code: exitCode}
 	}
 	return nil
+}
+
+// detachVM boots a Windows VM in the background (QEMU detaches from the
+// calling process) and returns once SSH is reachable. The VM keeps running
+// after cell start exits; cell stop shuts it down. No SFTP share or agent
+// exec: those happen when cell shell attaches.
+func detachVM(ctx context.Context, c engine.Cell, g guest, sshPort, rdpPort, vncPort uint16, logf func(string, ...any)) error {
+	so := startOpts(c, g, sshPort, rdpPort, vncPort)
+	so.Accel = cfg.Getenv("DEVCELL_WINKIT_ACCEL")
+	// Foreground defaults to false: QEMU detaches and outlives the caller.
+
+	if other, ok := RunningVMForImage(c.HostHome, so.Image); ok {
+		return fmt.Errorf("image %s is already running in cell %q (PID %d): stop it first", so.Image, other.CellName, other.PID)
+	}
+
+	logf("starting %s VM (detached): image=%s ssh=%d rdp=%d vnc=%d", g.label(), so.Image, so.SSHPort, so.RDPPort, so.VNCPort)
+	machine, err := winkitStartFunc(ctx, so)
+	if err != nil {
+		return fmt.Errorf("starting %s VM: %w", g.label(), err)
+	}
+
+	ch := g.channel(sshPort)
+	logf("waiting for SSH on %s", ch.addr())
+	if err := waitForSSH(ctx, ch, 10*time.Minute); err != nil {
+		machine.Stop()
+		return fmt.Errorf("waiting for guest SSH: %w", err)
+	}
+
+	fmt.Printf("VM %q started (PID %d)\n", c.Name, machine.PID())
+	fmt.Printf("  SSH:    ssh -p %d %s@127.0.0.1\n", ch.port, ch.user)
+	fmt.Printf("  RDP:    127.0.0.1:%d\n", rdpPort)
+	fmt.Printf("  VNC:    127.0.0.1:%d\n", vncPort)
+	fmt.Printf("  Stop:   cell stop --os=windows\n")
+	return nil
+}
+
+// StopVM gracefully shuts down a running Windows VM for the given cell.
+// It tries SSH shutdown first, then SIGTERM, then Kill.
+func StopVM(ctx context.Context, home, cellName string) error {
+	stateDir := InstanceDir(home, cellName)
+	states, err := vmstate.List(stateDir)
+	if err != nil {
+		return fmt.Errorf("listing VMs in %s: %w", stateDir, err)
+	}
+
+	var alive []*vmstate.State
+	for _, st := range states {
+		if vmstate.IsAlive(st.PID) {
+			alive = append(alive, st)
+		}
+	}
+	if len(alive) == 0 {
+		return fmt.Errorf("no running Windows VM found for cell %q", cellName)
+	}
+
+	for _, st := range alive {
+		fmt.Printf("Stopping VM %q (PID %d)\n", st.Name, st.PID)
+
+		if st.SSHPort > 0 {
+			if gracefulGuestShutdown(ctx, st) {
+				fmt.Println("Guest shutting down gracefully")
+				if waitForProcessExit(st.PID, 30*time.Second) {
+					fmt.Println("VM stopped")
+					vmstate.Remove(stateDir, st.Name)
+					continue
+				}
+				fmt.Println("Graceful shutdown timed out, sending SIGTERM")
+			}
+		}
+
+		p, perr := os.FindProcess(st.PID)
+		if perr == nil {
+			_ = p.Signal(syscall.SIGTERM)
+			if waitForProcessExit(st.PID, 10*time.Second) {
+				fmt.Println("VM stopped")
+				vmstate.Remove(stateDir, st.Name)
+				continue
+			}
+			_ = p.Kill()
+		}
+		fmt.Println("VM killed")
+		vmstate.Remove(stateDir, st.Name)
+	}
+	return nil
+}
+
+func gracefulGuestShutdown(ctx context.Context, st *vmstate.State) bool {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	addr := fmt.Sprintf("127.0.0.1:%d", st.SSHPort)
+	c, err := gosshd.DialWith(ctx, addr, gosshd.DefaultUser, gosshd.DefaultPassword)
+	if err != nil {
+		return false
+	}
+	defer c.Close()
+	_, _, _, err = c.Run(ctx, "shutdown /s /t 5")
+	return err == nil
+}
+
+func waitForProcessExit(pid int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if !vmstate.IsAlive(pid) {
+			return true
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return false
 }
 
 // guestEnvVars collects env vars to forward into the Windows VM: the host
