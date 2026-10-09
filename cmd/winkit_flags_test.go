@@ -49,7 +49,7 @@ func TestWinkitBuild_QemuWindowsISOFlagStillWorksAndWarns(t *testing.T) {
 // Agent commands scan the flags from argv; the old spelling still sets
 // the port and warns once.
 func TestWinkitShell_QemuSSHPortFlagStillWorksAndWarns(t *testing.T) {
-	out := runWinkit(t, "[cell]\n", nil, "--engine=winkit", "shell", "--dry-run", "--qemu-ssh-port", "3333")
+	out := runWinkit(t, "[cell]\n", nil, "--engine=winkit", "--os=winpe", "shell", "--dry-run", "--qemu-ssh-port", "3333")
 	if !strings.Contains(out, "127.0.0.1:3333") {
 		t.Errorf("want SSH port 3333 in dry-run output, got:\n%s", out)
 	}
@@ -60,7 +60,7 @@ func TestWinkitShell_QemuSSHPortFlagStillWorksAndWarns(t *testing.T) {
 }
 
 func TestWinkitShell_WinkitSSHPortFlag(t *testing.T) {
-	out := runWinkit(t, "[cell]\n", nil, "--engine=winkit", "shell", "--dry-run", "--winkit-ssh-port", "3333")
+	out := runWinkit(t, "[cell]\n", nil, "--engine=winkit", "--os=winpe", "shell", "--dry-run", "--winkit-ssh-port", "3333")
 	if !strings.Contains(out, "127.0.0.1:3333") {
 		t.Errorf("want SSH port 3333 in dry-run output, got:\n%s", out)
 	}
@@ -70,7 +70,7 @@ func TestWinkitShell_WinkitSSHPortFlag(t *testing.T) {
 }
 
 func TestWinkitShell_QemuSSHPortKeyStillWorksAndWarns(t *testing.T) {
-	out := runWinkit(t, "[cell]\nqemu_ssh_port = 3333\n", nil, "--engine=winkit", "shell", "--dry-run")
+	out := runWinkit(t, "[cell]\nqemu_ssh_port = 3333\n", nil, "--engine=winkit", "--os=winpe", "shell", "--dry-run")
 	if !strings.Contains(out, "127.0.0.1:3333") {
 		t.Errorf("want SSH port 3333 in dry-run output, got:\n%s", out)
 	}
@@ -81,7 +81,7 @@ func TestWinkitShell_QemuSSHPortKeyStillWorksAndWarns(t *testing.T) {
 }
 
 func TestWinkitShell_QemuSSHPortEnvStillWorksAndWarns(t *testing.T) {
-	out := runWinkit(t, "[cell]\n", []string{"DEVCELL_QEMU_SSH_PORT=3333"}, "--engine=winkit", "shell", "--dry-run")
+	out := runWinkit(t, "[cell]\n", []string{"DEVCELL_QEMU_SSH_PORT=3333"}, "--engine=winkit", "--os=winpe", "shell", "--dry-run")
 	if !strings.Contains(out, "127.0.0.1:3333") {
 		t.Errorf("want SSH port 3333 in dry-run output, got:\n%s", out)
 	}

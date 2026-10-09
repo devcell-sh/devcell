@@ -34,56 +34,7 @@ func qemuTestHomeWithTOML(t *testing.T, projectTOML string) string {
 
 // --- Cross-platform smoke tests (dry-run, mock, help) ---
 
-func TestEngineQemu_DryRunPrintsSSH(t *testing.T) {
-	home := qemuTestHome(t)
-	cmd := exec.Command(binaryPath, "--engine=winkit", "shell", "--dry-run")
-	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
-	}
-	s := string(out)
-	if !strings.Contains(s, "ssh") {
-		t.Errorf("expected 'ssh' in dry-run output, got:\n%s", s)
-	}
-	if !strings.Contains(s, "wsl -d winkit") {
-		t.Errorf("expected the WSL guest command in dry-run output, got:\n%s", s)
-	}
-	if strings.Contains(s, "docker run") {
-		t.Errorf("qemu engine should not print docker run argv, got:\n%s", s)
-	}
-}
-
-func TestEngineQemu_DryRunContainsBinary(t *testing.T) {
-	home := qemuTestHome(t)
-	cmd := exec.Command(binaryPath, "--engine=winkit", "claude", "--dry-run")
-	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
-	}
-	if !strings.Contains(string(out), " claude --dangerously-skip-permissions") {
-		t.Errorf("expected the claude agent and its default flags in the guest command, got:\n%s", out)
-	}
-}
-
-func TestEngineQemu_DryRunNoDocker(t *testing.T) {
-	home := qemuTestHome(t)
-	cmd := exec.Command(binaryPath, "--engine=winkit", "claude", "--dry-run")
-	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
-	}
-	if strings.Contains(string(out), "docker") {
-		t.Errorf("qemu engine should not involve docker, got:\n%s", out)
-	}
-}
-
-func TestEngineQemu_DryRunContainsEnvVars(t *testing.T) {
+func TestEngineQemu_DryRunShell(t *testing.T) {
 	home := qemuTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=winkit", "shell", "--dry-run")
 	cmd.Dir = home
@@ -92,23 +43,40 @@ func TestEngineQemu_DryRunContainsEnvVars(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(string(out), "TERM=xterm-256color") {
-		t.Errorf("expected TERM= in dry-run output, got:\n%s", out)
+	s := string(out)
+
+	for _, tc := range []struct{ label, want string }{
+		{"ssh command", "ssh"},
+		{"WSL guest (wsl)", "wsl"},
+		{"WSL guest (-d winkit)", "-d winkit"},
+		{"bunk SSH port (10122+100)", "127.0.0.1:10222"},
+		{"TERM forwarded", "TERM=xterm-256color"},
+	} {
+		if !strings.Contains(s, tc.want) {
+			t.Errorf("%s: want %q in output, got:\n%s", tc.label, tc.want, s)
+		}
+	}
+	if strings.Contains(s, "docker run") {
+		t.Errorf("winkit engine must not print docker run argv, got:\n%s", s)
 	}
 }
 
-func TestEngineQemu_DryRunSSHPort(t *testing.T) {
+func TestEngineQemu_DryRunClaude(t *testing.T) {
 	home := qemuTestHome(t)
-	cmd := exec.Command(binaryPath, "--engine=winkit", "shell", "--dry-run")
+	cmd := exec.Command(binaryPath, "--engine=winkit", "claude", "--dry-run")
 	cmd.Dir = home
-	// DEVCELL_BUNK=1, no SESSION_PORT_PREFIX → portPrefix="1" → SSH=ClampPort("122")=122 → hoisted to 10122
 	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(string(out), "127.0.0.1:10122") {
-		t.Errorf("expected bunk-based SSH port 10122 in dry-run output, got:\n%s", out)
+	s := string(out)
+
+	if !strings.Contains(s, " claude --dangerously-skip-permissions") {
+		t.Errorf("want claude binary and default flags in guest command, got:\n%s", s)
+	}
+	if strings.Contains(s, "docker") {
+		t.Errorf("winkit engine must not involve docker, got:\n%s", s)
 	}
 }
 
@@ -121,8 +89,8 @@ func TestEngineQemu_DryRunCustomSSHPort(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(string(out), "127.0.0.1:3333") {
-		t.Errorf("expected custom SSH port 3333 in dry-run output, got:\n%s", out)
+	if !strings.Contains(string(out), "127.0.0.1:3433") {
+		t.Errorf("expected custom SSH port 3433 (3333+100) in dry-run output, got:\n%s", out)
 	}
 }
 
@@ -148,8 +116,8 @@ func TestEngineQemu_DeprecatedAliasForWinkit(t *testing.T) {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
 	}
 	s := string(out)
-	if !strings.Contains(s, "wsl -d winkit") {
-		t.Errorf("expected the winkit guest command in dry-run output, got:\n%s", s)
+	if !strings.Contains(s, "wsl") || !strings.Contains(s, "-d winkit") {
+		t.Errorf("expected the WSL guest command in dry-run output, got:\n%s", s)
 	}
 	const warning = `engine "qemu" is deprecated (use engine = "winkit" instead)`
 	if n := strings.Count(s, warning); n != 1 {
@@ -248,10 +216,10 @@ func TestEngineQemu_BuildDryRun(t *testing.T) {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
 	}
 	s := string(out)
-	if !strings.Contains(s, "PE+WSL1 build (dry-run)") {
-		t.Errorf("expected 'PE+WSL1 build (dry-run)' in --dry-run output, got:\n%s", s)
+	if !strings.Contains(s, "Windows+WSL1 build (dry-run)") {
+		t.Errorf("expected 'Windows+WSL1 build (dry-run)' in --dry-run output, got:\n%s", s)
 	}
-	if !strings.Contains(s, filepath.Join(".devcell", "windows", "base", "winkit-pe-wsl.qcow2")) {
+	if !strings.Contains(s, filepath.Join(".devcell", "windows", "full-wsl", "base", "winkit-full-wsl.qcow2")) {
 		t.Errorf("expected the stage-named artifact under the base template dir in --dry-run output, got:\n%s", s)
 	}
 }
@@ -275,7 +243,7 @@ func TestEngineWinkit_DryRunTakesStackAndForceFromArgs(t *testing.T) {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
 	}
 	s := string(out)
-	if !strings.Contains(s, filepath.Join(".devcell", "windows", "go", "winkit-pe-wsl.qcow2")) {
+	if !strings.Contains(s, filepath.Join(".devcell", "windows", "full-wsl", "go", "winkit-full-wsl.qcow2")) {
 		t.Errorf("expected the go stack's template in dry-run output, got:\n%s", s)
 	}
 	for _, arg := range []string{"--stack", "--force"} {

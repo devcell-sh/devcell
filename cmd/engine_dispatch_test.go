@@ -210,12 +210,12 @@ func TestEngineCell_Guest(t *testing.T) {
 		{"--os wins over [cell] os", []string{"--os", "winpe"}, "macos", engine.WindowsPE},
 		{"--os=value form", []string{"--os=linux"}, "macos", engine.Linux},
 		{"--macos stands for --os macos", []string{"--macos"}, "", engine.MacOS},
-		{"[cell] os when --os is unset", nil, "windows", engine.WindowsPE},
+		{"[cell] os when --os is unset", nil, "windows", engine.WindowsFull},
 		{"unknown [cell] os is skipped: docker's default", nil, "freebsd", engine.Linux},
 		{"neither set: docker's default", nil, "", engine.Linux},
-		{"neither set: the --engine's default", []string{"--engine", "winkit"}, "", engine.WindowsPE},
-		{"[cell] os the --engine cannot run is skipped", []string{"--engine=winkit"}, "macos", engine.WindowsPE},
-		{"deprecated --engine alias", []string{"--engine=qemu"}, "", engine.WindowsPE},
+		{"neither set: the --engine's default", []string{"--engine", "winkit"}, "", engine.WindowsFull},
+		{"[cell] os the --engine cannot run is skipped", []string{"--engine=winkit"}, "macos", engine.WindowsFull},
+		{"deprecated --engine alias", []string{"--engine=qemu"}, "", engine.WindowsFull},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
