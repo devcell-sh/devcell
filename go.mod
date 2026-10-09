@@ -83,8 +83,8 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/devcell-sh/go-nixoci v0.1.0
 	github.com/devcell-sh/go-regedit v0.1.0 // indirect
-	github.com/devcell-sh/go-wimlib v0.1.0 // indirect
-	github.com/devcell-sh/go-winkit v0.2.1-0.20260930143555-d6bd279fd194
+	github.com/devcell-sh/go-wimlib v0.2.0 // indirect
+	github.com/devcell-sh/go-winkit v0.3.0
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/djherbis/times v1.6.0 // indirect
 	github.com/docker/cli v29.7.2+incompatible // indirect
@@ -191,5 +191,3 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.2 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
-
-replace github.com/devcell-sh/go-winkit => /Users/dmitry/dev/devcell-sh/go-winkit
