@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-
-	"github.com/DimmKirr/devcell/internal/s6"
 )
 
 // GenerateSetHostnameScript returns a script that sets the macOS hostname to
@@ -575,18 +573,57 @@ fi`, username)
 }
 
 // S6EnvDir is where session env vars are written for s6 service scripts.
-// Deprecated: use s6.EnvDir from internal/s6 instead.
-const S6EnvDir = s6.EnvDir
+// /etc on macOS is a symlink to /private/etc (Data volume, writable by root).
+// nix-darwin already manages /etc/s6/ via the s6-darwin-renderer activation script.
+const S6EnvDir = "/etc/s6/env"
 
-// S6ServicesDir is the s6-rc source directory.
-// Deprecated: use s6.SourceDir from internal/s6 instead.
-const S6ServicesDir = s6.SourceDir
+// S6ServicesDir is where s6 service definitions live (installed by nix-darwin's
+// s6-darwin-renderer.nix activation script; read by com.devcell.s6-svscan).
+const S6ServicesDir = "/etc/s6/services"
 
-// GenerateS6SessionActivateScript returns a script that activates s6
-// session services for a newly created session user via s6-rc.
-// Delegates to the shared s6.ActivateScript for the platform-agnostic parts.
+// GenerateS6SessionActivateScript returns a script that activates s6-rc
+// session services for a newly created session user.
+//
+// The script sets env vars that s6 service scripts read (HOST_USER, SESSION_HOME,
+// DEVCELL_HOME) and then runs s6-rc oneshot services if s6 is installed.
+// Paths use /etc/s6/ to match nix-darwin's s6-darwin-renderer output.
 func GenerateS6SessionActivateScript(cellUser string) string {
-	return s6.ActivateScript(s6.DarwinSessionEnv(cellUser, DarwinVMUser))
+	return fmt.Sprintf(`set -e
+export HOST_USER="%s"
+export SESSION_HOME="/Users/%s"
+export DEVCELL_HOME="/Users/%s"
+
+# Source nix-daemon profile so s6/s6-rc are on PATH (tart exec runs as admin
+# whose default PATH doesn't include /run/current-system/sw/bin).
+. /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh 2>/dev/null || true
+export PATH="/run/current-system/sw/bin${PATH:+:}${PATH}"
+
+S6_ENV="%s"
+S6_SVC="%s"
+
+if command -v s6-rc >/dev/null 2>&1 && [ -d "$S6_SVC" ]; then
+  sudo mkdir -p "$S6_ENV"
+  echo "$HOST_USER" | sudo tee "$S6_ENV/HOST_USER" > /dev/null
+  echo "$SESSION_HOME" | sudo tee "$S6_ENV/SESSION_HOME" > /dev/null
+  echo "$DEVCELL_HOME" | sudo tee "$S6_ENV/DEVCELL_HOME" > /dev/null
+  echo "s6: activating session services for $HOST_USER"
+  for svc in shell-rc claude-config codex-config gemini-config opencode-config homedir gcroot mise; do
+    if [ -d "$S6_SVC/$svc" ]; then
+      if [ -f "$S6_SVC/$svc/type" ] && [ "$(cat "$S6_SVC/$svc/type")" = "oneshot" ] && [ -x "$S6_SVC/$svc/up" ]; then
+        echo "s6: running $svc"
+        sudo -E "$S6_SVC/$svc/up" 2>&1 || echo "s6: $svc failed (non-fatal)"
+      fi
+    fi
+  done
+  echo "s6: session services activated"
+else
+  echo "s6: s6-rc not available — skipping session activation"
+fi`,
+		cellUser,
+		cellUser,
+		DarwinVMUser,
+		S6EnvDir,
+		S6ServicesDir)
 }
 
 // ProvisionedMarkerPath is on the boot disk's writable Data volume.

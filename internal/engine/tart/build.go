@@ -28,7 +28,7 @@ func (c *BuildConfig) ApplyDefaults() {
 		c.CPUs = 4
 	}
 	if c.MemoryGB == 0 {
-		c.MemoryGB = 4
+		c.MemoryGB = 8
 	}
 	if c.SSHPort == 0 {
 		c.SSHPort = 22

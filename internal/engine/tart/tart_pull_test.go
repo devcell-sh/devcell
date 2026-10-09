@@ -37,7 +37,7 @@ func TestTartClone(t *testing.T) {
 	th := t.TempDir()
 	t.Setenv("TART_HOME", th)
 
-	err := TartClone(context.Background(), "ghcr.io/cirruslabs/macos-sequoia-base:latest", "test-vm")
+	err := TartClone(context.Background(), "ghcr.io/cirruslabs/macos-tahoe-base:latest", "test-vm")
 	if err != nil {
 		t.Fatalf("TartClone() error: %v", err)
 	}

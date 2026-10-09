@@ -244,7 +244,7 @@ func build(ctx context.Context, p buildParams) error {
 	var vm *VM
 	if err := pr.PhaseDetailed("Booting VM", func() (string, error) {
 		var bootErr error
-		vm, bootErr = TartRun(ctx, buildVM, sharedDirs, disks)
+		vm, bootErr = TartRun(ctx, buildVM, sharedDirs, disks, true)
 		if bootErr != nil {
 			return "", fmt.Errorf("starting VM: %w", bootErr)
 		}
