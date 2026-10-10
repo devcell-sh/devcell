@@ -386,10 +386,12 @@ func extractCookiesViaCDP(bin, profile, storageStatePath string, urls []string) 
 	// Wait for CDP to be ready (poll /json/version).
 	cdpBase := "http://localhost:" + cdpPort
 	var wsURL string
+	var lastCDPErr error
 	for i := 0; i < 20; i++ {
 		time.Sleep(300 * time.Millisecond)
 		data, err := cdpGet(cdpBase + "/json")
 		if err != nil {
+			lastCDPErr = err
 			ux.Debugf("CDP not ready yet: %v", err)
 			continue
 		}
@@ -411,7 +413,7 @@ func extractCookiesViaCDP(bin, profile, storageStatePath string, urls []string) 
 		}
 	}
 	if wsURL == "" {
-		return 0, "", fmt.Errorf("CDP not ready after timeout")
+		return 0, "", fmt.Errorf("CDP on port %s not ready after %s: %v", cdpPort, "6s", lastCDPErr)
 	}
 	ux.Debugf("CDP WebSocket: %s", wsURL)
 

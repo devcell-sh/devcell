@@ -199,5 +199,5 @@ func For(n Name) (Engine, error) {
 	if e, ok := engines[n]; ok {
 		return e, nil
 	}
-	return nil, fmt.Errorf("engine %q is not available in this build", n)
+	return nil, fmt.Errorf("engine %q is not available in this build; see https://github.com/DimmKirr/devcell/issues", n)
 }

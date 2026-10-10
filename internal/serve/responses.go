@@ -488,7 +488,7 @@ func NewResponsesHandler(exec Executor, store *JobStore, logPrompts bool, system
 		if req.Stream && req.Background != nil && *req.Background {
 			writeAPIError(w, http.StatusBadRequest,
 				"invalid_request_error", "unsupported_combination",
-				`"stream": true and "background": true cannot be combined`)
+				`"stream": true and "background": true cannot be combined; see https://github.com/DimmKirr/devcell/issues`)
 			return
 		}
 

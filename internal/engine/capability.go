@@ -166,7 +166,7 @@ func Resolve(flagEngine, flagOS, tomlEngine, tomlOS string) (n Name, deprecation
 	if flagOS != "" {
 		g, ok := GuestForOS(flagOS)
 		if !ok {
-			return "", "", fmt.Errorf("unsupported --os value %q (valid: %s)", flagOS, osValues)
+			return "", "", fmt.Errorf("unsupported --os value %q (valid: %s); see https://github.com/DimmKirr/devcell/issues", flagOS, osValues)
 		}
 		if flagEngine == "" {
 			n, _ = DefaultFor(g)
@@ -209,7 +209,7 @@ func parse(v, source string) (Name, string, error) {
 	if hint, ok := Retired(n); ok {
 		return "", "", fmt.Errorf("%s %q: %s", source, n, hint)
 	}
-	return "", "", fmt.Errorf("unsupported %s value %q (valid: %s)", source, n, engineList())
+	return "", "", fmt.Errorf("unsupported %s value %q (valid: %s); see https://github.com/DimmKirr/devcell/issues", source, n, engineList())
 }
 
 func guestsOf(n Name) ([]Guest, bool) {

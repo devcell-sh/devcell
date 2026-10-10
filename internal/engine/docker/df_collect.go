@@ -59,11 +59,11 @@ func CollectVMDisk(ctx context.Context) (VMDiskInfo, error) {
 	}
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	if len(lines) < 2 {
-		return VMDiskInfo{}, fmt.Errorf("unexpected df output")
+		return VMDiskInfo{}, fmt.Errorf("unexpected df output: %q", string(out))
 	}
 	fields := strings.Fields(lines[1])
 	if len(fields) < 4 {
-		return VMDiskInfo{}, fmt.Errorf("cannot parse df fields")
+		return VMDiskInfo{}, fmt.Errorf("cannot parse df fields from %q", lines[1])
 	}
 	total, _ := strconv.ParseInt(fields[1], 10, 64)
 	used, _ := strconv.ParseInt(fields[2], 10, 64)
