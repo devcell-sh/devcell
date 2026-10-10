@@ -1,3 +1,5 @@
+// Package logger wraps charmbracelet/log behind slog, providing leveled
+// structured logging with optional color and timestamps.
 package logger
 
 import (
@@ -11,6 +13,7 @@ import (
 
 var defaultLogger *slog.Logger
 
+// Initialize sets the global log level and output format.
 func Initialize(logLevel string, plain bool) {
 	var level charmlog.Level
 	switch strings.ToLower(logLevel) {
@@ -39,18 +42,22 @@ func Initialize(logLevel string, plain bool) {
 	defaultLogger = slog.New(logger)
 }
 
+// Info logs a message at INFO level with optional structured key-value pairs.
 func Info(msg string, keysAndValues ...interface{}) {
 	defaultLogger.Info(msg, keysAndValues...)
 }
 
+// Debug logs a message at DEBUG level; suppressed unless verbose logging is enabled.
 func Debug(msg string, keysAndValues ...interface{}) {
 	defaultLogger.Debug(msg, keysAndValues...)
 }
 
+// Warn logs a message at WARN level.
 func Warn(msg string, keysAndValues ...interface{}) {
 	defaultLogger.Warn(msg, keysAndValues...)
 }
 
+// Error logs a message at ERROR level.
 func Error(msg string, keysAndValues ...interface{}) {
 	defaultLogger.Error(msg, keysAndValues...)
 }

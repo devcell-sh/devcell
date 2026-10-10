@@ -1,3 +1,5 @@
+// Package telemetry sends anonymous usage events to PostHog when the user
+// has opted in. Call Init early, Track per event, and Close before exit.
 package telemetry
 
 import (
@@ -19,6 +21,7 @@ var (
 	captureHook func(posthog.Capture)
 )
 
+// Init loads telemetry config and opens the PostHog client if allowed.
 func Init(configDir string) {
 	cfg := LoadConfig(configDir)
 	if !IsAllowed(cfg) {
@@ -42,6 +45,7 @@ func initClient(cfg Config) {
 	anonymousID = cfg.AnonymousID
 }
 
+// Close flushes and shuts down the telemetry client.
 func Close() {
 	if client != nil {
 		client.Close()
@@ -49,6 +53,7 @@ func Close() {
 	}
 }
 
+// Track enqueues an event with the given properties; no-op when telemetry is off.
 func Track(event string, props map[string]any) {
 	if client == nil {
 		return

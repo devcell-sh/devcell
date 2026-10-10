@@ -1,3 +1,5 @@
+// Package cellrun tracks agent sessions: when a cell started, which tool
+// ran, and when it stopped. Records persist as JSON in the project directory.
 package cellrun
 
 import (
@@ -7,6 +9,7 @@ import (
 	"time"
 )
 
+// Record is one cell run, from Begin to its recorded stop.
 type Record struct {
 	Started time.Time  `json:"started"`
 	Stopped *time.Time `json:"stopped"`
@@ -15,6 +18,7 @@ type Record struct {
 	Args    []string   `json:"args"`
 }
 
+// Begin starts and persists a new Record for a cell run in projectDir.
 func Begin(projectDir, tool string, args []string) (*Record, error) {
 	if args == nil {
 		args = []string{}
