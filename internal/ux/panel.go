@@ -247,6 +247,20 @@ func (p *BootPanel) Snapshot() *streak.Grid {
 	return p.loader.Snapshot()
 }
 
+// PromotePending sets every Pending dot to Done. Call when attaching to
+// an already-running container so Boot/Services/Environment groups show
+// green instead of grey.
+func (p *BootPanel) PromotePending() {
+	snap := p.loader.Snapshot()
+	for r := 0; r < snap.Rows(); r++ {
+		for c := 0; c < snap.RowCols(r); c++ {
+			if s, _ := snap.Get(r, c); s == streak.Pending {
+				_ = p.loader.Set(r, c, streak.Done)
+			}
+		}
+	}
+}
+
 // PromoteRunning sets every Running dot to Done. Call when an external
 // signal (e.g. boot.ready) confirms all services are up, even if some
 // never emitted their own "up" event (longruns that exec into a daemon).
@@ -294,10 +308,17 @@ func (p *BootPanel) Clear() {
 // group rows and rule, then erases everything below (issue lines,
 // footer message). The agent starts on a clean line right after the
 // rule. No-op in plain/verbose mode.
+//
+// Vertical layout from the saved cursor position:
+//
+//	line 0: banner           (1 line)
+//	line 1..N: group rows    (len(groups) lines)
+//	line N+1: rule           (1 line)
+//	line N+2: footer/issues  ← erase from here
 func (p *BootPanel) ClearBelowGroups() {
 	if LogPlainText || Verbose {
 		return
 	}
-	n := len(p.groups)
+	n := 1 + len(p.groups) + 1 // banner + groups + rule
 	fmt.Fprintf(os.Stderr, "\x1b8\x1b[%dB\x1b[J", n)
 }

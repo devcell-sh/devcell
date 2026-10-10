@@ -152,3 +152,53 @@ func TestBootPanel_SetBootWithGroup(t *testing.T) {
 	panel.SetBoot("Environment", "Shell", streak.Done, "Shell ready")
 	panel.Finish("done")
 }
+
+func TestBootPanel_PromotePending(t *testing.T) {
+	groups := []PanelGroup{
+		{Label: "Prepare", Steps: []string{"Docker", "Network"}},
+		{Label: "Boot", Steps: []string{"Container", "Entrypoint"}},
+		{Label: "Services", Steps: []string{"Display", "Audio"}},
+	}
+	panel := NewBootPanel(groups)
+
+	// Simulate Prepare completing normally.
+	_ = panel.Phase("Docker", func() error { return nil })
+	_ = panel.Phase("Network", func() error { return nil })
+
+	// Boot: only Container done (attach path).
+	panel.SetBoot("Boot", "Container", streak.Done, "Container running")
+
+	// Services: untouched (all Pending).
+	// PromotePending should fill in the gaps.
+	panel.PromotePending()
+
+	snap := panel.Snapshot()
+
+	// Prepare: already Done, should stay Done.
+	for _, col := range []int{0, 1} {
+		s, _ := snap.Get(0, col)
+		if s != streak.Done {
+			t.Errorf("Prepare col %d = %v, want Done", col, s)
+		}
+	}
+
+	// Boot.Container: already Done.
+	s, _ := snap.Get(1, 0)
+	if s != streak.Done {
+		t.Errorf("Boot.Container = %v, want Done", s)
+	}
+	// Boot.Entrypoint: was Pending, should now be Done.
+	s, _ = snap.Get(1, 1)
+	if s != streak.Done {
+		t.Errorf("Boot.Entrypoint = %v, want Done (was Pending)", s)
+	}
+
+	// Services: both were Pending, should now be Done.
+	for _, col := range []int{0, 1} {
+		s, _ := snap.Get(2, col)
+		if s != streak.Done {
+			t.Errorf("Services col %d = %v, want Done", col, s)
+		}
+	}
+	panel.Finish("done")
+}
