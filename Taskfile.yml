@@ -119,6 +119,7 @@ tasks:
     silent: true
     cmds:
       - go run cmd/schemagen.go -version {{.SCHEMA_VERSION}}
+      - cp web/public/schema/{{.SCHEMA_VERSION}}/devcell.json internal/cfg/devcell-schema.json
 
   schema:catalog:
     desc: Publish the home flake's module/stack/package catalog to web/public/schema/<version>/devcell-sh/home/ (needs nix; FLAKE=path:/path/to/home for a local checkout, VERSION=vX.Y.Z for a release)

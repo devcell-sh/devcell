@@ -185,7 +185,7 @@ func warnConfigDeprecations(w io.Writer, c cfg.CellConfig) {
 // repeat what it is about to fix).
 func skipsConfigCheck(arg string) bool {
 	switch arg {
-	case "help", "completion", "-h", "--help", "--version", "config":
+	case "help", "completion", "-h", "--help", "--version", "config", "openapi":
 		return true
 	}
 	return strings.HasPrefix(arg, "__complete")
@@ -285,6 +285,7 @@ func init() {
 		serveCmd,
 		authCmd,
 		telemetryCmd,
+		openapiCmd,
 	)
 }
 
