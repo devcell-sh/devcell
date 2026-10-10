@@ -11,6 +11,9 @@ on:
       - feature/wip
       - feature/add-web
       - feature/web
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       skip_nix_cache:
