@@ -43,7 +43,7 @@ jobs:
             platform: linux/arm64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Set lowercase image name
         run: echo "IMAGE_NAME_LC=${IMAGE_NAME,,}" >> $GITHUB_ENV
@@ -164,7 +164,7 @@ jobs:
     name: Cell CLI Release Build
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
