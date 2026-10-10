@@ -28,6 +28,18 @@ On first run, `cell` creates `.devcell.toml` and `.devcell/` in your project dir
 - **4 primary stacks**: `base` (minimal), `dev` (seed: stealth browser + IaC MCPs), `ultimate` (general development), `bbb` (ultimate plus specialist tools). Legacy: go/node/python/fullstack/electronics. See [MIGRATION.md](./MIGRATION.md).
 - **Model ranking** - `cell models` shows cloud models (Anthropic, OpenAI, Google via OpenRouter) and local ollama models ranked by SWE-Bench score and speed, side by side
 
+## Comparison
+
+| | DevCell | VS Code Dev Containers | E2B | Daytona | Raw `docker run` |
+|---|---|---|---|---|---|
+| Host filesystem isolated | yes | no (mounts workspace) | yes | partial | manual |
+| Claude Max/Pro (no API key) | yes | no | no | no | manual |
+| VM-backed macOS/Windows | yes (tart, winkit) | no | no | no | no |
+| MCP servers bundled | yes | manual | no | no | manual |
+| IDE integration | CLI + any editor | VS Code only | SDK | IDE plugins | manual |
+
+Use Dev Containers when you want IDE-integrated rebuild-on-save. Use E2B when you need ephemeral cloud sandboxes with an SDK. Use Daytona for team-managed remote environments. Use raw Docker when you already have a hardened seccomp/AppArmor profile. Use DevCell when the agent needs full auto-approve in a cell that can't touch your host.
+
 ## Stacks
 
 Published to `ghcr.io/devcell-sh/devcell`. Multi-arch: linux/amd64, linux/arm64. The `dev` seed and `ultimate` general development stack support extra capability modules; `bbb` retains the specialist tools previously bundled with ultimate (see [MIGRATION.md](./MIGRATION.md)). Legacy stacks (go, node, python, fullstack, electronics) still build.
@@ -206,6 +218,14 @@ task nix:validate    # Syntax check + attribute resolution across all stacks
 | **module** | A toggleable Nix capability composed into a stack (see [MIGRATION.md](./MIGRATION.md)). |
 
 **One-line model:** *a cell is the boundary; many projects live inside it; each project at a time spawns one container.*
+
+## Not yet
+
+| Gap | Status | Where to look |
+|---|---|---|
+| `windows-full` guest | internal only | `internal/engine` capability table |
+| Snapshot/restore cells | planned | `internal/engine/docker` |
+| Pre-built registry images (`cell pull`) | planned | image build pipeline |
 
 ## License
 
