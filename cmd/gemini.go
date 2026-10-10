@@ -26,6 +26,9 @@ Examples:
     cell gemini --model=gemini-2.5-pro`,
 	DisableFlagParsing: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if wantsHelp(args) {
+			return cmd.Help()
+		}
 		return runAgent("gemini", []string{"--yolo"}, args, nil)
 	},
 }

@@ -45,6 +45,9 @@ Examples:
     cell claude --openrouter`,
 	DisableFlagParsing: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if wantsHelp(args) {
+			return cmd.Help()
+		}
 		return runAgent("claude", []string{"--dangerously-skip-permissions"}, args, claudeEnv())
 	},
 }

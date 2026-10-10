@@ -517,6 +517,21 @@ var osArgs = os.Args
 // scanFlag checks osArgs for a boolean flag.
 // Needed because DisableFlagParsing prevents cobra from parsing persistent
 // flags on agent subcommands.
+// wantsHelp returns true if -h or --help appears in the raw args.
+// Used by passthrough commands that set DisableFlagParsing, which
+// suppresses cobra's built-in help handling.
+func wantsHelp(args []string) bool {
+	for _, a := range args {
+		if a == "-h" || a == "--help" {
+			return true
+		}
+		if a == "--" {
+			return false
+		}
+	}
+	return false
+}
+
 func scanFlag(flag string) bool {
 	for _, arg := range osArgs {
 		if arg == flag {

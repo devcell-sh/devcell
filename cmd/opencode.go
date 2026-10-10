@@ -32,6 +32,9 @@ Examples:
     cell opencode --model anthropic/claude-sonnet-4-5`,
 	DisableFlagParsing: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if wantsHelp(args) {
+			return cmd.Help()
+		}
 		// If the user passed no arguments (after stripping devcell flags),
 		// default to "opencode ." so it opens in the current directory.
 		cleaned := stripCellFlags(args)
@@ -59,6 +62,9 @@ Examples:
     cell opencode resume`,
 	DisableFlagParsing: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if wantsHelp(args) {
+			return cmd.Help()
+		}
 		return runAgent("opencode", nil, append([]string{"resume"}, args...), opencodeEnv())
 	},
 }

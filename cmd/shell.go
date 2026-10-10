@@ -31,6 +31,9 @@ Examples:
     cell shell -- ls /workspace`,
 	DisableFlagParsing: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if wantsHelp(args) {
+			return cmd.Help()
+		}
 		applyOutputFlags()
 
 		c, err := config.LoadFromOS()

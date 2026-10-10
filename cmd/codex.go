@@ -33,6 +33,9 @@ Examples:
     cell codex --model o3`,
 	DisableFlagParsing: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if wantsHelp(args) {
+			return cmd.Help()
+		}
 		extraFlags, extraEnv := codexProviderConfig()
 		return runAgent("codex",
 			append([]string{"--dangerously-bypass-approvals-and-sandbox"}, extraFlags...),
@@ -52,6 +55,9 @@ Examples:
     cell codex resume`,
 	DisableFlagParsing: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if wantsHelp(args) {
+			return cmd.Help()
+		}
 		return runAgent("codex", nil, append([]string{"resume"}, args...), nil)
 	},
 }
