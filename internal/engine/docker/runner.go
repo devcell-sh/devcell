@@ -195,6 +195,7 @@ type RunSpec struct {
 	BootDir      string              // CELL-264: host-side boot dir for fsnotify sentinels; empty disables the bind-mount
 	TTY          bool                // allocate a pseudo-TTY (-it); set from isatty check on stdin
 	Detach       bool                // run container in detached mode (-d); set by `cell start`
+	Lifecycle    string              // "persistent" (cell start) or "oneshot" (cell claude); empty defaults to "oneshot"
 	NoSecrets    bool                // skip `op run --` prefix and all secrets injection
 }
 
@@ -274,6 +275,13 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	// Labels for VNC lookup: filter by basedir+cellid without inspecting all containers
 	argv = append(argv, "--label", "devcell.basedir="+c.BaseDir)
 	argv = append(argv, "--label", "devcell.cellid="+c.Bunk)
+	argv = append(argv, "--label", "devcell.config-hash="+cfg.ConfigHash(spec.CellCfg))
+	argv = append(argv, "--label", "devcell.stack="+spec.CellCfg.Cell.ResolvedStack())
+	lifecycle := spec.Lifecycle
+	if lifecycle == "" {
+		lifecycle = "oneshot"
+	}
+	argv = append(argv, "--label", "devcell.lifecycle="+lifecycle)
 
 	// Container-layout env vars. The cell-level ones (APP_NAME,
 	// DEVCELL_CELL_NAME, IS_SANDBOX, WORKSPACE, git identity, TZ, locale,
@@ -557,6 +565,17 @@ func ContainerRunning(ctx context.Context, name string) bool {
 		return false
 	}
 	return strings.TrimSpace(string(out)) == "running"
+}
+
+// ContainerLabel returns the value of a Docker label on a running or stopped
+// container, or "" if the container or label is missing.
+func ContainerLabel(ctx context.Context, name, key string) string {
+	out, err := exec.CommandContext(ctx, "docker", "inspect",
+		"--format", "{{index .Config.Labels \""+key+"\"}}", name).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // EnsureNetwork creates the devcell-network docker network if it doesn't exist.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -442,6 +443,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	if opts.Detach {
 		// cell start: detached with agent as CMD (unchanged).
 		spec.Detach = true
+		spec.Lifecycle = "persistent"
 		argv := BuildArgv(spec, OsFS, exec.LookPath)
 		cmd := exec.Command(argv[0], argv[1:]...)
 		cmd.Stderr = os.Stderr
@@ -456,7 +458,8 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	// The container runs detached with `sleep infinity` as CMD.
 	// Boot events (JSONL from devcell-event + _notify) flow through docker
 	// logs. Once boot is done, we docker exec into the agent binary.
-	// The container survives agent exit; `cell stop` tears it down.
+	// On exit: auto-stopped if we started it (oneshot); left running if
+	// we attached to an existing container or it was started via `cell start`.
 
 	sess, sessErr := cellrun.Begin(c.BaseDir, binary, userArgs)
 	if sessErr != nil {
@@ -465,6 +468,19 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	startTime := time.Now()
 
 	alreadyRunning := ContainerRunning(ctx, c.ContainerName)
+
+	// Config drift: if the container is running but the config changed,
+	// restart it so volumes, env, stack, ports etc. take effect.
+	if alreadyRunning {
+		if drifted, reason := configDrifted(ctx, c.ContainerName, cellCfg); drifted {
+			fmt.Printf("\n  Config changed (%s) — restarting container\n\n", reason)
+			stopCmd := exec.CommandContext(ctx, "docker", "stop", c.ContainerName)
+			stopCmd.Stdout = io.Discard
+			stopCmd.Stderr = io.Discard
+			_ = stopCmd.Run()
+			alreadyRunning = false
+		}
+	}
 
 	// ── Group 3: Boot ────────────────────────────────────────────────────
 	if !alreadyRunning {
@@ -521,6 +537,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		}
 	} else {
 		panel.SetBoot("Boot", "Container", streak.Done, "Container running")
+		panel.PromotePending()
 		panel.Finish("Cell ready (attached)")
 	}
 	panel.ClearBelowGroups()
@@ -573,6 +590,17 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 			ux.Debugf("cellrun finish: %v", err)
 		}
 	}
+
+	// Auto-stop: if we started this container (not attached) and it's
+	// labeled oneshot, stop it now so the user doesn't have to `cell stop`.
+	if !alreadyRunning && ContainerLabel(ctx, c.ContainerName, "devcell.lifecycle") == "oneshot" {
+		ux.Debugf("auto-stopping oneshot container %s", c.ContainerName)
+		stopCmd := exec.CommandContext(ctx, "docker", "stop", c.ContainerName)
+		stopCmd.Stdout = io.Discard
+		stopCmd.Stderr = io.Discard
+		_ = stopCmd.Run()
+	}
+
 	return agentExit(waitErr)
 }
 
@@ -672,4 +700,31 @@ func resolveTrustFlake(baseDir, cellHome string) bool {
 	}
 
 	return trusted
+}
+
+// configDrifted compares the running container's config hash label against
+// the current config. Returns true + a human-readable reason when the
+// container should be restarted. Containers without the label (created
+// before this feature) are left alone.
+func configDrifted(ctx context.Context, containerName string, current cfg.CellConfig) (bool, string) {
+	haveHash := ContainerLabel(ctx, containerName, "devcell.config-hash")
+	if haveHash == "" {
+		return false, ""
+	}
+	wantHash := cfg.ConfigHash(current)
+	if haveHash == wantHash {
+		return false, ""
+	}
+
+	// Build a short reason from what we can read off the container.
+	var reasons []string
+	oldStack := ContainerLabel(ctx, containerName, "devcell.stack")
+	newStack := current.Cell.ResolvedStack()
+	if oldStack != "" && oldStack != newStack {
+		reasons = append(reasons, fmt.Sprintf("stack: %s → %s", oldStack, newStack))
+	}
+	if len(reasons) == 0 {
+		reasons = append(reasons, "config changed")
+	}
+	return true, strings.Join(reasons, ", ")
 }

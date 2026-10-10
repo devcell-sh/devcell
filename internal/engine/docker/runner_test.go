@@ -1859,3 +1859,72 @@ func TestArgv_MisePackages_AbsentWhenEmpty(t *testing.T) {
 		}
 	}
 }
+
+// --- config-hash label ---
+
+func TestArgv_ConfigHashLabel(t *testing.T) {
+	argv := buildArgv(t)
+	found := false
+	for _, a := range argv {
+		if strings.HasPrefix(a, "devcell.config-hash=") {
+			found = true
+			hash := strings.TrimPrefix(a, "devcell.config-hash=")
+			if len(hash) != 12 {
+				t.Errorf("expected 12-char hash, got %d: %q", len(hash), hash)
+			}
+		}
+	}
+	if !found {
+		t.Error("missing devcell.config-hash label")
+	}
+}
+
+func TestArgv_StackLabel(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.CellCfg.Cell.Stack = "ultimate"
+	})
+	if !hasArg(argv, "devcell.stack=ultimate") {
+		t.Error("missing devcell.stack label on container")
+	}
+}
+
+func TestArgv_ConfigHashChangesWithConfig(t *testing.T) {
+	argv1 := buildArgv(t, func(s *docker.RunSpec) {
+		s.CellCfg.Cell.Stack = "base"
+	})
+	argv2 := buildArgv(t, func(s *docker.RunSpec) {
+		s.CellCfg.Cell.Stack = "ultimate"
+	})
+	var hash1, hash2 string
+	for _, a := range argv1 {
+		if strings.HasPrefix(a, "devcell.config-hash=") {
+			hash1 = strings.TrimPrefix(a, "devcell.config-hash=")
+		}
+	}
+	for _, a := range argv2 {
+		if strings.HasPrefix(a, "devcell.config-hash=") {
+			hash2 = strings.TrimPrefix(a, "devcell.config-hash=")
+		}
+	}
+	if hash1 == hash2 {
+		t.Error("different stacks must produce different config-hash labels")
+	}
+}
+
+// --- lifecycle label ---
+
+func TestArgv_LifecycleLabel_Oneshot(t *testing.T) {
+	argv := buildArgv(t)
+	if !hasConsecutive(argv, "--label", "devcell.lifecycle=oneshot") {
+		t.Error("interactive mode should set devcell.lifecycle=oneshot")
+	}
+}
+
+func TestArgv_LifecycleLabel_Persistent(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.Lifecycle = "persistent"
+	})
+	if !hasConsecutive(argv, "--label", "devcell.lifecycle=persistent") {
+		t.Error("Lifecycle=persistent should set devcell.lifecycle=persistent")
+	}
+}
