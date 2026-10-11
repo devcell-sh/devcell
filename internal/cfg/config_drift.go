@@ -58,6 +58,14 @@ func ConfigDrift(old, new CellConfig) string {
 		diffs = append(diffs, "GUI settings")
 	}
 
+	if NetworkProxyEnabled(old) != NetworkProxyEnabled(new) ||
+		old.Network.Proxy.ResolvedMode() != new.Network.Proxy.ResolvedMode() ||
+		strings.Join(sortedCopy(old.Network.Proxy.Allow), ",") != strings.Join(sortedCopy(new.Network.Proxy.Allow), ",") ||
+		strings.Join(sortedCopy(old.Network.Proxy.Block), ",") != strings.Join(sortedCopy(new.Network.Proxy.Block), ",") ||
+		strings.Join(sortedCopy(old.Network.Proxy.Presets), ",") != strings.Join(sortedCopy(new.Network.Proxy.Presets), ",") {
+		diffs = append(diffs, "network proxy")
+	}
+
 	if len(diffs) == 0 {
 		return ""
 	}

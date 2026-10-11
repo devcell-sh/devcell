@@ -161,20 +161,20 @@ func TestMcp_PlaywrightSecretsFromDotEnv(t *testing.T) {
 		"USER_WORKING_DIR": "/tmp/test-wd",
 	})
 
-	_, code := exec(t, c, []string{"sh", "-c", "command -v patchright-mcp-cell"})
+	_, code := containerExec(t, c, []string{"sh", "-c", "command -v patchright-mcp-cell"})
 	if code != 0 {
 		t.Fatal("FAIL: patchright-mcp-cell not found on PATH")
 	}
 
 	// Create mock .env with the secret key names (values in .env are irrelevant;
 	// wrapper looks them up from container env at runtime).
-	_, code = exec(t, c, []string{"sh", "-c",
+	_, code = containerExec(t, c, []string{"sh", "-c",
 		"mkdir -p /tmp/test-wd && printf 'TEST_PASSWORD=placeholder\nGITHUB_TOKEN=placeholder\n' > /tmp/test-wd/.env"})
 	if code != 0 {
 		t.Fatal("FAIL: could not create test .env file")
 	}
 
-	out, code := exec(t, c, []string{"sh", "-c", `
+	out, code := containerExec(t, c, []string{"sh", "-c", `
 		SECRETS_FILE=$(mktemp /tmp/pw-secrets-XXXXXX.env)
 		trap 'rm -f "$SECRETS_FILE"' EXIT
 		_ENV_FILE="${USER_WORKING_DIR:-}/.env"
@@ -236,14 +236,14 @@ func TestMcp_PlaywrightE2EFormSecrets(t *testing.T) {
 		"/tmp/e2e-wd/.env", 0o644); err != nil {
 		// CopyToContainer creates parent dirs automatically only when the file is in /tmp;
 		// fall back to exec if copy fails.
-		if _, code := exec(t, c, []string{"sh", "-c",
+		if _, code := containerExec(t, c, []string{"sh", "-c",
 			"mkdir -p /tmp/e2e-wd && printf 'TEST_USERNAME=\nTEST_PASSWORD=\n' > /tmp/e2e-wd/.env"}); code != 0 {
 			t.Fatalf("FAIL setup: could not create .env: %v", err)
 		}
 	}
 
 	// Step 1: playwright registered in ~/.claude.json (merged by entrypoint.sh).
-	raw, code := exec(t, c, []string{"cat", "/home/" + hostUser + "/.claude.json"})
+	raw, code := containerExec(t, c, []string{"cat", "/home/" + hostUser + "/.claude.json"})
 	if code != 0 {
 		t.Fatalf("FAIL step 1: ~/.claude.json not found (exit %d)", code)
 	}
@@ -273,17 +273,17 @@ func TestMcp_PlaywrightE2EFormSecrets(t *testing.T) {
 	}
 
 	// Step 3: start Node.js server (backgrounds immediately, writes port to /tmp/server-port.txt).
-	exec(t, c, []string{"bash", "-c", "node /tmp/form-server.js &"})
-	_, portCode := exec(t, c, []string{"bash", "-c",
+	containerExec(t, c, []string{"bash", "-c", "node /tmp/form-server.js &"})
+	_, portCode := containerExec(t, c, []string{"bash", "-c",
 		"for i in 1 2 3 4 5 6 7 8 9 10; do [ -f /tmp/server-port.txt ] && exit 0; sleep 0.5; done; exit 1"})
 	if portCode != 0 {
 		t.Fatal("FAIL step 3: Node.js server did not start (no port file in 5s)")
 	}
-	port, _ := exec(t, c, []string{"cat", "/tmp/server-port.txt"})
+	port, _ := containerExec(t, c, []string{"cat", "/tmp/server-port.txt"})
 	t.Logf("step 3: Node.js form server on port %s", port)
 
 	// Step 4: run Python MCP client — drives patchright-mcp-cell to fill form with secrets.
-	mcpOut, mcpCode := exec(t, c, []string{"python3", "/tmp/mcp-form-client.py"})
+	mcpOut, mcpCode := containerExec(t, c, []string{"python3", "/tmp/mcp-form-client.py"})
 	t.Logf("step 4 MCP client output:\n%s", mcpOut)
 	if mcpCode != 0 {
 		t.Fatalf("FAIL step 4: MCP client exited %d", mcpCode)
@@ -293,7 +293,7 @@ func TestMcp_PlaywrightE2EFormSecrets(t *testing.T) {
 	}
 
 	// Step 5: assert the real secret values reached the form (not the names).
-	result, resultCode := exec(t, c, []string{"cat", "/tmp/form-output.txt"})
+	result, resultCode := containerExec(t, c, []string{"cat", "/tmp/form-output.txt"})
 	if resultCode != 0 {
 		t.Fatal("FAIL step 5: /tmp/form-output.txt not found — form was not submitted")
 	}
@@ -336,14 +336,14 @@ func TestMcp_PatchrightUndetected(t *testing.T) {
 	})
 
 	// Smoke check 1: patchright-mcp-cell is on PATH
-	_, code := exec(t, c, []string{"sh", "-c", "command -v patchright-mcp-cell"})
+	_, code := containerExec(t, c, []string{"sh", "-c", "command -v patchright-mcp-cell"})
 	if code != 0 {
 		t.Fatal("FAIL: patchright-mcp-cell not on PATH")
 	}
 	t.Log("PASS: patchright-mcp-cell on PATH")
 
 	// Smoke check 2: stealth-init.js exists
-	_, code = exec(t, c, []string{"sh", "-c",
+	_, code = containerExec(t, c, []string{"sh", "-c",
 		"ls /nix/store/*-patchright-mcp-cell/share/patchright/stealth-init.js"})
 	if code != 0 {
 		t.Fatal("FAIL: stealth-init.js not found")
@@ -351,7 +351,7 @@ func TestMcp_PatchrightUndetected(t *testing.T) {
 	t.Log("PASS: stealth-init.js present")
 
 	// Smoke check 3: config.json has WebGL spoof args
-	out, code := exec(t, c, []string{"sh", "-c",
+	out, code := containerExec(t, c, []string{"sh", "-c",
 		"cat /nix/store/*-patchright-mcp-cell/share/patchright/config.json"})
 	if code != 0 {
 		t.Fatal("FAIL: config.json not found")
@@ -394,14 +394,14 @@ func TestThinEntrypoint_MiseFound(t *testing.T) {
 		"HOST_USER": hostUser,
 	})
 
-	out, code := exec(t, c, []string{"sh", "-c", "command -v mise"})
+	out, code := containerExec(t, c, []string{"sh", "-c", "command -v mise"})
 	if code != 0 {
 		t.Fatalf("mise not on PATH in thin container: %s", out)
 	}
 	t.Logf("mise found at: %s", strings.TrimSpace(out))
 
 	// The entrypoint fragment should NOT fail with "No such file or directory"
-	out, _ = exec(t, c, []string{"sh", "-c",
+	out, _ = containerExec(t, c, []string{"sh", "-c",
 		"grep -c 'No such file or directory' /tmp/entrypoint.log 2>/dev/null || echo 0"})
 	count := strings.TrimSpace(out)
 	if count != "0" && count != "" {
@@ -420,7 +420,7 @@ func TestThinEntrypoint_LocaleWorks(t *testing.T) {
 		"HOST_USER": hostUser,
 	})
 
-	out, code := exec(t, c, []string{"sh", "-c", "locale 2>&1"})
+	out, code := containerExec(t, c, []string{"sh", "-c", "locale 2>&1"})
 	if code != 0 {
 		t.Fatalf("locale command failed: %s", out)
 	}
@@ -442,7 +442,7 @@ func TestThinEntrypoint_FontconfigResolvesFonts(t *testing.T) {
 		"HOST_USER": hostUser,
 	})
 
-	out, code := exec(t, c, []string{"sh", "-c", "fc-list 2>&1"})
+	out, code := containerExec(t, c, []string{"sh", "-c", "fc-list 2>&1"})
 	if code != 0 {
 		t.Fatalf("fc-list failed (exit %d):\n%s", code, out)
 	}
@@ -464,13 +464,13 @@ func TestMcp_PatchrightNoIsolatedWithStorageState(t *testing.T) {
 	})
 
 	// Verify patchright-mcp-cell exists
-	_, code := exec(t, c, []string{"sh", "-c", "command -v patchright-mcp-cell"})
+	_, code := containerExec(t, c, []string{"sh", "-c", "command -v patchright-mcp-cell"})
 	if code != 0 {
 		t.Skip("patchright-mcp-cell not on PATH (stack without scraping module)")
 	}
 
 	// Create storage-state.json (triggers the --isolated code path)
-	_, code = exec(t, c, []string{"sh", "-c",
+	_, code = containerExec(t, c, []string{"sh", "-c",
 		`mkdir -p $HOME/.playwright && echo '{"cookies":[],"origins":[]}' > $HOME/.playwright/storage-state.json`})
 	if code != 0 {
 		t.Fatal("could not create storage-state.json")
@@ -478,7 +478,7 @@ func TestMcp_PatchrightNoIsolatedWithStorageState(t *testing.T) {
 
 	// Extract the wrapper script and check what args it would pass.
 	// Replace mcp-server-patchright with a shim that prints its args.
-	out, code := exec(t, c, []string{"sh", "-c", `
+	out, code := containerExec(t, c, []string{"sh", "-c", `
 		# Create a shim that prints args instead of running the real binary
 		REAL=$(command -v mcp-server-patchright)
 		SHIM_DIR=$(mktemp -d)
@@ -522,7 +522,7 @@ func TestMcp_ClaudeJsonBackupOnMerge(t *testing.T) {
 	c := startEnvContainer(t)
 
 	// Confirm the staging file declares backupBeforeMerge=true.
-	raw, code := exec(t, c, []string{"cat", "/etc/claude-code/nix-mcp-servers.json"})
+	raw, code := containerExec(t, c, []string{"cat", "/etc/claude-code/nix-mcp-servers.json"})
 	if code != 0 {
 		t.Fatalf("FAIL: could not read nix-mcp-servers.json (exit %d)", code)
 	}
@@ -541,7 +541,7 @@ func TestMcp_ClaudeJsonBackupOnMerge(t *testing.T) {
 	// Run the backup+merge logic against a temp file that already has content,
 	// simulating a second container start where ~/.claude.json pre-exists.
 	// Uses the real /etc/claude-code/nix-mcp-servers.json staging file.
-	out, code := exec(t, c, []string{"bash", "-c", `
+	out, code := containerExec(t, c, []string{"bash", "-c", `
 		NM=/etc/claude-code/nix-mcp-servers.json
 		TARGET=$(mktemp /tmp/test-claude-XXXXXX.json)
 		echo '{"mcpServers":{"pre-existing":{"type":"stdio","command":"old-tool","args":[],"env":{}}}}' > "$TARGET"

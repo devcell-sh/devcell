@@ -35,7 +35,7 @@ func TestEntrypoint_Fragments(t *testing.T) {
 	c := startRdpContainer(t)
 
 	t.Run("fragment_staged", func(t *testing.T) {
-		out, code := exec(t, c, []string{"ls", "-la", "/etc/devcell/entrypoint.d/50-gui.sh"})
+		out, code := containerExec(t, c, []string{"ls", "-la", "/etc/devcell/entrypoint.d/50-gui.sh"})
 		if code != 0 {
 			t.Fatalf("FAIL: 50-gui.sh not found in /etc/devcell/entrypoint.d/ (exit %d)", code)
 		}
@@ -46,7 +46,7 @@ func TestEntrypoint_Fragments(t *testing.T) {
 	})
 
 	t.Run("xvfb_running", func(t *testing.T) {
-		_, code := exec(t, c, []string{"pgrep", "Xvfb"})
+		_, code := containerExec(t, c, []string{"pgrep", "Xvfb"})
 		if code != 0 {
 			t.Fatalf("FAIL: Xvfb process not found (exit %d)", code)
 		}
@@ -54,7 +54,7 @@ func TestEntrypoint_Fragments(t *testing.T) {
 	})
 
 	t.Run("xrdp_running", func(t *testing.T) {
-		_, code := exec(t, c, []string{"pgrep", "xrdp"})
+		_, code := containerExec(t, c, []string{"pgrep", "xrdp"})
 		if code != 0 {
 			t.Fatalf("FAIL: xrdp process not found (exit %d)", code)
 		}
@@ -62,7 +62,7 @@ func TestEntrypoint_Fragments(t *testing.T) {
 	})
 
 	t.Run("xrdp_listening", func(t *testing.T) {
-		out, code := exec(t, c, []string{"sh", "-c",
+		out, code := containerExec(t, c, []string{"sh", "-c",
 			"grep -i 0D3D /proc/net/tcp6 /proc/net/tcp 2>/dev/null | grep ' 0A '"})
 		if code != 0 || !strings.Contains(strings.ToUpper(out), "0D3D") {
 			t.Fatalf("FAIL: port 3389 (0x0D3D) not in LISTEN state:\n%s", out)

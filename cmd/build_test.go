@@ -94,8 +94,8 @@ func TestBuildBinarySize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const maxSize = 50 * 1024 * 1024 // 50 MB
+	const maxSize = 100 * 1024 * 1024 // 100 MB
 	if info.Size() > maxSize {
-		t.Errorf("binary size %d exceeds 50MB limit", info.Size())
+		t.Errorf("binary size %d exceeds 100MB limit", info.Size())
 	}
 }

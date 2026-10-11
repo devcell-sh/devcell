@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
@@ -992,6 +993,63 @@ type WireguardEntry struct {
 	Config  string `toml:"config"`
 }
 
+// NetworkProxySection holds [network.proxy] config for egress filtering.
+type NetworkProxySection struct {
+	Enabled          *bool    `toml:"enabled"`
+	Mode             string   `toml:"mode"`
+	Presets          []string `toml:"presets"`
+	Allow            []string `toml:"allow"`
+	Block            []string `toml:"block"`
+	AllowHostNetwork *bool    `toml:"allow_host_network"`
+	Log              *bool    `toml:"log"`
+	Image            string   `toml:"image"`
+}
+
+// ResolvedImage returns the squid image to use for the gateway sidecar.
+func (p NetworkProxySection) ResolvedImage() string {
+	if p.Image != "" {
+		return p.Image
+	}
+	return ""
+}
+
+// ResolvedEnabled returns false when Enabled is nil (absent from config).
+func (p NetworkProxySection) ResolvedEnabled() bool {
+	if p.Enabled == nil {
+		return false
+	}
+	return *p.Enabled
+}
+
+// ResolvedMode returns "allow" when Mode is empty (deny by default).
+func (p NetworkProxySection) ResolvedMode() string {
+	if p.Mode == "" {
+		return "allow"
+	}
+	return p.Mode
+}
+
+// ResolvedAllowHostNetwork returns false when AllowHostNetwork is nil.
+func (p NetworkProxySection) ResolvedAllowHostNetwork() bool {
+	if p.AllowHostNetwork == nil {
+		return false
+	}
+	return *p.AllowHostNetwork
+}
+
+// ResolvedLog returns true when Log is nil.
+func (p NetworkProxySection) ResolvedLog() bool {
+	if p.Log == nil {
+		return true
+	}
+	return *p.Log
+}
+
+// NetworkSection holds [network] config.
+type NetworkSection struct {
+	Proxy NetworkProxySection `toml:"proxy"`
+}
+
 // CellConfig is the merged configuration from all TOML layers.
 type CellConfig struct {
 	Cell      CellSection
@@ -1007,6 +1065,7 @@ type CellConfig struct {
 	Mcp       McpSection     `toml:"mcp"`
 	Stealth   StealthSection `toml:"stealth"`
 	GUI       GUISection     `toml:"gui"`
+	Network   NetworkSection `toml:"network"`
 	Env       map[string]string
 	Mise      map[string]string `toml:"mise"` // [mise] — keys map to MISE_<UPPER_KEY> env vars
 	Volumes   []VolumeMount
@@ -1502,6 +1561,11 @@ func Merge(global, project CellConfig) CellConfig {
 		}
 	}
 
+	// Network proxy: intersection semantics. A project cannot widen past a
+	// global constraint. enabled=OR, block=union, mode="allow" wins,
+	// allow_host_network=AND.
+	out.Network = mergeNetwork(global.Network, project.Network)
+
 	migrateGUIField(&out)
 	return out
 }
@@ -1648,6 +1712,182 @@ func ValidateWireguard(c CellConfig) error {
 		}
 	}
 	return nil
+}
+
+// mergeNetwork implements intersection merge for [network.proxy].
+func mergeNetwork(global, project NetworkSection) NetworkSection {
+	g := global.Proxy
+	p := project.Proxy
+	var out NetworkProxySection
+
+	// enabled: OR (project cannot disable)
+	if g.ResolvedEnabled() || p.ResolvedEnabled() {
+		b := true
+		out.Enabled = &b
+	}
+
+	// mode: "allow" wins if either uses it (stricter default verdict)
+	if g.ResolvedMode() == "allow" || p.ResolvedMode() == "allow" {
+		out.Mode = "allow"
+	} else {
+		out.Mode = "block"
+	}
+
+	// block: union (only grows)
+	out.Block = unionDedupStrings(g.Block, p.Block)
+
+	// presets: union (only grows)
+	out.Presets = unionDedupStrings(g.Presets, p.Presets)
+
+	// allow: both layers contribute, block carves holes
+	out.Allow = unionDedupStrings(g.Allow, p.Allow)
+
+	// allow_host_network: AND (either layer can forbid)
+	gAHN := g.ResolvedAllowHostNetwork()
+	pAHN := p.ResolvedAllowHostNetwork()
+	ahn := gAHN && pAHN
+	// Only set when at least one layer explicitly configured it
+	if g.AllowHostNetwork != nil || p.AllowHostNetwork != nil {
+		out.AllowHostNetwork = &ahn
+	}
+
+	// log: OR (either can enable)
+	if g.Log != nil || p.Log != nil {
+		l := g.ResolvedLog() || p.ResolvedLog()
+		out.Log = &l
+	}
+
+	// image: global wins (project cannot override the trusted proxy image)
+	if g.Image != "" {
+		out.Image = g.Image
+	} else {
+		out.Image = p.Image
+	}
+
+	return NetworkSection{Proxy: out}
+}
+
+// ValidateNetworkProxy checks [network.proxy] config for errors.
+func ValidateNetworkProxy(c CellConfig) error {
+	p := c.Network.Proxy
+	if !p.ResolvedEnabled() {
+		return nil
+	}
+	if m := p.Mode; m != "" && m != "allow" && m != "block" {
+		return fmt.Errorf("[network.proxy] mode %q is not valid; use \"allow\" or \"block\"", m)
+	}
+	for _, name := range p.Presets {
+		if _, ok := Presets[name]; !ok {
+			return fmt.Errorf("[network.proxy] unknown preset %q (known: %s)", name, knownPresetNames())
+		}
+	}
+	if WireguardEnabled(c) {
+		return fmt.Errorf("[network.proxy] cannot be enabled with [[wireguard]]: WireGuard needs an external route; disable the proxy or remove the tunnel (or use --force-insecure-network)")
+	}
+	return nil
+}
+
+// NetworkProxyEnabled reports whether the network proxy is enabled in the
+// merged config. Either layer setting enabled = true is enough.
+func NetworkProxyEnabled(c CellConfig) bool {
+	return c.Network.Proxy.ResolvedEnabled()
+}
+
+// solitaryCaps are capabilities that defeat network isolation.
+var solitaryCaps = map[string]bool{
+	"NET_ADMIN":     true,
+	"SYS_ADMIN":     true,
+	"SYS_PTRACE":    true,
+	"SYS_MODULE":    true,
+	"NET_BROADCAST": true,
+	"BPF":           true,
+	"PERFMON":       true,
+	"SYS_RAWIO":     true,
+}
+
+var solitaryMountPrefixes = []string{
+	"/var/run",
+	"/run",
+	"/proc",
+	"/sys",
+}
+
+// SanitizeForSolitary mutates c in place to enforce full network lockdown.
+// It force-enables the proxy, force-disables host network access, and strips
+// any setting that could leak traffic past the proxy. Returns a human-readable
+// list of what was changed.
+func SanitizeForSolitary(c *CellConfig) []string {
+	var stripped []string
+
+	if c.Docker.Privileged {
+		c.Docker.Privileged = false
+		stripped = append(stripped, "[docker] privileged forced off")
+	}
+
+	var safeCaps []string
+	for _, raw := range c.Docker.CapAdd {
+		name := strings.ToUpper(strings.TrimPrefix(strings.ToUpper(raw), "CAP_"))
+		if solitaryCaps[name] {
+			stripped = append(stripped, fmt.Sprintf("[docker] cap_add %s stripped", name))
+		} else {
+			safeCaps = append(safeCaps, raw)
+		}
+	}
+	c.Docker.CapAdd = safeCaps
+
+	for i := range c.Wireguard {
+		if c.Wireguard[i].Enabled {
+			c.Wireguard[i].Enabled = false
+			name := c.Wireguard[i].Name
+			if name == "" {
+				name = fmt.Sprintf("#%d", i)
+			}
+			stripped = append(stripped, fmt.Sprintf("[[wireguard]] %s disabled", name))
+		}
+	}
+
+	if c.Cell.KVM != nil && *c.Cell.KVM {
+		b := false
+		c.Cell.KVM = &b
+		stripped = append(stripped, "[cell] kvm forced off")
+	}
+
+	var safeVols []VolumeMount
+	for _, vol := range c.Volumes {
+		src := volumeSourceFromMount(vol.Mount)
+		if src != "" && isSolitaryDangerousMount(src) {
+			stripped = append(stripped, fmt.Sprintf("[[volumes]] %s stripped", vol.Mount))
+		} else {
+			safeVols = append(safeVols, vol)
+		}
+	}
+	c.Volumes = safeVols
+
+	enabled := true
+	c.Network.Proxy.Enabled = &enabled
+
+	hostNet := false
+	c.Network.Proxy.AllowHostNetwork = &hostNet
+
+	return stripped
+}
+
+func volumeSourceFromMount(mount string) string {
+	parts := strings.SplitN(mount, ":", 3)
+	if len(parts) == 0 {
+		return ""
+	}
+	return parts[0]
+}
+
+func isSolitaryDangerousMount(src string) bool {
+	clean := filepath.Clean(src)
+	for _, prefix := range solitaryMountPrefixes {
+		if clean == prefix || strings.HasPrefix(clean, prefix+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // WireguardEnabled reports whether any [[wireguard]] entry is enabled.

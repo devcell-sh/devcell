@@ -21,6 +21,7 @@ On first run, `cell` creates `.devcell.toml` and `.devcell/` in your project dir
 - **Isolated sandbox** - agents edit freely inside your project; your host system is untouched
 - **12+ MCP servers** - Yahoo Finance, Google Maps, Linear, KiCad, Inkscape, and more. Backing tools ship in the image alongside their servers
 - **Claude Max/Pro support** - runs Claude Code directly, no API key or proxy needed
+- **Solitary Mode** - `--solitary` locks down outbound traffic to allow-listed domains only, strips privileged mode, dangerous capabilities, docker socket, and published ports. A squid gateway sidecar proxies all egress; everything else is denied
 - **Stealth Chromium + zero-password login** - `cell login <url>` opens a clean browser on your host, you log in, press Enter; cookies and localStorage sync to the container. The agent never sees your password. Anti-fingerprint Playwright replays sessions that pass Cloudflare and Kasada
 - **Remote desktop** - VNC and RDP into the container to watch or interact with GUI apps
 - **1Password secrets** - list document names in `.devcell.toml`; fields are injected as env vars into the container at runtime, written to a RAM-only tmpfs, gone when the container stops

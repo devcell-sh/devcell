@@ -346,7 +346,9 @@ var cellBoolFlags = map[string]bool{
 	"--use-flake":    true, // opt-in to project-level flake.nix install (CELL-447)
 	"--no-flake":     true, // legacy, ignored (flake is off by default now)
 	"--skip-flake":   true, // legacy, ignored
-	"--no-ports":     true, // skip allocating docker ports even if [ports] is configured
+	"--no-ports":              true, // skip allocating docker ports even if [ports] is configured
+	"--force-insecure-network": true, // disable proxy mode, run with open egress (CELL-623)
+	"--solitary":              true, // full lockdown: proxy on, dangerous settings stripped (CELL-623)
 }
 
 // cellStringFlags are string flags consumed by devcell: strip the flag token
@@ -507,7 +509,9 @@ func runOpts(c engine.Cell, binary string, defaultFlags, userArgs []string, extr
 		NixDaemon:    scanFlag("--nix-daemon"),
 		NoPorts:      scanFlag("--no-ports"),
 		UseFlake:     scanFlag("--use-flake"),
-		AutoCleanup:  scanFlag("--auto-cleanup"),
+		AutoCleanup:          scanFlag("--auto-cleanup"),
+		ForceInsecureNetwork: scanFlag("--force-insecure-network") || os.Getenv("DEVCELL_FORCE_INSECURE_NETWORK") == "1",
+		Solitary:             scanFlag("--solitary") || os.Getenv("DEVCELL_SOLITARY") == "1",
 	}
 }
 

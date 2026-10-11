@@ -622,7 +622,7 @@ func startEnvContainer(t *testing.T) testcontainers.Container {
 // asUser runs cmd as the host user inside a login shell so ~/.bashrc is sourced.
 func asUser(t *testing.T, c testcontainers.Container, cmd string) (string, int) {
 	t.Helper()
-	return exec(t, c, []string{"gosu", hostUser, "bash", "-lc", cmd})
+	return containerExec(t, c, []string{"gosu", hostUser, "bash", "-lc", cmd})
 }
 
 // startContainerWithStaleHome starts a container where $HOME is pre-seeded
@@ -712,7 +712,7 @@ func removeVolume(name string) {
 	cli.VolumeRemove(ctx, name, true) //nolint:errcheck
 }
 
-func exec(t *testing.T, c testcontainers.Container, cmd []string) (string, int) {
+func containerExec(t *testing.T, c testcontainers.Container, cmd []string) (string, int) {
 	t.Helper()
 	ctx := context.Background()
 	code, reader, err := c.Exec(ctx, cmd)

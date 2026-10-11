@@ -47,6 +47,13 @@ Windows VMs are shut down gracefully via SSH, then SIGTERM.`,
 				return fmt.Errorf("stop container %s: %w", c.ContainerName, err)
 			}
 			fmt.Printf("Container %s stopped\n", c.ContainerName)
+
+			gwName := docker.ProxySidecarName(c.AppName)
+			if docker.ContainerRunning(ctx, gwName) {
+				_ = docker.RemoveProxySidecar(ctx, gwName)
+				_ = docker.RemoveNetwork(ctx, docker.InternalNetworkName(c.AppName))
+				fmt.Printf("Gateway %s stopped\n", gwName)
+			}
 			return nil
 		}
 	},

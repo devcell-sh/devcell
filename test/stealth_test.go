@@ -433,15 +433,15 @@ func startStealthCell(t *testing.T) testcontainers.Container {
 	})
 
 	// Skip if patchright-mcp-cell isn't installed in this stack variant.
-	if _, code := exec(t, c, []string{"sh", "-c", "command -v patchright-mcp-cell"}); code != 0 {
+	if _, code := containerExec(t, c, []string{"sh", "-c", "command -v patchright-mcp-cell"}); code != 0 {
 		t.Skip("patchright-mcp-cell not on PATH (stack without scraping module); set DEVCELL_TEST_IMAGE to a stack that includes it")
 	}
 	// Skip if python3 isn't available (needed for both probe server and MCP client).
-	if _, code := exec(t, c, []string{"sh", "-c", "command -v python3"}); code != 0 {
+	if _, code := containerExec(t, c, []string{"sh", "-c", "command -v python3"}); code != 0 {
 		t.Skip("python3 not on PATH")
 	}
 
-	exec(t, c, []string{"mkdir", "-p", stealthDir})
+	containerExec(t, c, []string{"mkdir", "-p", stealthDir})
 	ctx := context.Background()
 	if err := c.CopyToContainer(ctx, []byte(stealthProbeServer), stealthDir+"/server.py", 0o755); err != nil {
 		t.Fatalf("copy probe server: %v", err)
@@ -450,15 +450,15 @@ func startStealthCell(t *testing.T) testcontainers.Container {
 		t.Fatalf("copy probe client: %v", err)
 	}
 
-	exec(t, c, []string{"bash", "-c",
+	containerExec(t, c, []string{"bash", "-c",
 		"nohup python3 " + stealthDir + "/server.py > " + stealthDir + "/server.log 2>&1 &"})
-	if _, code := exec(t, c, []string{"bash", "-c",
+	if _, code := containerExec(t, c, []string{"bash", "-c",
 		"for i in 1 2 3 4 5 6 7 8 9 10; do [ -f " + stealthDir + "/port ] && exit 0; sleep 0.5; done; exit 1",
 	}); code != 0 {
-		log, _ := exec(t, c, []string{"cat", stealthDir + "/server.log"})
+		log, _ := containerExec(t, c, []string{"cat", stealthDir + "/server.log"})
 		t.Fatalf("probe server did not start in 5s:\n%s", log)
 	}
-	port, _ := exec(t, c, []string{"cat", stealthDir + "/port"})
+	port, _ := containerExec(t, c, []string{"cat", stealthDir + "/port"})
 	t.Logf("probe server listening on port %s", port)
 	return c
 }
@@ -470,11 +470,11 @@ func startStealthCell(t *testing.T) testcontainers.Container {
 // and most permission backends activate).
 func ensureStealthXvfb(t *testing.T, c testcontainers.Container) {
 	t.Helper()
-	exec(t, c, []string{"bash", "-c",
+	containerExec(t, c, []string{"bash", "-c",
 		"DISPLAY=:99 xset q >/dev/null 2>&1 && exit 0; " +
 			"rm -f /tmp/.X99-lock /tmp/.X11-unix/X99; " +
 			"setsid Xvfb :99 -screen 0 1920x1080x24 +extension GLX +render < /dev/null > /tmp/Xvfb.log 2>&1 &"})
-	if _, code := exec(t, c, []string{"bash", "-c",
+	if _, code := containerExec(t, c, []string{"bash", "-c",
 		"for i in $(seq 1 40); do DISPLAY=:99 xset q >/dev/null 2>&1 && exit 0; sleep 0.25; done; cat /tmp/Xvfb.log; exit 1",
 	}); code != 0 {
 		t.Fatal("Xvfb did not come up on :99")
@@ -489,7 +489,7 @@ func runStealthProbe(t *testing.T, c testcontainers.Container, p stealthProbe, i
 
 	// Reset the previous probe's artifacts so polling sees a clean slate and
 	// the header log only holds this probe's requests.
-	exec(t, c, []string{"sh", "-c",
+	containerExec(t, c, []string{"sh", "-c",
 		"rm -f " + stealthDir + "/headers.json " + stealthDir + "/results.json " + stealthDir + "/mcp-stderr.log"})
 
 	argv := append([]string{"env"}, p.env...)
@@ -506,21 +506,21 @@ func runStealthProbe(t *testing.T, c testcontainers.Container, p stealthProbe, i
 		argv = append(argv, "--executable-path", stealthNixChromium)
 	}
 
-	mcpOut, mcpCode := exec(t, c, argv)
+	mcpOut, mcpCode := containerExec(t, c, argv)
 	t.Logf("MCP client output:\n%s", mcpOut)
 	if mcpCode != 0 {
-		stderr, _ := exec(t, c, []string{"sh", "-c", "tail -100 " + stealthDir + "/mcp-stderr.log 2>/dev/null"})
+		stderr, _ := containerExec(t, c, []string{"sh", "-c", "tail -100 " + stealthDir + "/mcp-stderr.log 2>/dev/null"})
 		t.Fatalf("MCP client exited %d\nstderr:\n%s", mcpCode, stderr)
 	}
 
-	resultsRaw, code := exec(t, c, []string{"cat", stealthDir + "/results.json"})
+	resultsRaw, code := containerExec(t, c, []string{"cat", stealthDir + "/results.json"})
 	if code != 0 {
 		t.Fatalf("%s/results.json missing: %s probe page did not POST results", stealthDir, p.name)
 	}
 	if err := json.Unmarshal([]byte(resultsRaw), into); err != nil {
 		t.Fatalf("parse %s results: %v\nraw: %s", p.name, err, resultsRaw)
 	}
-	headersRaw, _ = exec(t, c, []string{"cat", stealthDir + "/headers.json"})
+	headersRaw, _ = containerExec(t, c, []string{"cat", stealthDir + "/headers.json"})
 	return headersRaw
 }
 

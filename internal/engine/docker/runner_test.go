@@ -1928,3 +1928,150 @@ func TestArgv_LifecycleLabel_Persistent(t *testing.T) {
 		t.Error("Lifecycle=persistent should set devcell.lifecycle=persistent")
 	}
 }
+
+// --- Network proxy mode ---
+
+func TestArgv_ProxyEnabled_UsesInternalNetwork(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.ProxyEnabled = true
+	})
+	c := baseConfig()
+	wantNet := docker.InternalNetworkName(c.AppName)
+	if !hasConsecutive(argv, "--network", wantNet) {
+		t.Errorf("proxy mode should use --network %s", wantNet)
+	}
+	if hasConsecutive(argv, "--network", "devcell-network") {
+		t.Error("proxy mode should not use devcell-network")
+	}
+}
+
+func TestArgv_ProxyDisabled_UsesDevcellNetwork(t *testing.T) {
+	argv := buildArgv(t)
+	if !hasConsecutive(argv, "--network", "devcell-network") {
+		t.Error("default should use --network devcell-network")
+	}
+}
+
+func TestArgv_ProxyEnabled_DropsDockerSocket(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.ProxyEnabled = true
+	})
+	for _, a := range argv {
+		if strings.Contains(a, "docker.sock") {
+			t.Errorf("proxy mode should not mount docker socket, found: %s", a)
+		}
+	}
+}
+
+func TestArgv_ProxyDisabled_MountsDockerSocket(t *testing.T) {
+	argv := buildArgv(t)
+	found := false
+	for _, a := range argv {
+		if strings.Contains(a, "docker.sock") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("default mode should mount docker socket")
+	}
+}
+
+func TestArgv_ProxyEnabled_InjectsProxyEnv(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.ProxyEnabled = true
+	})
+	c := baseConfig()
+	proxyURL := "http://" + docker.ProxySidecarName(c.AppName) + ":3128"
+	wantVars := []string{
+		"HTTP_PROXY=" + proxyURL,
+		"HTTPS_PROXY=" + proxyURL,
+		"ALL_PROXY=" + proxyURL,
+		"http_proxy=" + proxyURL,
+		"https_proxy=" + proxyURL,
+		"all_proxy=" + proxyURL,
+		"NO_PROXY=localhost,127.0.0.1,::1",
+		"no_proxy=localhost,127.0.0.1,::1",
+		"NODE_USE_ENV_PROXY=1",
+	}
+	for _, want := range wantVars {
+		if !hasConsecutive(argv, "-e", want) {
+			t.Errorf("proxy mode missing env: %s", want)
+		}
+	}
+}
+
+func TestArgv_ProxyDisabled_NoProxyEnv(t *testing.T) {
+	argv := buildArgv(t)
+	for _, a := range argv {
+		if strings.Contains(a, "HTTP_PROXY=") || strings.Contains(a, "http_proxy=") {
+			t.Errorf("default mode should not set proxy env, found: %s", a)
+		}
+	}
+}
+
+func TestArgv_Solitary_ForcesNoPorts(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.Solitary = true
+		s.ProxyEnabled = true
+		s.NoPorts = true
+		s.CellCfg.Ports.Forward = []string{"8080:8080"}
+	})
+	for _, a := range argv {
+		if strings.Contains(a, "8080") {
+			t.Errorf("solitary should suppress port mappings, found: %s", a)
+		}
+	}
+}
+
+func TestArgv_Solitary_DropsDockerSocket(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.Solitary = true
+		s.ProxyEnabled = true
+	})
+	for _, a := range argv {
+		if strings.Contains(a, "docker.sock") {
+			t.Errorf("solitary should not mount docker socket, found: %s", a)
+		}
+	}
+}
+
+func TestArgv_Solitary_UsesInternalNetwork(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.Solitary = true
+		s.ProxyEnabled = true
+	})
+	c := baseConfig()
+	wantNet := docker.InternalNetworkName(c.AppName)
+	if !hasConsecutive(argv, "--network", wantNet) {
+		t.Errorf("solitary should use --network %s", wantNet)
+	}
+}
+
+func TestArgv_Solitary_InjectsProxyEnv(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.Solitary = true
+		s.ProxyEnabled = true
+	})
+	c := baseConfig()
+	wantURL := "http://" + docker.ProxySidecarName(c.AppName) + ":3128"
+	found := false
+	for _, a := range argv {
+		if a == "HTTP_PROXY="+wantURL {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("solitary should inject HTTP_PROXY env")
+	}
+}
+
+func TestArgv_ProxyEnabled_ConfigDirRO(t *testing.T) {
+	// Proxy mode should mount config dir read-only: deferred to boot orchestration
+	// (global config mounted :ro is a run.go concern, not runner.go).
+	// This test documents the intent.
+	_ = buildArgv(t, func(s *docker.RunSpec) {
+		s.ProxyEnabled = true
+	})
+}

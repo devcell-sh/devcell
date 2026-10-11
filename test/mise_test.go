@@ -34,7 +34,7 @@ func TestMise_DeclaredToolsOnPATH(t *testing.T) {
 	for _, tool := range declared {
 		bin := miseBinaryName(tool)
 		t.Run(tool, func(t *testing.T) {
-			out, code := exec(t, c, []string{"gosu", hostUser, "bash", "-lc", "command -v " + bin})
+			out, code := containerExec(t, c, []string{"gosu", hostUser, "bash", "-lc", "command -v " + bin})
 			if code != 0 || strings.TrimSpace(out) == "" {
 				t.Fatalf("declared mise tool %q (binary %q) not on PATH: out=%q exit=%d", tool, bin, out, code)
 			}
@@ -58,7 +58,7 @@ func TestMise_SharedInstalls_DeclaredToolsShared(t *testing.T) {
 		"HOST_USER": hostUser,
 	})
 
-	out, code := exec(t, c, []string{"gosu", hostUser, "bash", "-lc", "mise ls 2>/dev/null"})
+	out, code := containerExec(t, c, []string{"gosu", hostUser, "bash", "-lc", "mise ls 2>/dev/null"})
 	if code != 0 {
 		t.Fatalf("mise ls failed: exit=%d out=%q", code, out)
 	}
@@ -92,7 +92,7 @@ func TestMise_TerraformAndOpentofuOnPATH(t *testing.T) {
 
 	for _, bin := range []string{"terraform", "tofu"} {
 		t.Run(bin, func(t *testing.T) {
-			out, code := exec(t, c, []string{"gosu", hostUser, "bash", "-lc", "command -v " + bin})
+			out, code := containerExec(t, c, []string{"gosu", hostUser, "bash", "-lc", "command -v " + bin})
 			if code != 0 || strings.TrimSpace(out) == "" {
 				t.Fatalf("%s missing from PATH (this was the pre-CELL-85 bug): out=%q exit=%d", bin, out, code)
 			}
@@ -118,7 +118,7 @@ func TestMise_Layering_LocalToolVersionsOverridesShared(t *testing.T) {
 	versionRe := regexp.MustCompile(`(?m)^v\d+\.\d+\.\d+$`)
 
 	// 1. Baseline: resolves the shared baked version (no local pin).
-	out, code := exec(t, c, []string{"gosu", hostUser, "bash", "-lc", "cd && node --version"})
+	out, code := containerExec(t, c, []string{"gosu", hostUser, "bash", "-lc", "cd && node --version"})
 	if code != 0 {
 		t.Fatalf("baseline node --version failed: exit=%d out=%q", code, out)
 	}
@@ -134,7 +134,7 @@ func TestMise_Layering_LocalToolVersionsOverridesShared(t *testing.T) {
 
 	// 2+3. Project dir pins a version absent from both layers → shim must
 	// auto-install it into the user layer and run it.
-	out, code = exec(t, c, []string{"gosu", hostUser, "bash", "-lc",
+	out, code = containerExec(t, c, []string{"gosu", hostUser, "bash", "-lc",
 		`mkdir -p ~/app && echo "node ` + pin + `" > ~/app/.tool-versions && cd ~/app && node --version 2>/dev/null`})
 	if code != 0 {
 		t.Fatalf("pinned node --version failed (shim auto-install broken?): exit=%d out=%q", code, out)
@@ -144,7 +144,7 @@ func TestMise_Layering_LocalToolVersionsOverridesShared(t *testing.T) {
 	}
 
 	// Auto-install landed in the user layer; the shared dir stayed read-only.
-	out, _ = exec(t, c, []string{"gosu", hostUser, "bash", "-lc",
+	out, _ = containerExec(t, c, []string{"gosu", hostUser, "bash", "-lc",
 		`test -d "$HOME/.local/share/mise/installs/node/` + pin + `" && echo USER-LAYER-OK; ` +
 			`test ! -e "/opt/devcell/.local/share/mise/installs/node/` + pin + `" && echo SHARED-UNTOUCHED`})
 	for _, want := range []string{"USER-LAYER-OK", "SHARED-UNTOUCHED"} {
@@ -170,7 +170,7 @@ func TestMise_SharedInstalls_NoUserCopies(t *testing.T) {
 	// Only cross-tier links (absolute targets into /opt or elsewhere) are
 	// forbidden — mise's own relative version aliases (24 -> ./24.16.0) are
 	// legitimate and must survive boot.
-	out, _ := exec(t, c, []string{"gosu", hostUser, "bash", "-lc",
+	out, _ := containerExec(t, c, []string{"gosu", hostUser, "bash", "-lc",
 		`find "$HOME/.local/share/mise/installs" -maxdepth 2 -type l -lname '/*' 2>/dev/null; true`})
 	if links := strings.TrimSpace(out); links != "" {
 		t.Errorf("user mise installs dir contains absolute-target symlinks (legacy cross-bind still active):\n%s", links)
@@ -230,7 +230,7 @@ func TestMise_UserInstallPreserved(t *testing.T) {
 	c := startEnvContainer(t)
 
 	// Create a fake "user-installed" real directory for a non-existent version.
-	_, code := exec(t, c, []string{"bash", "-c",
+	_, code := containerExec(t, c, []string{"bash", "-c",
 		"mkdir -p /home/" + hostUser + "/.local/share/mise/installs/node/99.99.99/bin && " +
 			"printf '#!/bin/sh\\necho v99.99.99\\n' > /home/" + hostUser + "/.local/share/mise/installs/node/99.99.99/bin/node && " +
 			"chmod +x /home/" + hostUser + "/.local/share/mise/installs/node/99.99.99/bin/node",
@@ -240,7 +240,7 @@ func TestMise_UserInstallPreserved(t *testing.T) {
 	}
 
 	// Re-run the symlink setup logic (simulates what entrypoint does on restart).
-	_, code = exec(t, c, []string{"bash", "-c", `
+	_, code = containerExec(t, c, []string{"bash", "-c", `
 		baked="/opt/mise"
 		user_mise="/home/` + hostUser + `/.local/share/mise"
 		for tool_dir in "$baked/installs"/*/; do
@@ -261,7 +261,7 @@ func TestMise_UserInstallPreserved(t *testing.T) {
 	}
 
 	// The real directory must NOT have been replaced by a symlink.
-	out, code := exec(t, c, []string{"bash", "-c",
+	out, code := containerExec(t, c, []string{"bash", "-c",
 		"test -L /home/" + hostUser + "/.local/share/mise/installs/node/99.99.99 && echo SYMLINK || echo REAL"})
 	if code != 0 || strings.TrimSpace(out) != "REAL" {
 		t.Errorf("FAIL: user install was converted to symlink: %s", out)
@@ -276,7 +276,7 @@ func TestMise_DanglingSymlinkCleaned(t *testing.T) {
 	c := startEnvContainer(t)
 
 	// Inject a dangling symlink pointing to a non-existent /opt/mise path.
-	_, code := exec(t, c, []string{"bash", "-c",
+	_, code := containerExec(t, c, []string{"bash", "-c",
 		"mkdir -p /home/" + hostUser + "/.local/share/mise/installs/node && " +
 			"ln -s /opt/mise/installs/node/0.0.0-nonexistent " +
 			"/home/" + hostUser + "/.local/share/mise/installs/node/0.0.0-nonexistent",
@@ -286,7 +286,7 @@ func TestMise_DanglingSymlinkCleaned(t *testing.T) {
 	}
 
 	// Re-run the dangling-symlink cleanup logic from setup_mise_home.
-	_, code = exec(t, c, []string{"bash", "-c", `
+	_, code = containerExec(t, c, []string{"bash", "-c", `
 		user_mise="/home/` + hostUser + `/.local/share/mise"
 		for tool in "$user_mise/installs"/*/; do
 			for link in "${tool%/}"/*; do
@@ -299,7 +299,7 @@ func TestMise_DanglingSymlinkCleaned(t *testing.T) {
 	}
 
 	// The dangling symlink must be gone.
-	out, _ := exec(t, c, []string{"bash", "-c",
+	out, _ := containerExec(t, c, []string{"bash", "-c",
 		"test -L /home/" + hostUser + "/.local/share/mise/installs/node/0.0.0-nonexistent && echo EXISTS || echo CLEANED",
 	})
 	if strings.TrimSpace(out) != "CLEANED" {
@@ -320,7 +320,7 @@ func TestThinRuntime_NodeIsMiseShim(t *testing.T) {
 		"HOST_USER": hostUser,
 	})
 
-	shimPath, code := exec(t, c, []string{"sh", "-c", "which node"})
+	shimPath, code := containerExec(t, c, []string{"sh", "-c", "which node"})
 	if code != 0 {
 		t.Fatalf("node not found on PATH: %s", shimPath)
 	}
@@ -342,7 +342,7 @@ func TestThinRuntime_NodeVersion(t *testing.T) {
 		"HOST_USER": hostUser,
 	})
 
-	out, code := exec(t, c, []string{"sh", "-c", "node --version"})
+	out, code := containerExec(t, c, []string{"sh", "-c", "node --version"})
 	if code != 0 {
 		t.Fatalf("node --version failed (exit %d): %s", code, out)
 	}
@@ -364,7 +364,7 @@ func TestThinRuntime_AllDeclaredTools(t *testing.T) {
 		"HOST_USER": hostUser,
 	})
 
-	out, code := exec(t, c, []string{"sh", "-c", "mise ls 2>&1"})
+	out, code := containerExec(t, c, []string{"sh", "-c", "mise ls 2>&1"})
 	if code != 0 {
 		t.Fatalf("mise ls failed (exit %d): %s", code, out)
 	}

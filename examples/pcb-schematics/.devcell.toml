@@ -192,6 +192,17 @@ enabled = true
 # [packages.node]
 # "some-tool" = "^1.0.0"           # "latest" or any npm version range
 
+# --- Network egress proxy (deny-by-default outbound) ---
+# Lock down outbound traffic: only allow-listed destinations are reachable.
+# Use `cell claude --solitary` for full lockdown (auto-enables proxy + strips
+# privileged, dangerous caps, docker socket, ports).
+# [network.proxy]
+# enabled = true
+# mode = "allow"                     # "allow" = deny by default; "block" = allow by default
+# presets = ["claude", "github", "nix"]
+# allow = []                         # custom domains/CIDRs on top of presets
+# block = []                         # deny-holes carved from the allow list
+
 # --- WireGuard tunnels (one [[wireguard]] block per tunnel) ---
 # [[wireguard]]
 # name = "office"

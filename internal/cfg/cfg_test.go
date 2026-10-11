@@ -3335,3 +3335,369 @@ func TestMerge_EngineGlobalKeptWhenProjectUnset(t *testing.T) {
 		t.Errorf("merged Engine = %q, want global value preserved", got)
 	}
 }
+
+// ── [network.proxy] parsing tests ───────────────────────────────────────
+
+func TestNetworkProxy_Parse_Defaults(t *testing.T) {
+	dir := t.TempDir()
+	writeTOML(t, dir, "devcell.toml", `
+[network.proxy]
+enabled = true
+`)
+	c, err := cfg.LoadFile(filepath.Join(dir, "devcell.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Network.Proxy.ResolvedEnabled() {
+		t.Error("enabled should be true")
+	}
+	if c.Network.Proxy.ResolvedMode() != "allow" {
+		t.Errorf("default mode should be allow, got %q", c.Network.Proxy.ResolvedMode())
+	}
+	if !c.Network.Proxy.ResolvedLog() {
+		t.Error("default log should be true")
+	}
+	if c.Network.Proxy.ResolvedAllowHostNetwork() {
+		t.Error("default allow_host_network should be false")
+	}
+	if len(c.Network.Proxy.Allow) != 0 {
+		t.Errorf("default allow should be empty, got %v", c.Network.Proxy.Allow)
+	}
+	if len(c.Network.Proxy.Block) != 0 {
+		t.Errorf("default block should be empty, got %v", c.Network.Proxy.Block)
+	}
+	if len(c.Network.Proxy.Presets) != 0 {
+		t.Errorf("default presets should be empty, got %v", c.Network.Proxy.Presets)
+	}
+}
+
+func TestNetworkProxy_Parse_Full(t *testing.T) {
+	dir := t.TempDir()
+	writeTOML(t, dir, "devcell.toml", `
+[network.proxy]
+enabled = true
+mode = "block"
+presets = ["claude", "github"]
+allow = ["api.example.com", "*.internal.corp"]
+block = ["pastebin.com"]
+allow_host_network = true
+log = false
+`)
+	c, err := cfg.LoadFile(filepath.Join(dir, "devcell.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Network.Proxy.ResolvedEnabled() {
+		t.Error("enabled should be true")
+	}
+	if c.Network.Proxy.ResolvedMode() != "block" {
+		t.Errorf("mode should be block, got %q", c.Network.Proxy.ResolvedMode())
+	}
+	if len(c.Network.Proxy.Presets) != 2 || c.Network.Proxy.Presets[0] != "claude" {
+		t.Errorf("presets: want [claude github], got %v", c.Network.Proxy.Presets)
+	}
+	if len(c.Network.Proxy.Allow) != 2 || c.Network.Proxy.Allow[0] != "api.example.com" {
+		t.Errorf("allow: want [api.example.com *.internal.corp], got %v", c.Network.Proxy.Allow)
+	}
+	if len(c.Network.Proxy.Block) != 1 || c.Network.Proxy.Block[0] != "pastebin.com" {
+		t.Errorf("block: want [pastebin.com], got %v", c.Network.Proxy.Block)
+	}
+	if !c.Network.Proxy.ResolvedAllowHostNetwork() {
+		t.Error("allow_host_network should be true")
+	}
+	if c.Network.Proxy.ResolvedLog() {
+		t.Error("log should be false")
+	}
+}
+
+func TestNetworkProxy_Parse_Absent(t *testing.T) {
+	dir := t.TempDir()
+	writeTOML(t, dir, "devcell.toml", `
+[cell]
+image_tag = "v0.0.0-go"
+`)
+	c, err := cfg.LoadFile(filepath.Join(dir, "devcell.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Network.Proxy.ResolvedEnabled() {
+		t.Error("absent [network.proxy] should not be enabled")
+	}
+	if cfg.NetworkProxyEnabled(c) {
+		t.Error("NetworkProxyEnabled should be false for absent section")
+	}
+}
+
+// ── [network.proxy] merge tests ─────────────────────────────────────────
+
+func TestNetworkProxy_Merge_EnabledOR(t *testing.T) {
+	global := cfg.CellConfig{
+		Network: cfg.NetworkSection{
+			Proxy: cfg.NetworkProxySection{Enabled: boolPtr(true)},
+		},
+	}
+	project := cfg.CellConfig{
+		Network: cfg.NetworkSection{
+			Proxy: cfg.NetworkProxySection{Enabled: boolPtr(false)},
+		},
+	}
+	merged := cfg.Merge(global, project)
+	if !merged.Network.Proxy.ResolvedEnabled() {
+		t.Error("project cannot disable proxy when global enables it")
+	}
+}
+
+func TestNetworkProxy_Merge_BlockUnion(t *testing.T) {
+	global := cfg.CellConfig{
+		Network: cfg.NetworkSection{
+			Proxy: cfg.NetworkProxySection{
+				Block: []string{"pastebin.com", "evil.org"},
+			},
+		},
+	}
+	project := cfg.CellConfig{
+		Network: cfg.NetworkSection{
+			Proxy: cfg.NetworkProxySection{
+				Block: []string{"evil.org", "ngrok.io"},
+			},
+		},
+	}
+	merged := cfg.Merge(global, project)
+	want := map[string]bool{"pastebin.com": true, "evil.org": true, "ngrok.io": true}
+	got := make(map[string]bool)
+	for _, b := range merged.Network.Proxy.Block {
+		got[b] = true
+	}
+	for k := range want {
+		if !got[k] {
+			t.Errorf("block list should contain %q", k)
+		}
+	}
+	if len(got) != len(want) {
+		t.Errorf("block list should have %d entries (deduped), got %d: %v", len(want), len(got), merged.Network.Proxy.Block)
+	}
+}
+
+func TestNetworkProxy_Merge_ModeAllowWins(t *testing.T) {
+	cases := []struct {
+		name         string
+		globalMode   string
+		projectMode  string
+		wantMode     string
+	}{
+		{"both_allow", "allow", "allow", "allow"},
+		{"global_allow_project_block", "allow", "block", "allow"},
+		{"global_block_project_allow", "block", "allow", "allow"},
+		{"both_block", "block", "block", "block"},
+		{"global_allow_project_empty", "allow", "", "allow"},
+		{"global_empty_project_allow", "", "allow", "allow"},
+		{"both_empty", "", "", "allow"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			global := cfg.CellConfig{
+				Network: cfg.NetworkSection{
+					Proxy: cfg.NetworkProxySection{Mode: tc.globalMode},
+				},
+			}
+			project := cfg.CellConfig{
+				Network: cfg.NetworkSection{
+					Proxy: cfg.NetworkProxySection{Mode: tc.projectMode},
+				},
+			}
+			merged := cfg.Merge(global, project)
+			if merged.Network.Proxy.ResolvedMode() != tc.wantMode {
+				t.Errorf("mode: want %q, got %q", tc.wantMode, merged.Network.Proxy.ResolvedMode())
+			}
+		})
+	}
+}
+
+func TestNetworkProxy_Merge_AllowHostNetworkAND(t *testing.T) {
+	cases := []struct {
+		name   string
+		global *bool
+		proj   *bool
+		want   bool
+	}{
+		{"both_true", boolPtr(true), boolPtr(true), true},
+		{"global_false", boolPtr(false), boolPtr(true), false},
+		{"project_false", boolPtr(true), boolPtr(false), false},
+		{"both_false", boolPtr(false), boolPtr(false), false},
+		{"global_nil", nil, boolPtr(true), false},
+		{"project_nil", boolPtr(true), nil, false},
+		{"both_nil", nil, nil, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			global := cfg.CellConfig{
+				Network: cfg.NetworkSection{
+					Proxy: cfg.NetworkProxySection{AllowHostNetwork: tc.global},
+				},
+			}
+			project := cfg.CellConfig{
+				Network: cfg.NetworkSection{
+					Proxy: cfg.NetworkProxySection{AllowHostNetwork: tc.proj},
+				},
+			}
+			merged := cfg.Merge(global, project)
+			if merged.Network.Proxy.ResolvedAllowHostNetwork() != tc.want {
+				t.Errorf("allow_host_network: want %v, got %v", tc.want, merged.Network.Proxy.ResolvedAllowHostNetwork())
+			}
+		})
+	}
+}
+
+func TestNetworkProxy_Merge_AbsentLayerPassthrough(t *testing.T) {
+	project := cfg.CellConfig{
+		Network: cfg.NetworkSection{
+			Proxy: cfg.NetworkProxySection{
+				Enabled: boolPtr(true),
+				Mode:    "allow",
+				Allow:   []string{"api.example.com"},
+				Block:   []string{"evil.org"},
+				Presets: []string{"claude"},
+			},
+		},
+	}
+	merged := cfg.Merge(cfg.CellConfig{}, project)
+	if !merged.Network.Proxy.ResolvedEnabled() {
+		t.Error("enabled should pass through from project when global absent")
+	}
+	if merged.Network.Proxy.ResolvedMode() != "allow" {
+		t.Errorf("mode should pass through, got %q", merged.Network.Proxy.ResolvedMode())
+	}
+	if len(merged.Network.Proxy.Allow) != 1 || merged.Network.Proxy.Allow[0] != "api.example.com" {
+		t.Errorf("allow should pass through, got %v", merged.Network.Proxy.Allow)
+	}
+	if len(merged.Network.Proxy.Block) != 1 || merged.Network.Proxy.Block[0] != "evil.org" {
+		t.Errorf("block should pass through, got %v", merged.Network.Proxy.Block)
+	}
+	if len(merged.Network.Proxy.Presets) != 1 || merged.Network.Proxy.Presets[0] != "claude" {
+		t.Errorf("presets should pass through, got %v", merged.Network.Proxy.Presets)
+	}
+}
+
+func stringsContain(ss []string, sub string) bool {
+	for _, s := range ss {
+		if strings.Contains(strings.ToLower(s), strings.ToLower(sub)) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestSanitizeForSolitary_StripsPrivileged(t *testing.T) {
+	c := cfg.CellConfig{
+		Docker: cfg.DockerSection{Privileged: true},
+	}
+	stripped := cfg.SanitizeForSolitary(&c)
+	if c.Docker.Privileged {
+		t.Error("privileged should be forced off")
+	}
+	if !stringsContain(stripped, "privileged") {
+		t.Errorf("should report stripping privileged, got %v", stripped)
+	}
+}
+
+func TestSanitizeForSolitary_StripsDangerousCaps(t *testing.T) {
+	c := cfg.CellConfig{
+		Docker: cfg.DockerSection{CapAdd: []string{"NET_ADMIN", "SYS_PTRACE", "SYS_CHROOT"}},
+	}
+	stripped := cfg.SanitizeForSolitary(&c)
+	if len(c.Docker.CapAdd) != 1 || c.Docker.CapAdd[0] != "SYS_CHROOT" {
+		t.Errorf("should keep only SYS_CHROOT, got %v", c.Docker.CapAdd)
+	}
+	if !stringsContain(stripped, "NET_ADMIN") || !stringsContain(stripped, "SYS_PTRACE") {
+		t.Errorf("should report stripped caps, got %v", stripped)
+	}
+}
+
+func TestSanitizeForSolitary_DisablesWireGuard(t *testing.T) {
+	c := cfg.CellConfig{
+		Wireguard: []cfg.WireguardEntry{{Enabled: true, Name: "wg0"}},
+	}
+	stripped := cfg.SanitizeForSolitary(&c)
+	if c.Wireguard[0].Enabled {
+		t.Error("wireguard should be disabled")
+	}
+	if !stringsContain(stripped, "wireguard") {
+		t.Errorf("should report disabling wireguard, got %v", stripped)
+	}
+}
+
+func TestSanitizeForSolitary_DisablesKVM(t *testing.T) {
+	c := cfg.CellConfig{}
+	b := true
+	c.Cell.KVM = &b
+	stripped := cfg.SanitizeForSolitary(&c)
+	if c.Cell.ResolvedKVM() {
+		t.Error("kvm should be disabled")
+	}
+	if !stringsContain(stripped, "kvm") {
+		t.Errorf("should report disabling kvm, got %v", stripped)
+	}
+}
+
+func TestSanitizeForSolitary_StripsDangerousVolumes(t *testing.T) {
+	c := cfg.CellConfig{
+		Volumes: []cfg.VolumeMount{
+			{Mount: "/var/run/docker.sock:/var/run/docker.sock"},
+			{Mount: "/home/user/code:/code"},
+			{Mount: "/proc/sysrq-trigger:/host-proc:ro"},
+		},
+	}
+	stripped := cfg.SanitizeForSolitary(&c)
+	if len(c.Volumes) != 1 {
+		t.Errorf("should keep only /home/user/code, got %v", c.Volumes)
+	}
+	if c.Volumes[0].Mount != "/home/user/code:/code" {
+		t.Errorf("wrong volume kept: %v", c.Volumes[0])
+	}
+	if !stringsContain(stripped, "/var/run/docker.sock") {
+		t.Errorf("should report stripped docker socket, got %v", stripped)
+	}
+}
+
+func TestSanitizeForSolitary_ForcesProxyOn(t *testing.T) {
+	c := cfg.CellConfig{}
+	cfg.SanitizeForSolitary(&c)
+	if !c.Network.Proxy.ResolvedEnabled() {
+		t.Error("proxy should be force-enabled")
+	}
+	if c.Network.Proxy.ResolvedAllowHostNetwork() {
+		t.Error("host network should be force-disabled")
+	}
+}
+
+func TestSanitizeForSolitary_NothingToStrip(t *testing.T) {
+	c := cfg.CellConfig{}
+	stripped := cfg.SanitizeForSolitary(&c)
+	if !c.Network.Proxy.ResolvedEnabled() {
+		t.Error("proxy should be force-enabled even when nothing else was stripped")
+	}
+	for _, s := range stripped {
+		if stringsContain([]string{s}, "privileged") || stringsContain([]string{s}, "cap") {
+			t.Errorf("shouldn't report stripping items that weren't there, got %v", stripped)
+		}
+	}
+}
+
+func TestNetworkProxy_Merge_EmptyAllowDeniesAll(t *testing.T) {
+	global := cfg.CellConfig{
+		Network: cfg.NetworkSection{
+			Proxy: cfg.NetworkProxySection{
+				Enabled: boolPtr(true),
+				Mode:    "allow",
+				Allow:   []string{},
+			},
+		},
+	}
+	merged := cfg.Merge(global, cfg.CellConfig{})
+	if merged.Network.Proxy.ResolvedMode() != "allow" {
+		t.Errorf("mode should be allow, got %q", merged.Network.Proxy.ResolvedMode())
+	}
+	if len(merged.Network.Proxy.Allow) != 0 {
+		t.Errorf("empty allow must stay empty (deny all), got %v", merged.Network.Proxy.Allow)
+	}
+}

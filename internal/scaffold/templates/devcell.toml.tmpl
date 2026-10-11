@@ -197,6 +197,45 @@
 # [packages.node]
 # "some-tool" = "^1.0.0"           # "latest" or any npm version range
 
+# --- Network egress proxy (deny-by-default outbound) ---
+# When enabled, the container sits on an internal-only network behind a gateway
+# sidecar (squid). Only allowed destinations are reachable; everything else gets
+# a 403. Presets cover common registries and AI APIs. Default: disabled (open).
+#
+# Quick start: `cell claude --solitary` enables the proxy and strips every
+# setting that could bypass it (privileged, NET_ADMIN, docker socket, etc.).
+#
+# [network.proxy]
+# enabled = true
+# mode = "allow"                     # "allow" = deny by default; "block" = allow by default
+# presets = ["claude", "github", "npm", "nix"]
+# allow = ["api.example.com", "*.corp.internal", "10.0.0.0/8"]
+# block = ["pastebin.com"]
+# allow_host_network = false         # true = host reachable on bridge gateway
+# log = true                         # JSON access log in the sidecar
+# image = ""                         # gateway sidecar image; default: ubuntu/squid (pinned)
+#
+# Available presets:
+#   claude   — api.anthropic.com, claude.ai, claude.com, ...
+#   codex    — api.openai.com, chatgpt.com, ...
+#   gemini   — generativelanguage.googleapis.com, ...
+#   opencode — opencode.ai, models.dev
+#   openrouter — openrouter.ai
+#   github   — github.com, api.github.com, ghcr.io, ...
+#   npm      — registry.npmjs.org
+#   pypi     — pypi.org, files.pythonhosted.org
+#   go       — proxy.golang.org, sum.golang.org, ...
+#   cargo    — index.crates.io, static.crates.io
+#   nix      — cache.nixos.org, channels.nixos.org (includes github)
+#   mise     — mise-versions.jdx.dev, nodejs.org (includes github)
+#   docker   — registry-1.docker.io, auth.docker.io, ...
+#   devcell  — devcell.sh, host.docker.internal
+#   1password — *.1password.com, *.1passwordservices.com, ...
+#
+# Flags:
+#   --solitary              full lockdown (proxy + strip dangerous settings)
+#   --force-insecure-network  disable proxy, run with open egress
+
 # --- WireGuard tunnels (one [[wireguard]] block per tunnel) ---
 #
 # Paste a standard wg-quick config. Keep secrets OUT of the file: devcell

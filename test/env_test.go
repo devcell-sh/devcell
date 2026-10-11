@@ -19,7 +19,7 @@ func TestEnv_NixLdLibs(t *testing.T) {
 	c := startEnvContainer(t)
 
 	// The directory must exist and contain .so files.
-	out, code := exec(t, c, []string{"ls", "/opt/devcell/.nix-ld-libs/"})
+	out, code := containerExec(t, c, []string{"ls", "/opt/devcell/.nix-ld-libs/"})
 	if code != 0 || out == "" {
 		t.Fatalf("FAIL: /opt/devcell/.nix-ld-libs/ missing or empty (exit %d)", code)
 	}
@@ -80,7 +80,7 @@ func TestEnv_NixProfilePath(t *testing.T) {
 		"/opt/devcell/.nix-profile",
 		"/opt/devcell/.nix-profile/bin",
 	} {
-		_, code := exec(t, c, []string{"test", "-e", path})
+		_, code := containerExec(t, c, []string{"test", "-e", path})
 		if code != 0 {
 			t.Errorf("FAIL: %s does not exist", path)
 		} else {
@@ -92,7 +92,7 @@ func TestEnv_NixProfilePath(t *testing.T) {
 // TestEnv_NixProfile -- home-manager native profile path must resolve.
 func TestEnv_NixProfile(t *testing.T) {
 	c := startEnvContainer(t)
-	out, code := exec(t, c, []string{"readlink", "-f", "/opt/devcell/.local/state/nix/profiles/profile"})
+	out, code := containerExec(t, c, []string{"readlink", "-f", "/opt/devcell/.local/state/nix/profiles/profile"})
 	if code != 0 || !strings.Contains(out, "/nix/store/") {
 		t.Fatalf("FAIL: /opt/devcell/.local/state/nix/profiles/profile doesn't resolve to /nix/store (exit %d): %q", code, out)
 	}
@@ -116,7 +116,7 @@ func TestEnv_SessionIdentity(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		out, code := exec(t, c, []string{"gosu", hostUser, "bash", "-lc", tc.cmd})
+		out, code := containerExec(t, c, []string{"gosu", hostUser, "bash", "-lc", tc.cmd})
 		if code != 0 || !strings.Contains(out, tc.contains) {
 			t.Errorf("FAIL %s: want %q, got %q (exit %d)", tc.name, tc.contains, out, code)
 		} else {
@@ -132,10 +132,10 @@ func TestEnv_WritePaths(t *testing.T) {
 	// GOPATH must not be inside /opt/devcell.
 	// Use $GOPATH env var (set by 05-shell-rc.sh) instead of `go env GOPATH`
 	// to avoid requiring the go binary in stacks that don't include it.
-	gopath, code := exec(t, c, []string{"gosu", hostUser, "bash", "-lc", `echo "$GOPATH"`})
+	gopath, code := containerExec(t, c, []string{"gosu", hostUser, "bash", "-lc", `echo "$GOPATH"`})
 	if code != 0 || gopath == "" {
 		// Fallback: try go env if available
-		gopath, code = exec(t, c, []string{"gosu", hostUser, "bash", "-lc", "go env GOPATH 2>/dev/null"})
+		gopath, code = containerExec(t, c, []string{"gosu", hostUser, "bash", "-lc", "go env GOPATH 2>/dev/null"})
 		if code != 0 {
 			t.Fatalf("FAIL: GOPATH not set and go not available (exit %d): %s", code, gopath)
 		}
@@ -148,7 +148,7 @@ func TestEnv_WritePaths(t *testing.T) {
 
 	// GOPATH must be writable
 	probe := gopath + "/.write-test-" + strconv.FormatInt(time.Now().UnixNano(), 36)
-	_, code = exec(t, c, []string{"gosu", hostUser, "bash", "-lc",
+	_, code = containerExec(t, c, []string{"gosu", hostUser, "bash", "-lc",
 		fmt.Sprintf("mkdir -p %q && rmdir %q", probe, probe)})
 	if code != 0 {
 		t.Errorf("FAIL: GOPATH=%q is not writable by host user", gopath)
@@ -157,7 +157,7 @@ func TestEnv_WritePaths(t *testing.T) {
 	}
 
 	// $HOME must be writable
-	_, code = exec(t, c, []string{"gosu", hostUser, "bash", "-lc",
+	_, code = containerExec(t, c, []string{"gosu", hostUser, "bash", "-lc",
 		"touch ~/.write-test && rm ~/.write-test"})
 	if code != 0 {
 		t.Errorf("FAIL: $HOME is not writable by host user")
@@ -166,12 +166,12 @@ func TestEnv_WritePaths(t *testing.T) {
 	}
 
 	// /opt/devcell must NOT be writable by the host user (it's the nix env, owned by devcell)
-	_, code = exec(t, c, []string{"gosu", hostUser, "bash", "-lc",
+	_, code = containerExec(t, c, []string{"gosu", hostUser, "bash", "-lc",
 		"touch /opt/devcell/.write-test 2>/dev/null"})
 	if code == 0 {
 		t.Errorf("FAIL: host user can write to /opt/devcell -- should be read-only")
 		// cleanup
-		exec(t, c, []string{"rm", "-f", "/opt/devcell/.write-test"}) //nolint
+		containerExec(t, c, []string{"rm", "-f", "/opt/devcell/.write-test"}) //nolint
 	} else {
 		t.Logf("PASS: /opt/devcell is read-only for host user")
 	}
@@ -194,7 +194,7 @@ func TestEnv_BasePermissions(t *testing.T) {
 	}
 
 	for _, dir := range dirs {
-		out, code := exec(t, c, []string{"stat", "-c", "%u:%g", dir})
+		out, code := containerExec(t, c, []string{"stat", "-c", "%u:%g", dir})
 		if code != 0 {
 			t.Errorf("FAIL: %s does not exist", dir)
 			continue
@@ -213,7 +213,7 @@ func TestEnv_BasePermissions(t *testing.T) {
 func TestEnv_ImageVersionStamps(t *testing.T) {
 	c := startEnvContainer(t)
 
-	out, code := exec(t, c, []string{"cat", "/etc/devcell/metadata.json"})
+	out, code := containerExec(t, c, []string{"cat", "/etc/devcell/metadata.json"})
 	if code != 0 {
 		t.Fatalf("FAIL: /etc/devcell/metadata.json not found (exit %d) — canonical build metadata file missing", code)
 	}

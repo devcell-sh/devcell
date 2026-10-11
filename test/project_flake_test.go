@@ -107,7 +107,7 @@ echo "SEED_DONE"`, flakeNix)
 	t.Cleanup(func() { _ = c.Terminate(ctx) })
 
 	t.Run("system_detection_matches_uname", func(t *testing.T) {
-		out, code := exec(t, c, []string{"uname", "-m"})
+		out, code := containerExec(t, c, []string{"uname", "-m"})
 		if code != 0 {
 			t.Fatalf("uname -m exit %d: %s", code, out)
 		}
@@ -124,13 +124,13 @@ echo "SEED_DONE"`, flakeNix)
 		// Verify the project profile was installed for the correct system by
 		// checking the entrypoint log. A wrong system (e.g. x86_64-linux on
 		// aarch64) would show "platform mismatch" and no profile.
-		logOut, _ := exec(t, c, []string{
+		logOut, _ := containerExec(t, c, []string{
 			"grep", "-c", "project-flake: installed packages." + wantSystem, "/proc/1/fd/1",
 		})
 		// /proc/1/fd/1 may not be readable; fall back to profile existence check.
 		if strings.TrimSpace(logOut) == "0" {
 			// If we can't read the log, at least verify the profile exists
-			_, profileCode := exec(t, c, []string{
+			_, profileCode := containerExec(t, c, []string{
 				"test", "-d", "/home/" + hostUser + "/.local/state/nix/profiles/project",
 			})
 			if profileCode != 0 {
@@ -141,7 +141,7 @@ echo "SEED_DONE"`, flakeNix)
 	})
 
 	t.Run("project_profile_exists", func(t *testing.T) {
-		out, code := exec(t, c, []string{
+		out, code := containerExec(t, c, []string{
 			"test", "-L", "/home/" + hostUser + "/.local/state/nix/profiles/project",
 		})
 		if code != 0 {
@@ -169,7 +169,7 @@ echo "SEED_DONE"`, flakeNix)
 	})
 
 	t.Run("baked_jq_still_reachable", func(t *testing.T) {
-		out, code := exec(t, c, []string{
+		out, code := containerExec(t, c, []string{
 			"/opt/devcell/.local/state/nix/profiles/profile/bin/jq", "--version",
 		})
 		if code != 0 {

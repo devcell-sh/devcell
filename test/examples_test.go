@@ -56,6 +56,15 @@ var exampleSpecs = []exampleSpec{
 		buildCmd: "kicad-cli version",
 	},
 	{
+		name: "secure-agent",
+		binaries: []string{
+			"go", "gopls", "golangci-lint",
+			"node", "npm", "hugo",
+			"zsh", "git", "curl", "jq", "rg", "task",
+		},
+		buildCmd: "go version && node --version",
+	},
+	{
 		name: "aws-infrastructure",
 		binaries: []string{
 			"terraform", "aws", "helm", "kubectl", "packer",
@@ -156,7 +165,7 @@ func TestExamples_E2E(t *testing.T) {
 					if code != 0 {
 						t.Fatalf("drawio export failed (exit %d):\n%s", code, out)
 					}
-					pngData, code := exec(t, c, []string{"cat", "/tmp/arch.png"})
+					pngData, code := containerExec(t, c, []string{"cat", "/tmp/arch.png"})
 					if code != 0 || len(pngData) == 0 {
 						t.Error("PNG file not created or empty")
 					} else {
@@ -235,7 +244,7 @@ func copyExampleFiles(t *testing.T, c testcontainers.Container, exampleName stri
 	t.Helper()
 	ctx := context.Background()
 
-	if _, code := exec(t, c, []string{"mkdir", "-p", "/workspace"}); code != 0 {
+	if _, code := containerExec(t, c, []string{"mkdir", "-p", "/workspace"}); code != 0 {
 		t.Fatal("failed to create /workspace")
 	}
 

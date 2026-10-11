@@ -35,7 +35,7 @@ import (
 // the per-behavior tests run.
 func TestMcp_ChromiumSingletonSweep_HelperPresent_DIMM222(t *testing.T) {
 	c := startEnvContainer(t)
-	out, code := exec(t, c, []string{"sh", "-c",
+	out, code := containerExec(t, c, []string{"sh", "-c",
 		"cat $(command -v patchright-mcp-cell) | grep -c chromium-singleton-sweep"})
 	if code != 0 {
 		t.Fatalf("FAIL CELL-62: patchright-mcp-cell wrapper does not reference chromium-singleton-sweep (grep exit=%d, out=%q) — per-launch sweep not wired", code, out)
@@ -78,7 +78,7 @@ echo "after-sweep:"
 ls -la "$DIR"/Singleton* 2>&1 || echo "  (all removed)"
 echo "orphan-after: $(ls -la $ORPHAN 2>&1 || echo '  (removed)')"
 `
-	out, code := exec(t, c, []string{"bash", "-c", setupScript})
+	out, code := containerExec(t, c, []string{"bash", "-c", setupScript})
 	t.Logf("setup+sweep output:\n%s", out)
 	if code != 0 {
 		t.Fatalf("FAIL: setup script exit=%d", code)
@@ -86,12 +86,12 @@ echo "orphan-after: $(ls -la $ORPHAN 2>&1 || echo '  (removed)')"
 
 	// Each triple file must be gone, and the orphan dir must be removed.
 	for _, f := range []string{"SingletonLock", "SingletonCookie", "SingletonSocket"} {
-		_, c2 := exec(t, c, []string{"test", "-h", "/tmp/dimm222-stale/" + f})
+		_, c2 := containerExec(t, c, []string{"test", "-h", "/tmp/dimm222-stale/" + f})
 		if c2 == 0 {
 			t.Errorf("FAIL CELL-62: /tmp/dimm222-stale/%s still exists after sweep — stale lock not removed", f)
 		}
 	}
-	_, c2 := exec(t, c, []string{"test", "-d", "/tmp/.org.chromium.Chromium.STALE"})
+	_, c2 := containerExec(t, c, []string{"test", "-d", "/tmp/.org.chromium.Chromium.STALE"})
 	if c2 == 0 {
 		t.Errorf("FAIL CELL-62: orphan /tmp/.org.chromium.Chromium.STALE/ still exists — orphan tmp dir not cleaned")
 	}
@@ -153,7 +153,7 @@ ls -la "$DIR"/Singleton* 2>&1
 # Clean up the masquerade.
 kill "$LIVE_PID" 2>/dev/null || true
 `
-	out, code := exec(t, c, []string{"bash", "-c", setupScript})
+	out, code := containerExec(t, c, []string{"bash", "-c", setupScript})
 	t.Logf("setup+sweep output:\n%s", out)
 	if code != 0 {
 		t.Fatalf("FAIL: setup script exit=%d", code)
@@ -162,7 +162,7 @@ kill "$LIVE_PID" 2>/dev/null || true
 	// All three files must still exist — the sweep must NOT have touched
 	// them because the recorded PID is alive AND its comm matches chrome*.
 	for _, f := range []string{"SingletonLock", "SingletonCookie", "SingletonSocket"} {
-		_, c2 := exec(t, c, []string{"test", "-h", "/tmp/dimm222-live/" + f})
+		_, c2 := containerExec(t, c, []string{"test", "-h", "/tmp/dimm222-live/" + f})
 		if c2 != 0 {
 			t.Errorf("FAIL CELL-62: /tmp/dimm222-live/%s was removed by sweep — live chrome lock destroyed (regression in comm-check)", f)
 		}

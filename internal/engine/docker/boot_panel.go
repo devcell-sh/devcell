@@ -22,6 +22,9 @@ func bootGroups(binary string, opts groupOpts) []ux.PanelGroup {
 	if opts.needsBuild {
 		prepare.Steps = append(prepare.Steps, "Image build")
 	}
+	if opts.hasProxy {
+		prepare.Steps = append(prepare.Steps, "Proxy")
+	}
 	prepare.Steps = append(prepare.Steps, "Image pin")
 
 	// Group 2: Configure — project-specific settings injected into the container.
@@ -106,6 +109,7 @@ type groupOpts struct {
 	hasSecrets     bool
 	hasAPIKeys     bool
 	hasWireGuard   bool
+	hasProxy       bool
 	hasPostgres    bool
 	hasNixPackages bool
 	hasMCP         bool
@@ -118,6 +122,7 @@ type groupOpts struct {
 // and full s6 service names (shell-rc, nix-daemon, homedir, ...) so the
 // same map works for both BootDirWatcher and ContainerLogWatcher events.
 var bootComponentStep = map[string]struct{ Group, Step string }{
+	"proxy":      {"Prepare", "Proxy"},
 	"container":  {"Boot", "Container"},
 	"entrypoint": {"Boot", "Entrypoint"},
 	"s6":         {"Boot", "Services"},

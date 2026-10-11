@@ -68,5 +68,22 @@ func ConfigHash(c CellConfig) string {
 	sort.Strings(pkgs)
 	fmt.Fprintf(h, "packages=%s\n", strings.Join(pkgs, ","))
 
+	// Network proxy
+	fmt.Fprintf(h, "proxy.enabled=%v\n", NetworkProxyEnabled(c))
+	fmt.Fprintf(h, "proxy.mode=%s\n", c.Network.Proxy.ResolvedMode())
+	proxyAllow := make([]string, len(c.Network.Proxy.Allow))
+	copy(proxyAllow, c.Network.Proxy.Allow)
+	sort.Strings(proxyAllow)
+	fmt.Fprintf(h, "proxy.allow=%s\n", strings.Join(proxyAllow, ","))
+	proxyBlock := make([]string, len(c.Network.Proxy.Block))
+	copy(proxyBlock, c.Network.Proxy.Block)
+	sort.Strings(proxyBlock)
+	fmt.Fprintf(h, "proxy.block=%s\n", strings.Join(proxyBlock, ","))
+	proxyPresets := make([]string, len(c.Network.Proxy.Presets))
+	copy(proxyPresets, c.Network.Proxy.Presets)
+	sort.Strings(proxyPresets)
+	fmt.Fprintf(h, "proxy.presets=%s\n", strings.Join(proxyPresets, ","))
+	fmt.Fprintf(h, "proxy.allow_host_network=%v\n", c.Network.Proxy.ResolvedAllowHostNetwork())
+
 	return fmt.Sprintf("%x", h.Sum(nil))[:12]
 }

@@ -28,7 +28,7 @@ func TestKicad_Mcp(t *testing.T) {
 
 	// ── 2. Registered in nix-mcp-servers.json ────────────────────────────────
 	t.Run("registered in nix-mcp-servers.json", func(t *testing.T) {
-		raw, code := exec(t, c, []string{"cat", "/etc/claude-code/nix-mcp-servers.json"})
+		raw, code := containerExec(t, c, []string{"cat", "/etc/claude-code/nix-mcp-servers.json"})
 		if code != 0 {
 			t.Fatalf("FAIL: could not read nix-mcp-servers.json (exit %d)", code)
 		}

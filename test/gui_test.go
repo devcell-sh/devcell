@@ -334,7 +334,7 @@ func probeGUI(t *testing.T) {
 // skipIfNoXfreerdp skips the test if xfreerdp is not on PATH inside the container.
 func skipIfNoXfreerdp(t *testing.T, c testcontainers.Container) {
 	t.Helper()
-	_, code := exec(t, c, []string{"sh", "-c", "command -v xfreerdp"})
+	_, code := containerExec(t, c, []string{"sh", "-c", "command -v xfreerdp"})
 	if code != 0 {
 		t.Skip("skipping: xfreerdp not on PATH")
 	}
@@ -567,11 +567,11 @@ func TestDesktop_XvfbDpi96(t *testing.T) {
 func TestRdp_ListensOn3389(t *testing.T) {
 	probeGUI(t)
 	c := startRdpContainer(t)
-	_, code := exec(t, c, []string{"pgrep", "xrdp"})
+	_, code := containerExec(t, c, []string{"pgrep", "xrdp"})
 	if code != 0 {
 		t.Fatalf("FAIL: xrdp process not found (exit %d)", code)
 	}
-	out, code := exec(t, c, []string{"sh", "-c",
+	out, code := containerExec(t, c, []string{"sh", "-c",
 		"grep -i 0D3D /proc/net/tcp6 /proc/net/tcp 2>/dev/null | grep ' 0A '"})
 	if code != 0 || !strings.Contains(strings.ToUpper(out), "0D3D") {
 		t.Errorf("FAIL: port 3389 (0x0D3D) not in LISTEN state:\n%s", out)
@@ -641,15 +641,15 @@ func TestRdp_ConnectWithCreds(t *testing.T) {
 	skipIfNoXfreerdp(t, c)
 	// Connect via RDP and verify xrdp proxies to VNC by checking that the
 	// number of ESTABLISHED connections on port 5900 (0x170C) increases.
-	beforeOut, _ := exec(t, c, []string{"sh", "-c",
+	beforeOut, _ := containerExec(t, c, []string{"sh", "-c",
 		"grep '170C' /proc/net/tcp6 /proc/net/tcp 2>/dev/null | grep -c ' 01 '"})
 	before, _ := strconv.Atoi(strings.TrimSpace(beforeOut))
 
-	exec(t, c, []string{"sh", "-c",
+	containerExec(t, c, []string{"sh", "-c",
 		"DISPLAY=:99 xfreerdp /v:127.0.0.1:3389 /u:" + hostUser + " /p:rdp /cert:ignore /timeout:5000 2>/dev/null &"})
 	time.Sleep(3 * time.Second)
 
-	afterOut, _ := exec(t, c, []string{"sh", "-c",
+	afterOut, _ := containerExec(t, c, []string{"sh", "-c",
 		"grep '170C' /proc/net/tcp6 /proc/net/tcp 2>/dev/null | grep -c ' 01 '"})
 	after, _ := strconv.Atoi(strings.TrimSpace(afterOut))
 	if after > before {
@@ -657,7 +657,7 @@ func TestRdp_ConnectWithCreds(t *testing.T) {
 	} else {
 		t.Errorf("FAIL: no new VNC connection after RDP connect (before=%d, after=%d)", before, after)
 	}
-	exec(t, c, []string{"sh", "-c", "pkill -f 'xfreerdp.*127.0.0.1:3389' 2>/dev/null; true"})
+	containerExec(t, c, []string{"sh", "-c", "pkill -f 'xfreerdp.*127.0.0.1:3389' 2>/dev/null; true"})
 }
 
 // TestRdp_NoLoginPrompt -- xrdp auto-connects to VNC without showing a login screen.
@@ -666,13 +666,13 @@ func TestRdp_NoLoginPrompt(t *testing.T) {
 	c := startRdpContainer(t)
 	skipIfNoXfreerdp(t, c)
 	// Clear xrdp log, connect, then check log for VNC connection.
-	exec(t, c, []string{"sh", "-c", "truncate -s0 /var/log/xrdp.log"})
+	containerExec(t, c, []string{"sh", "-c", "truncate -s0 /var/log/xrdp.log"})
 	// Connect with correct creds -- triggers xrdp to proxy to VNC.
-	exec(t, c, []string{"sh", "-c",
+	containerExec(t, c, []string{"sh", "-c",
 		"xfreerdp /v:127.0.0.1:3389 /u:" + hostUser + " /p:rdp /cert:ignore /timeout:5000 2>&1 &" +
 			" sleep 3 && kill %1 2>/dev/null; true"})
 	// Check xrdp log: should contain VNC connection, not "login_wnd"
-	out, _ := exec(t, c, []string{"sh", "-c", "cat /var/log/xrdp.log 2>/dev/null"})
+	out, _ := containerExec(t, c, []string{"sh", "-c", "cat /var/log/xrdp.log 2>/dev/null"})
 	if strings.Contains(out, "login_wnd") {
 		t.Errorf("FAIL: xrdp showed login window (login_wnd found in log):\n%s", out)
 	}
@@ -692,17 +692,17 @@ func TestRdp_KickExistingConnection(t *testing.T) {
 	c := startRdpContainer(t)
 	skipIfNoXfreerdp(t, c)
 	// Start first connection in background.
-	exec(t, c, []string{"sh", "-c",
+	containerExec(t, c, []string{"sh", "-c",
 		"xfreerdp /v:127.0.0.1:3389 /u:" + hostUser + " /p:rdp /cert:ignore 2>/dev/null &"})
 	time.Sleep(3 * time.Second)
 
 	// Start second connection -- should kick the first.
-	exec(t, c, []string{"sh", "-c",
+	containerExec(t, c, []string{"sh", "-c",
 		"xfreerdp /v:127.0.0.1:3389 /u:" + hostUser + " /p:rdp /cert:ignore 2>/dev/null &"})
 	time.Sleep(3 * time.Second)
 
 	// After second connect, only one ESTABLISHED VNC connection should remain.
-	out, _ := exec(t, c, []string{"sh", "-c",
+	out, _ := containerExec(t, c, []string{"sh", "-c",
 		"grep '170C' /proc/net/tcp6 /proc/net/tcp 2>/dev/null | grep -c ' 01 '"})
 	count, _ := strconv.Atoi(strings.TrimSpace(out))
 	if count <= 1 {
@@ -712,20 +712,20 @@ func TestRdp_KickExistingConnection(t *testing.T) {
 	}
 
 	// Clean up background xfreerdp processes.
-	exec(t, c, []string{"sh", "-c", "pkill -f 'xfreerdp.*127.0.0.1:3389' 2>/dev/null; true"})
+	containerExec(t, c, []string{"sh", "-c", "pkill -f 'xfreerdp.*127.0.0.1:3389' 2>/dev/null; true"})
 }
 
 // TestRdp_LogsToFile -- xrdp logs must go to /var/log, not stdout.
 func TestRdp_LogsToFile(t *testing.T) {
 	probeGUI(t)
 	c := startRdpContainer(t)
-	out, code := exec(t, c, []string{"sh", "-c",
+	out, code := containerExec(t, c, []string{"sh", "-c",
 		"test -f /var/log/xrdp.log && echo OK"})
 	if code != 0 || !strings.Contains(out, "OK") {
 		t.Fatalf("FAIL: xrdp log files not found in /var/log/")
 	}
 	// xrdp.ini must have LogFile pointing to /var/log and syslog disabled
-	out, _ = exec(t, c, []string{"sh", "-c",
+	out, _ = containerExec(t, c, []string{"sh", "-c",
 		"grep -E '^LogFile=|^EnableSyslog=' /tmp/xrdp/xrdp.ini 2>/dev/null"})
 	if !strings.Contains(out, "LogFile=/var/log/xrdp.log") {
 		t.Errorf("FAIL: xrdp.ini LogFile not set to /var/log/xrdp.log:\n%s", out)
@@ -741,7 +741,7 @@ func TestRdp_LogsToFile(t *testing.T) {
 func TestRdp_NoXorgSection(t *testing.T) {
 	probeGUI(t)
 	c := startRdpContainer(t)
-	out, _ := exec(t, c, []string{"sh", "-c",
+	out, _ := containerExec(t, c, []string{"sh", "-c",
 		"grep -c '\\[Xorg\\]' /tmp/xrdp/xrdp.ini 2>/dev/null || echo 0"})
 	count, _ := strconv.Atoi(strings.TrimSpace(out))
 	if count > 0 {
@@ -755,7 +755,7 @@ func TestRdp_NoXorgSection(t *testing.T) {
 func TestRdp_UserExists(t *testing.T) {
 	probeGUI(t)
 	c := startRdpContainer(t)
-	out, code := exec(t, c, []string{"sh", "-c",
+	out, code := containerExec(t, c, []string{"sh", "-c",
 		"id " + hostUser + " && getent passwd " + hostUser + " | cut -d: -f7"})
 	if code != 0 {
 		t.Fatalf("FAIL: user %s does not exist (exit %d)", hostUser, code)
@@ -775,7 +775,7 @@ func TestRdp_ClipboardSync(t *testing.T) {
 	skipIfNoXfreerdp(t, c)
 
 	// Verify xclip is available.
-	_, code := exec(t, c, []string{"sh", "-c", "command -v xclip"})
+	_, code := containerExec(t, c, []string{"sh", "-c", "command -v xclip"})
 	if code != 0 {
 		t.Skip("skipping: xclip not on PATH")
 	}
@@ -783,29 +783,29 @@ func TestRdp_ClipboardSync(t *testing.T) {
 	testText := "devcell-clip-" + time.Now().Format("150405")
 
 	// Start a second Xvfb (:98) for the xfreerdp client side.
-	exec(t, c, []string{"sh", "-c", "Xvfb :98 -screen 0 1024x768x24 &"})
+	containerExec(t, c, []string{"sh", "-c", "Xvfb :98 -screen 0 1024x768x24 &"})
 	time.Sleep(1 * time.Second)
 	t.Cleanup(func() {
-		exec(t, c, []string{"sh", "-c", "pkill -f 'Xvfb :98' 2>/dev/null; true"})
+		containerExec(t, c, []string{"sh", "-c", "pkill -f 'Xvfb :98' 2>/dev/null; true"})
 	})
 
 	// Connect xfreerdp with clipboard enabled (client on :98, server on :99 via RDP).
-	exec(t, c, []string{"sh", "-c",
+	containerExec(t, c, []string{"sh", "-c",
 		"DISPLAY=:98 xfreerdp /v:127.0.0.1:3389 /u:" + hostUser +
 			" /p:rdp /cert:ignore +clipboard 2>/dev/null &"})
 	t.Cleanup(func() {
-		exec(t, c, []string{"sh", "-c", "pkill -f 'xfreerdp.*127.0.0.1:3389' 2>/dev/null; true"})
+		containerExec(t, c, []string{"sh", "-c", "pkill -f 'xfreerdp.*127.0.0.1:3389' 2>/dev/null; true"})
 	})
 	// FreeRDP 3.x needs ~10s to fully establish the RDP session and cliprdr channel.
 	time.Sleep(10 * time.Second)
 
 	// Set clipboard text on the server display (:99).
-	exec(t, c, []string{"sh", "-c",
+	containerExec(t, c, []string{"sh", "-c",
 		"echo -n '" + testText + "' | DISPLAY=:99 xclip -selection clipboard"})
 	time.Sleep(5 * time.Second)
 
 	// Read clipboard from the client display (:98).
-	out, code := exec(t, c, []string{"sh", "-c",
+	out, code := containerExec(t, c, []string{"sh", "-c",
 		"DISPLAY=:98 xclip -selection clipboard -o 2>&1"})
 	if code != 0 {
 		t.Fatalf("FAIL: xclip read on :98 failed (exit %d): %s", code, out)
@@ -833,17 +833,17 @@ func TestRdp_ClientResolutionRequest(t *testing.T) {
 	skipIfNoXfreerdp(t, c)
 
 	// xdotool is used to read the FreeRDP window geometry on :98.
-	if _, code := exec(t, c, []string{"sh", "-c", "command -v xdotool"}); code != 0 {
+	if _, code := containerExec(t, c, []string{"sh", "-c", "command -v xdotool"}); code != 0 {
 		t.Skip("skipping: xdotool not on PATH")
 	}
 
 	// Roomy second Xvfb (:98) acts as the xfreerdp client display.
 	// 3200x1800 is larger than any size we request below, so the FreeRDP
 	// window never gets clipped by its own host display.
-	exec(t, c, []string{"sh", "-c", "Xvfb :98 -screen 0 3200x1800x24 2>/dev/null &"})
+	containerExec(t, c, []string{"sh", "-c", "Xvfb :98 -screen 0 3200x1800x24 2>/dev/null &"})
 	time.Sleep(1 * time.Second)
 	t.Cleanup(func() {
-		exec(t, c, []string{"sh", "-c", "pkill -f 'Xvfb :98' 2>/dev/null; true"})
+		containerExec(t, c, []string{"sh", "-c", "pkill -f 'Xvfb :98' 2>/dev/null; true"})
 	})
 
 	cases := []struct {
@@ -869,15 +869,15 @@ func TestRdp_ClientResolutionRequest(t *testing.T) {
 			cmd := fmt.Sprintf(
 				"DISPLAY=:98 xfreerdp /v:127.0.0.1:3389 /u:%s /p:rdp /cert:ignore /size:%dx%d 2>/dev/null &",
 				hostUser, tc.reqWidth, tc.reqHeight)
-			exec(t, c, []string{"sh", "-c", cmd})
+			containerExec(t, c, []string{"sh", "-c", cmd})
 			t.Cleanup(func() {
-				exec(t, c, []string{"sh", "-c", "pkill -f 'xfreerdp.*127.0.0.1:3389' 2>/dev/null; true"})
+				containerExec(t, c, []string{"sh", "-c", "pkill -f 'xfreerdp.*127.0.0.1:3389' 2>/dev/null; true"})
 			})
 			// FreeRDP 3.x needs ~8s to fully establish the session and
 			// map its top-level window.
 			time.Sleep(8 * time.Second)
 
-			out, code := exec(t, c, []string{"sh", "-c",
+			out, code := containerExec(t, c, []string{"sh", "-c",
 				"DISPLAY=:98 xdotool search --name FreeRDP 2>/dev/null | head -1 | " +
 					"xargs -I{} xdotool getwindowgeometry --shell {} 2>&1"})
 			if code != 0 || !strings.Contains(out, "WIDTH=") {
@@ -917,12 +917,12 @@ func TestVnc_ListensOn5900(t *testing.T) {
 	probeGUI(t)
 	c := startVncContainer(t) // already waited for port to be reachable
 	// Verify x11vnc process is alive
-	_, code := exec(t, c, []string{"pgrep", "x11vnc"})
+	_, code := containerExec(t, c, []string{"pgrep", "x11vnc"})
 	if code != 0 {
 		t.Fatalf("FAIL: x11vnc process not found (exit %d)", code)
 	}
 	// Verify the socket is in LISTEN state via /proc/net
-	out, code := exec(t, c, []string{"sh", "-c",
+	out, code := containerExec(t, c, []string{"sh", "-c",
 		"grep -i 170C /proc/net/tcp6 /proc/net/tcp 2>/dev/null | grep ' 0A '"})
 	if code != 0 || !strings.Contains(strings.ToUpper(out), "170C") {
 		t.Errorf("FAIL: port 5900 (0x170C) not in LISTEN state in /proc/net:\n%s", out)
@@ -954,7 +954,7 @@ func TestVnc_DynamicResolution(t *testing.T) {
 	c := startVncContainer(t)
 
 	// Default resolution should be 1920x1080
-	out, code := exec(t, c, []string{"sh", "-c", "DISPLAY=:99 xrandr 2>&1"})
+	out, code := containerExec(t, c, []string{"sh", "-c", "DISPLAY=:99 xrandr 2>&1"})
 	if code != 0 {
 		t.Fatalf("xrandr failed (exit %d): %s", code, out)
 	}
@@ -964,7 +964,7 @@ func TestVnc_DynamicResolution(t *testing.T) {
 	t.Logf("PASS: default resolution is 1920x1080")
 
 	// Add a new mode and switch to it
-	_, code = exec(t, c, []string{"sh", "-c",
+	_, code = containerExec(t, c, []string{"sh", "-c",
 		"DISPLAY=:99 xrandr --newmode 2560x1440 0 2560 2560 2560 2560 1440 1440 1440 1440 2>/dev/null; " +
 			"DISPLAY=:99 xrandr --addmode screen 2560x1440 2>/dev/null; " +
 			"DISPLAY=:99 xrandr -s 2560x1440 2>/dev/null"})
@@ -973,7 +973,7 @@ func TestVnc_DynamicResolution(t *testing.T) {
 	}
 
 	// Verify new resolution
-	out, code = exec(t, c, []string{"sh", "-c", "DISPLAY=:99 xrandr 2>&1"})
+	out, code = containerExec(t, c, []string{"sh", "-c", "DISPLAY=:99 xrandr 2>&1"})
 	if code != 0 {
 		t.Fatalf("xrandr check failed (exit %d): %s", code, out)
 	}
@@ -1037,7 +1037,7 @@ func TestRdp_AudioPlayback(t *testing.T) {
 
 	// Guard: need paplay, parec, and pactl for this test.
 	for _, tool := range []string{"paplay", "parec", "pactl"} {
-		if _, code := exec(t, c, []string{"sh", "-c", "command -v " + tool}); code != 0 {
+		if _, code := containerExec(t, c, []string{"sh", "-c", "command -v " + tool}); code != 0 {
 			t.Skipf("skipping: %s not on PATH", tool)
 		}
 	}
@@ -1049,32 +1049,32 @@ func TestRdp_AudioPlayback(t *testing.T) {
 	}
 
 	// Verify PulseAudio is running and xrdp_sink exists.
-	sinksOut, _ := exec(t, c, []string{"sh", "-c", paRun + " pactl list sinks short 2>/dev/null"})
+	sinksOut, _ := containerExec(t, c, []string{"sh", "-c", paRun + " pactl list sinks short 2>/dev/null"})
 	if !strings.Contains(sinksOut, "xrdp-sink") {
-		paLog, _ := exec(t, c, []string{"sh", "-c", "cat /var/log/pulseaudio.log 2>/dev/null | tail -30"})
+		paLog, _ := containerExec(t, c, []string{"sh", "-c", "cat /var/log/pulseaudio.log 2>/dev/null | tail -30"})
 		t.Fatalf("FAIL: xrdp-sink not found in PulseAudio sinks — module-xrdp-sink not loaded\nSinks: %s\nPulseAudio log:\n%s", sinksOut, paLog)
 	}
 	t.Logf("PulseAudio sinks:\n%s", sinksOut)
 
 	// Set NullSink as default so paplay routes there (xrdp-sink's transport
 	// isn't active without a real RDP client session).
-	exec(t, c, []string{"sh", "-c", paRun + " pactl set-default-sink NullSink 2>/dev/null; true"})
+	containerExec(t, c, []string{"sh", "-c", paRun + " pactl set-default-sink NullSink 2>/dev/null; true"})
 
 	// Play the sine wave through PulseAudio (routed to NullSink).
-	exec(t, c, []string{"sh", "-c", paRun + " paplay /tmp/sine440.wav &"})
+	containerExec(t, c, []string{"sh", "-c", paRun + " paplay /tmp/sine440.wav &"})
 	time.Sleep(1 * time.Second)
 
 	// Capture 3 seconds of audio from NullSink's monitor source.
-	captureOut, captureCode := exec(t, c, []string{"sh", "-c",
+	captureOut, captureCode := containerExec(t, c, []string{"sh", "-c",
 		paRun + " timeout 3 parec --device=NullSink.monitor --format=s16le --rate=44100 --channels=2 " +
 			"--file-format=wav /tmp/out.wav 2>&1; echo EXIT=$?"})
 	t.Logf("parec output: %s (exec code %d)", captureOut, captureCode)
 
 	// Stop playback.
-	exec(t, c, []string{"sh", "-c", "pkill -f 'paplay.*sine440' 2>/dev/null; true"})
+	containerExec(t, c, []string{"sh", "-c", "pkill -f 'paplay.*sine440' 2>/dev/null; true"})
 
 	// Verify capture file exists.
-	lsOut, _ := exec(t, c, []string{"sh", "-c", "ls -la /tmp/out.wav 2>&1"})
+	lsOut, _ := containerExec(t, c, []string{"sh", "-c", "ls -la /tmp/out.wav 2>&1"})
 	t.Logf("capture file: %s", lsOut)
 	if strings.Contains(lsOut, "No such file") {
 		t.Fatal("FAIL: parec did not produce /tmp/out.wav")
@@ -1082,7 +1082,7 @@ func TestRdp_AudioPlayback(t *testing.T) {
 
 	// Copy the captured WAV out of the container for analysis.
 	wavPath := filepath.Join(t.TempDir(), "out.wav")
-	wavB64, _ := exec(t, c, []string{"sh", "-c", "base64 /tmp/out.wav"})
+	wavB64, _ := containerExec(t, c, []string{"sh", "-c", "base64 /tmp/out.wav"})
 	wavData, err := base64.StdEncoding.DecodeString(strings.TrimSpace(wavB64))
 	if err != nil {
 		t.Fatalf("FAIL: decode base64 of captured WAV: %v", err)
@@ -1124,25 +1124,25 @@ func TestRdp_AudioRedirection(t *testing.T) {
 	paRun := "gosu " + hostUser + " env PULSE_SERVER=unix:/tmp/pulse-runtime/pulse/native XDG_RUNTIME_DIR=/tmp/pulse-runtime"
 
 	for _, tool := range []string{"paplay", "parec", "pactl"} {
-		if _, code := exec(t, c, []string{"sh", "-c", "command -v " + tool}); code != 0 {
+		if _, code := containerExec(t, c, []string{"sh", "-c", "command -v " + tool}); code != 0 {
 			t.Skipf("skipping: %s not on PATH", tool)
 		}
 	}
 
-	sinksOut, _ := exec(t, c, []string{"sh", "-c", paRun + " pactl list sinks short 2>/dev/null"})
+	sinksOut, _ := containerExec(t, c, []string{"sh", "-c", paRun + " pactl list sinks short 2>/dev/null"})
 	if !strings.Contains(sinksOut, "xrdp-sink") {
 		t.Skip("skipping: xrdp-sink not loaded — module-xrdp-sink not available")
 	}
 	t.Logf("Server PA sinks:\n%s", sinksOut)
 
-	exec(t, c, []string{"sh", "-c", paRun + " pactl set-default-sink xrdp-sink 2>/dev/null; true"})
+	containerExec(t, c, []string{"sh", "-c", paRun + " pactl set-default-sink xrdp-sink 2>/dev/null; true"})
 
 	// --- Client-side setup ---
 
-	exec(t, c, []string{"sh", "-c", "Xvfb :98 -screen 0 1024x768x24 2>/dev/null &"})
+	containerExec(t, c, []string{"sh", "-c", "Xvfb :98 -screen 0 1024x768x24 2>/dev/null &"})
 	time.Sleep(1 * time.Second)
 	t.Cleanup(func() {
-		exec(t, c, []string{"sh", "-c", "pkill -f 'Xvfb :98' 2>/dev/null; true"})
+		containerExec(t, c, []string{"sh", "-c", "pkill -f 'Xvfb :98' 2>/dev/null; true"})
 	})
 
 	clientPADir := "/tmp/pa-client"
@@ -1157,37 +1157,37 @@ pulseaudio --daemonize=yes --exit-idle-time=-1 --disable-shm=true -n \
 	if err := c.CopyToContainer(context.Background(), []byte(clientPAScript), "/tmp/start-client-pa.sh", 0o755); err != nil {
 		t.Fatalf("copy client PA script: %v", err)
 	}
-	paStartOut, paStartCode := exec(t, c, []string{"sh", "-c",
+	paStartOut, paStartCode := containerExec(t, c, []string{"sh", "-c",
 		"gosu " + hostUser + " /tmp/start-client-pa.sh 2>&1"})
 	t.Logf("client PA start: exit=%d output=%s", paStartCode, paStartOut)
 	time.Sleep(2 * time.Second)
 	t.Cleanup(func() {
-		exec(t, c, []string{"sh", "-c",
+		containerExec(t, c, []string{"sh", "-c",
 			"gosu " + hostUser + " env PULSE_SERVER=unix:" + clientPADir + "/native pulseaudio --kill 2>/dev/null; true"})
 	})
 
 	clientPA := "gosu " + hostUser + " env PULSE_SERVER=unix:" + clientPADir + "/native"
 
-	clientSinks, code := exec(t, c, []string{"sh", "-c", clientPA + " pactl list sinks short 2>&1"})
+	clientSinks, code := containerExec(t, c, []string{"sh", "-c", clientPA + " pactl list sinks short 2>&1"})
 	if code != 0 || !strings.Contains(clientSinks, "ClientSink") {
-		psOut, _ := exec(t, c, []string{"sh", "-c", "ps aux | grep pulse"})
-		lsOut, _ := exec(t, c, []string{"sh", "-c", "ls -la " + clientPADir + "/"})
+		psOut, _ := containerExec(t, c, []string{"sh", "-c", "ps aux | grep pulse"})
+		lsOut, _ := containerExec(t, c, []string{"sh", "-c", "ls -la " + clientPADir + "/"})
 		t.Fatalf("client PulseAudio not running or ClientSink missing:\nsinks: %s\nps: %s\nls: %s", clientSinks, psOut, lsOut)
 	}
 	t.Logf("Client PA sinks:\n%s", clientSinks)
 
 	// Launch xfreerdp as the session user (not root) — PulseAudio's
 	// pa_context_new() returns NULL for root, breaking rdpsnd-pulse.
-	exec(t, c, []string{"sh", "-c",
+	containerExec(t, c, []string{"sh", "-c",
 		"gosu " + hostUser + " env DISPLAY=:98 PULSE_SERVER=unix:" + clientPADir + "/native " +
 			"xfreerdp /v:127.0.0.1:3389 /u:" + hostUser + " /p:rdp /cert:ignore " +
 			"/sound:sys:pulse /log-level:DEBUG >/tmp/freerdp-stdout.log 2>/tmp/freerdp-debug.log &"})
 	t.Cleanup(func() {
-		exec(t, c, []string{"sh", "-c", "pkill -f 'xfreerdp.*127.0.0.1:3389' 2>/dev/null; true"})
+		containerExec(t, c, []string{"sh", "-c", "pkill -f 'xfreerdp.*127.0.0.1:3389' 2>/dev/null; true"})
 	})
 	time.Sleep(10 * time.Second)
 
-	vncOut, _ := exec(t, c, []string{"sh", "-c",
+	vncOut, _ := containerExec(t, c, []string{"sh", "-c",
 		"grep '170C' /proc/net/tcp6 /proc/net/tcp 2>/dev/null | grep -c ' 01 '"})
 	vncCount, _ := strconv.Atoi(strings.TrimSpace(vncOut))
 	if vncCount == 0 {
@@ -1200,13 +1200,13 @@ pulseaudio --daemonize=yes --exit-idle-time=-1 --disable-shm=true -n \
 	if err := c.CopyToContainer(context.Background(), wavData, "/tmp/sine440.wav", 0o644); err != nil {
 		t.Fatalf("copy sine440.wav into container: %v", err)
 	}
-	exec(t, c, []string{"sh", "-c", paRun + " paplay /tmp/sine440.wav &"})
+	containerExec(t, c, []string{"sh", "-c", paRun + " paplay /tmp/sine440.wav &"})
 	time.Sleep(2 * time.Second)
 
 	// --- Subtests: isolate each pipeline hop ---
 
 	t.Run("1_server_xrdp_sink_receives_audio", func(t *testing.T) {
-		sinks, _ := exec(t, c, []string{"sh", "-c", paRun + " pactl list sinks short 2>/dev/null"})
+		sinks, _ := containerExec(t, c, []string{"sh", "-c", paRun + " pactl list sinks short 2>/dev/null"})
 		t.Logf("Server sinks during playback:\n%s", sinks)
 		for _, line := range strings.Split(sinks, "\n") {
 			if strings.Contains(line, "xrdp-sink") {
@@ -1222,7 +1222,7 @@ pulseaudio --daemonize=yes --exit-idle-time=-1 --disable-shm=true -n \
 	})
 
 	t.Run("2_chansrv_rdpsnd_negotiated", func(t *testing.T) {
-		chLog, _ := exec(t, c, []string{"sh", "-c",
+		chLog, _ := containerExec(t, c, []string{"sh", "-c",
 			"cat /tmp/xrdp-chansrv.*.log 2>/dev/null | grep -iv FUSE"})
 		t.Logf("chansrv log (filtered):\n%s", lastNLines(chLog, 40))
 
@@ -1236,7 +1236,7 @@ pulseaudio --daemonize=yes --exit-idle-time=-1 --disable-shm=true -n \
 	})
 
 	t.Run("3_freerdp_rdpsnd_active", func(t *testing.T) {
-		debugLog, _ := exec(t, c, []string{"sh", "-c", "cat /tmp/freerdp-debug.log 2>/dev/null"})
+		debugLog, _ := containerExec(t, c, []string{"sh", "-c", "cat /tmp/freerdp-debug.log 2>/dev/null"})
 		t.Logf("FreeRDP debug log (last 80 lines):\n%s", lastNLines(debugLog, 80))
 
 		hasRdpsnd := strings.Contains(strings.ToLower(debugLog), "rdpsnd") ||
@@ -1257,7 +1257,7 @@ pulseaudio --daemonize=yes --exit-idle-time=-1 --disable-shm=true -n \
 	})
 
 	t.Run("4_client_sink_receives_audio", func(t *testing.T) {
-		sinks, _ := exec(t, c, []string{"sh", "-c", clientPA + " pactl list sinks short 2>/dev/null"})
+		sinks, _ := containerExec(t, c, []string{"sh", "-c", clientPA + " pactl list sinks short 2>/dev/null"})
 		t.Logf("Client sinks during playback:\n%s", sinks)
 		for _, line := range strings.Split(sinks, "\n") {
 			if strings.Contains(line, "ClientSink") {
@@ -1273,21 +1273,21 @@ pulseaudio --daemonize=yes --exit-idle-time=-1 --disable-shm=true -n \
 	})
 
 	t.Run("5_client_captures_440hz", func(t *testing.T) {
-		captureOut, _ := exec(t, c, []string{"sh", "-c",
+		captureOut, _ := containerExec(t, c, []string{"sh", "-c",
 			clientPA + " timeout 3 parec --device=ClientSink.monitor " +
 				"--format=s16le --rate=44100 --channels=2 --file-format=wav /tmp/client-out.wav 2>&1; echo EXIT=$?"})
 		t.Logf("client parec output: %s", captureOut)
 
-		exec(t, c, []string{"sh", "-c", "pkill -f 'paplay.*sine440' 2>/dev/null; true"})
+		containerExec(t, c, []string{"sh", "-c", "pkill -f 'paplay.*sine440' 2>/dev/null; true"})
 
-		lsOut, _ := exec(t, c, []string{"sh", "-c", "ls -la /tmp/client-out.wav 2>&1"})
+		lsOut, _ := containerExec(t, c, []string{"sh", "-c", "ls -la /tmp/client-out.wav 2>&1"})
 		t.Logf("client capture file: %s", lsOut)
 		if strings.Contains(lsOut, "No such file") {
 			t.Fatal("parec did not produce /tmp/client-out.wav")
 		}
 
 		wavPath := filepath.Join(t.TempDir(), "client-out.wav")
-		wavB64, _ := exec(t, c, []string{"sh", "-c", "base64 /tmp/client-out.wav"})
+		wavB64, _ := containerExec(t, c, []string{"sh", "-c", "base64 /tmp/client-out.wav"})
 		capturedWav, err := base64.StdEncoding.DecodeString(strings.TrimSpace(wavB64))
 		if err != nil {
 			t.Fatalf("decode base64 of captured WAV: %v", err)

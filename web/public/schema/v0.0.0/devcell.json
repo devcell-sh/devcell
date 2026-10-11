@@ -492,6 +492,51 @@
       "description": "[mise] — keys map to MISE_\u003cUPPER_KEY\u003e env vars",
       "type": "object"
     },
+    "network": {
+      "additionalProperties": false,
+      "properties": {
+        "proxy": {
+          "additionalProperties": false,
+          "properties": {
+            "allow": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "allow_host_network": {
+              "type": "boolean"
+            },
+            "block": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "image": {
+              "type": "string"
+            },
+            "log": {
+              "type": "boolean"
+            },
+            "mode": {
+              "type": "string"
+            },
+            "presets": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "nix": {
       "additionalProperties": false,
       "properties": {

@@ -50,7 +50,7 @@ func TestPersistentHome_ToolVersions(t *testing.T) {
 	}
 
 	// Must NOT be a symlink (should be a plain file copy).
-	linkOut, code := exec(t, c, []string{"gosu", hostUser, "bash", "-lc",
+	linkOut, code := containerExec(t, c, []string{"gosu", hostUser, "bash", "-lc",
 		"test -L $HOME/.tool-versions && echo SYMLINK || echo PLAIN"})
 	if strings.Contains(linkOut, "SYMLINK") {
 		t.Errorf("FAIL: .tool-versions is still a symlink (should be plain file)")
@@ -78,7 +78,7 @@ func TestPersistentHome_MiseConfig(t *testing.T) {
 	t.Logf("PASS: mise config readable: %.80s...", out)
 
 	// After stale cleanup, $HOME/.config/mise/ should have no dangling symlinks.
-	out, code = exec(t, c, []string{"gosu", hostUser, "bash", "-lc", `
+	out, code = containerExec(t, c, []string{"gosu", hostUser, "bash", "-lc", `
 		if [ -L "$HOME/.config/mise/config.toml" ] && [ ! -e "$HOME/.config/mise/config.toml" ]; then
 			echo DANGLING
 		else
@@ -102,7 +102,7 @@ func TestPersistentHome_NoDanglingSymlinks(t *testing.T) {
 
 	// Find all dangling symlinks pointing to /nix/store under $HOME,
 	// excluding tmp/ (nix build artifacts).
-	out, code := exec(t, c, []string{"gosu", hostUser, "bash", "-lc", `
+	out, code := containerExec(t, c, []string{"gosu", hostUser, "bash", "-lc", `
 		found=0
 		while IFS= read -r link; do
 			target=$(readlink "$link" 2>/dev/null)
@@ -134,7 +134,7 @@ func TestPersistentHome_FontConfig(t *testing.T) {
 
 	// Fontconfig is read via FONTCONFIG_PATH (/opt/devcell/.config/fontconfig),
 	// not $HOME/.config/fontconfig. After stale cleanup, $HOME path may not exist.
-	out, code := exec(t, c, []string{"gosu", hostUser, "bash", "-lc", `
+	out, code := containerExec(t, c, []string{"gosu", hostUser, "bash", "-lc", `
 		# Check the production path (env var or /opt/devcell)
 		FC="${FONTCONFIG_PATH:-/opt/devcell/.config/fontconfig}"
 		if [ -e "$FC/conf.d/10-hm-fonts.conf" ]; then

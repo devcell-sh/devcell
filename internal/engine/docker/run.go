@@ -49,6 +49,23 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	// Set stack/modules so UserImageTag() produces stack-based tags.
 	useCell(opts.Cell)
 
+	if opts.Solitary {
+		ux.Debugf("solitary: sanitizing config for full network lockdown")
+		stripped := cfg.SanitizeForSolitary(&cellCfg)
+		opts.Cell.Config = cellCfg
+		for _, s := range stripped {
+			ux.Debugf("solitary: %s", s)
+		}
+		ux.Debugf("solitary: proxy force-enabled, host network blocked, ports suppressed")
+		if len(stripped) > 0 {
+			fmt.Println(ux.StyleMuted.Render("  solitary: " + strings.Join(stripped, "; ")))
+		}
+		if opts.ForceInsecureNetwork {
+			ux.Debugf("solitary: --force-insecure-network ignored (solitary wins)")
+		}
+	}
+	forceInsecure := opts.ForceInsecureNetwork && !opts.Solitary
+
 	thin := true
 	imageTag := func() string {
 		return PickImageTagThin()
@@ -131,7 +148,15 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		if envHost := os.Getenv("DEVCELL_HOSTNAME"); envHost != "" {
 			hostname = envHost
 		}
-		fmt.Println("   " + ux.KV(keyW, "Network", "devcell-network"+ux.StyleMuted.Render(" · hostname "+hostname+" · MAC "+mac)))
+		netLine := "devcell-network" + ux.StyleMuted.Render(" · hostname "+hostname+" · MAC "+mac)
+		if cfg.NetworkProxyEnabled(cellCfg) && !forceInsecure {
+			mode := "proxy"
+			if opts.Solitary {
+				mode = "solitary"
+			}
+			netLine = InternalNetworkName(c.AppName) + ux.StyleMuted.Render(" · "+mode+" · hostname "+hostname+" · MAC "+mac)
+		}
+		fmt.Println("   " + ux.KV(keyW, "Network", netLine))
 		// Locale + timezone — combine on one row.
 		tz := cellCfg.Cell.Timezone
 		if tz == "" {
@@ -168,6 +193,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		hasSecrets:     hasSecretsResolve,
 		hasAPIKeys:     hasORKeyPlaceholder && extraEnv["OPENROUTER_API_KEY"] == "",
 		hasWireGuard:   cfg.WireguardEnabled(cellCfg),
+		hasProxy:       cfg.NetworkProxyEnabled(cellCfg) && !forceInsecure,
 		hasGUI:         cellCfg.GUI.ResolvedEnabled(),
 		hasMCP:         binary == "claude" || binary == "codex" || binary == "opencode",
 		hasNixPackages: opts.UseFlake || cellCfg.Cell.FlakeEnabled(),
@@ -180,9 +206,46 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 
 	_ = panel.Phase("Network", func() error { return EnsureNetwork(ctx) })
 
+	proxyEnabled := cfg.NetworkProxyEnabled(cellCfg) && !forceInsecure
+	if proxyEnabled {
+		phaseName := "Proxy"
+		if opts.Solitary {
+			phaseName = "Gateway"
+		}
+		if err := panel.Phase(phaseName, func() error {
+			if !opts.Solitary {
+				if err := ValidateProxyCompatibility(cellCfg); err != nil {
+					return err
+				}
+			}
+			internalNet := InternalNetworkName(c.AppName)
+			isolateGateway := !cellCfg.Network.Proxy.ResolvedAllowHostNetwork()
+			ux.Debugf("proxy: internal network=%s isolate_gateway=%v mode=%s",
+				internalNet, isolateGateway, cellCfg.Network.Proxy.ResolvedMode())
+			if err := EnsureIsolatedNetwork(ctx, internalNet, isolateGateway); err != nil {
+				return fmt.Errorf("internal network: %w", err)
+			}
+			gwName := ProxySidecarName(c.AppName)
+			ux.Debugf("proxy: starting gateway sidecar %s (egress via devcell-network)", gwName)
+			return EnsureProxySidecar(ctx, ProxySidecarOpts{
+				AppName:     c.AppName,
+				CellName:    c.CellName,
+				Bunk:        c.Bunk,
+				CellHome:    c.CellHome,
+				InternalNet: internalNet,
+				EgressNet:   "devcell-network",
+				Proxy:       cellCfg.Network.Proxy,
+				SquidImage:  cellCfg.Network.Proxy.ResolvedImage(),
+			})
+		}); err != nil {
+			return err
+		}
+	}
+
 	// Orphan cleanup: remove stopped containers. Running containers are
 	// left alone so we can attach to them via docker exec.
 	if err := panel.Phase("Orphan cleanup", func() error {
+		_ = CleanupOrphanedProxies(ctx)
 		if ContainerRunning(ctx, c.ContainerName) {
 			return nil
 		}
@@ -601,6 +664,13 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		_ = stopCmd.Run()
 	}
 
+	if proxyEnabled && !ContainerRunning(ctx, c.ContainerName) {
+		gwName := ProxySidecarName(c.AppName)
+		ux.Debugf("proxy: cell container gone, removing gateway %s", gwName)
+		_ = RemoveProxySidecar(ctx, gwName)
+		_ = RemoveNetwork(ctx, InternalNetworkName(c.AppName))
+	}
+
 	return agentExit(waitErr)
 }
 
@@ -616,11 +686,13 @@ func newRunSpec(opts engine.RunOpts, c config.Config) RunSpec {
 		UserArgs:     opts.Args,
 		Debug:        opts.Debug,
 		NixDaemon:    opts.NixDaemon,
-		NoPorts:      opts.NoPorts,
+		NoPorts:      opts.NoPorts || opts.Solitary,
 		ExtraEnv:     opts.Env,
 		ThinImage:    true,
 		Detach:       opts.Detach,
 		NoSecrets:    opts.NoSecrets,
+		ProxyEnabled: cfg.NetworkProxyEnabled(opts.Cell.Config) && !(opts.ForceInsecureNetwork && !opts.Solitary),
+		Solitary:     opts.Solitary,
 	}
 }
 

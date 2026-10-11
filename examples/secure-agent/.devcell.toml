@@ -1,0 +1,40 @@
+#:schema https://devcell.sh/schema/v0.0.0/devcell.json
+# .devcell.toml — Secure AI agent (deny-by-default egress)
+# This example shows a locked-down cell for running AI coding agents
+# with outbound traffic restricted to only the services they need.
+# Run with `cell claude --solitary` for full lockdown.
+
+[cell]
+stack = "dev"
+modules = ["go", "node"]
+packages = ["curl", "jq"]
+
+# No ports exposed: agents don't serve traffic.
+# ports = []
+
+# --- Network egress proxy (ENABLED: deny-by-default) ---
+# Only allow-listed destinations are reachable from the cell.
+# `--solitary` adds: no privileged, no dangerous caps, no docker socket,
+# no published ports, no host network access.
+[network.proxy]
+enabled = true
+mode = "allow"
+presets = ["claude", "github", "go", "npm", "nix"]
+allow = []
+block = []
+# image = "my-registry/squid:v1"     # override the default gateway image
+
+# --- Docker resource limits ---
+[docker]
+mem_limit = "8g"
+cpu_limit = "4"
+
+# --- Secrets ---
+# 1Password documents whose fields become env vars.
+# [secrets.onepassword]
+# documents = ["agent-api-keys"]
+
+# --- Port publishing ---
+# Bind published ports to loopback only (VNC, RDP).
+[ports]
+publish_ip = "127.0.0.1"

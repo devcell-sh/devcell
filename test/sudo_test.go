@@ -39,7 +39,7 @@ func TestSudo_WorksInFreshCell(t *testing.T) {
 	}
 	c := startContainer(t, nil)
 
-	out, code := exec(t, c, []string{"sudo", "whoami"})
+	out, code := containerExec(t, c, []string{"sudo", "whoami"})
 	if code != 0 {
 		t.Fatalf("`sudo whoami` failed (exit=%d) — CELL-86 PAM stub not in image: %s", code, out)
 	}
@@ -57,7 +57,7 @@ func TestSudo_NoPamInitErrorOnPlainSudo(t *testing.T) {
 	}
 	c := startContainer(t, nil)
 
-	out, _ := exec(t, c, []string{"sudo", "-n", "true"})
+	out, _ := containerExec(t, c, []string{"sudo", "-n", "true"})
 	pamErrors := []string{
 		"unable to initialize PAM",
 		"Critical error - immediate abort",
@@ -85,7 +85,7 @@ func TestSudo_PreservesNixEnv(t *testing.T) {
 	}
 	c := startContainer(t, nil)
 
-	out, code := exec(t, c, []string{"sudo", "env"})
+	out, code := containerExec(t, c, []string{"sudo", "env"})
 	if code != 0 {
 		t.Fatalf("`sudo env` failed (exit=%d): %s", code, out)
 	}
@@ -112,7 +112,7 @@ func TestSudo_NixInstallHtop(t *testing.T) {
 	c := startContainer(t, nil)
 
 	// Install into root's nix profile. Exit 0 = success.
-	out, code := exec(t, c, []string{"sudo", "nix", "profile", "add", "nixpkgs#htop"})
+	out, code := containerExec(t, c, []string{"sudo", "nix", "profile", "add", "nixpkgs#htop"})
 	if code != 0 {
 		t.Fatalf("`sudo nix profile add nixpkgs#htop` failed (exit=%d) — env_keep insufficient or another regression\n--- output ---\n%s", code, out)
 	}
@@ -129,10 +129,10 @@ func TestSudo_NixInstallHtop(t *testing.T) {
 	}
 
 	// Sanity: htop binary should be reachable in root's profile after install.
-	out, code = exec(t, c, []string{"sudo", "/root/.nix-profile/bin/htop", "--version"})
+	out, code = containerExec(t, c, []string{"sudo", "/root/.nix-profile/bin/htop", "--version"})
 	if code != 0 {
 		// Fallback path some nix versions use.
-		out, code = exec(t, c, []string{"sudo", "/nix/var/nix/profiles/per-user/root/profile/bin/htop", "--version"})
+		out, code = containerExec(t, c, []string{"sudo", "/nix/var/nix/profiles/per-user/root/profile/bin/htop", "--version"})
 	}
 	if code != 0 || !strings.Contains(strings.ToLower(out), "htop") {
 		t.Fatalf("htop not runnable after install (exit=%d): %s", code, out)
@@ -164,7 +164,7 @@ func TestSudo_SessionUserCanEscalate(t *testing.T) {
 	c := startContainer(t, map[string]string{"HOST_USER": hostUser})
 
 	t.Run("wrapper is setuid root", func(t *testing.T) {
-		out, code := exec(t, c, []string{"stat", "-c", "%U %a", "/run/wrappers/bin/sudo"})
+		out, code := containerExec(t, c, []string{"stat", "-c", "%U %a", "/run/wrappers/bin/sudo"})
 		if code != 0 {
 			t.Fatalf("/run/wrappers/bin/sudo missing (exit %d) — entrypoint did not install the wrapper", code)
 		}

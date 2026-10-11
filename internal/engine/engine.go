@@ -115,6 +115,13 @@ type RunOpts struct {
 	// AutoCleanup reaps nix-store roots no running cell uses before the
 	// agent starts (--auto-cleanup). Docker only.
 	AutoCleanup bool
+	// ForceInsecureNetwork disables proxy mode even when [network.proxy]
+	// enabled = true (--force-insecure-network). Docker only.
+	ForceInsecureNetwork bool
+	// Solitary enables full network lockdown: force-enables the proxy,
+	// strips dangerous caps/mounts/privileged, and isolates the container
+	// from the host (--solitary). Docker only.
+	Solitary bool
 }
 
 // BuildOpts configures Engine.Build.

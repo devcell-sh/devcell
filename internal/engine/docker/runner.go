@@ -197,6 +197,8 @@ type RunSpec struct {
 	Detach       bool                // run container in detached mode (-d); set by `cell start`
 	Lifecycle    string              // "persistent" (cell start) or "oneshot" (cell claude); empty defaults to "oneshot"
 	NoSecrets    bool                // skip `op run --` prefix and all secrets injection
+	ProxyEnabled bool                // when true, use internal network and inject proxy env vars
+	Solitary     bool                // when true, full lockdown (proxy + no ports + no docker socket)
 }
 
 func (s RunSpec) getenv(key string) string {
@@ -400,6 +402,19 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 		argv = append(argv, "-e", kv)
 	}
 
+	// Proxy env vars: HTTP(S)_PROXY, ALL_PROXY, NO_PROXY (both cases)
+	if spec.ProxyEnabled {
+		proxyURL := "http://" + ProxySidecarName(c.AppName) + ":3128"
+		noProxy := "localhost,127.0.0.1,::1"
+		for _, k := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"} {
+			e(k, proxyURL)
+			e(strings.ToLower(k), proxyURL)
+		}
+		e("NO_PROXY", noProxy)
+		e("no_proxy", noProxy)
+		e("NODE_USE_ENV_PROXY", "1")
+	}
+
 	// Command-specific extra env vars (e.g. OPENCODE_CONFIG_CONTENT)
 	for k, v := range spec.ExtraEnv {
 		argv = append(argv, "-e", k+"="+v)
@@ -419,7 +434,9 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	v(c.BaseDir + ":" + c.BaseDir)
 	v(c.BaseDir + ":/" + c.AppName)
 	v(c.CellHome + ":/home/" + c.HostUser)
-	v("/var/run/docker.sock:/var/run/docker.sock")
+	if !spec.ProxyEnabled {
+		v("/var/run/docker.sock:/var/run/docker.sock")
+	}
 	v(c.HostHome + "/.claude/commands:/home/" + c.HostUser + "/.claude/commands")
 	v(c.HostHome + "/.claude/agents:/home/" + c.HostUser + "/.claude/agents:ro")
 	v(c.HostHome + "/.claude/skills:/home/" + c.HostUser + "/.claude/skills")
@@ -503,7 +520,11 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	argv = append(argv, "--tmpfs", "/run/secrets:mode=700,noexec,nosuid,size=1m")
 
 	// Network
-	argv = append(argv, "--network", "devcell-network")
+	if spec.ProxyEnabled {
+		argv = append(argv, "--network", InternalNetworkName(c.AppName))
+	} else {
+		argv = append(argv, "--network", "devcell-network")
+	}
 
 	// MAC address — pinned across restarts for infra-side identity persistence
 	// (bot-protection rate-limit keys, persistent-ban identification, stable

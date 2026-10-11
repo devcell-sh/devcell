@@ -78,7 +78,7 @@ func TestModules2_EnabledModulesShipBinariesAndClaudeEntries(t *testing.T) {
 	c := startContainer(t, nil)
 
 	// Read claude.json once; reuse across module subtests.
-	claudeRaw, code := exec(t, c, []string{"cat", "/opt/devcell/.claude.json"})
+	claudeRaw, code := containerExec(t, c, []string{"cat", "/opt/devcell/.claude.json"})
 	if code != 0 {
 		t.Fatalf("read claude.json: exit=%d out=%q", code, claudeRaw)
 	}
@@ -95,7 +95,7 @@ func TestModules2_EnabledModulesShipBinariesAndClaudeEntries(t *testing.T) {
 		m := m
 		t.Run(m.module, func(t *testing.T) {
 			// 1. binary present + executable
-			out, code := exec(t, c, []string{"test", "-x", binDir + "/" + m.binary})
+			out, code := containerExec(t, c, []string{"test", "-x", binDir + "/" + m.binary})
 			if code != 0 {
 				t.Errorf("binary missing for module %q: expected %s/%s (exit=%d out=%q)",
 					m.module, binDir, m.binary, code, out)
@@ -148,7 +148,7 @@ func TestModules2_DevStackHasOnlySeedBinaries(t *testing.T) {
 	for _, bin := range []string{"patchright-mcp-cell", "opentofu-mcp-server"} {
 		bin := bin
 		t.Run("present/"+bin, func(t *testing.T) {
-			_, code := exec(t, c, []string{"test", "-x", binDir + "/" + bin})
+			_, code := containerExec(t, c, []string{"test", "-x", binDir + "/" + bin})
 			if code != 0 {
 				t.Errorf("seed binary missing: %s/%s", binDir, bin)
 			}
@@ -159,7 +159,7 @@ func TestModules2_DevStackHasOnlySeedBinaries(t *testing.T) {
 	for _, bin := range []string{"kicad-mcp", "plex-mcp-server", "inoreader-mcp"} {
 		bin := bin
 		t.Run("absent/"+bin, func(t *testing.T) {
-			_, code := exec(t, c, []string{"test", "-x", binDir + "/" + bin})
+			_, code := containerExec(t, c, []string{"test", "-x", binDir + "/" + bin})
 			if code == 0 {
 				t.Errorf("non-seed binary unexpectedly present in dev stack: %s/%s", binDir, bin)
 			}
@@ -226,7 +226,7 @@ func TestModules2_FreshVolumeStartsCleanly(t *testing.T) {
 	if err == nil {
 		// Bootstrap unexpectedly succeeded — the gap is closed. Update this test.
 		t.Cleanup(func() { _ = c.Terminate(ctx) })
-		out, code := exec(t, c, []string{"sh", "-c", "echo first-run-ok"})
+		out, code := containerExec(t, c, []string{"sh", "-c", "echo first-run-ok"})
 		if code == 0 && strings.Contains(out, "first-run-ok") {
 			t.Log("UNEXPECTED: fresh thin volume booted cleanly — first-run gap may be fixed; consider updating test")
 			return
@@ -419,7 +419,7 @@ modules = ["`+innerModule+`"]
 	for _, bin := range []string{outerBinary, innerBinary} {
 		bin := bin
 		t.Run("binary/"+bin, func(t *testing.T) {
-			out, code := exec(t, c, []string{"test", "-x", binDir + "/" + bin})
+			out, code := containerExec(t, c, []string{"test", "-x", binDir + "/" + bin})
 			if code != 0 {
 				t.Errorf("binary missing for merged module: %s/%s (exit=%d out=%q)",
 					binDir, bin, code, out)
@@ -603,7 +603,7 @@ modules = ["`+innerModule+`"]
 	for _, bin := range []string{outerBinary, innerBinary} {
 		bin := bin
 		t.Run("binary/"+bin, func(t *testing.T) {
-			out, code := exec(t, c, []string{"test", "-x", binDir + "/" + bin})
+			out, code := containerExec(t, c, []string{"test", "-x", binDir + "/" + bin})
 			if code != 0 {
 				t.Errorf("expected %s/%s installed, got exit=%d out=%q",
 					binDir, bin, code, out)
@@ -735,7 +735,7 @@ modules = ["`+innerModule+`"]
 	for _, bin := range []string{outerBinary, innerBinary} {
 		bin := bin
 		t.Run("binary/"+bin, func(t *testing.T) {
-			out, code := exec(t, c, []string{"test", "-x", binDir + "/" + bin})
+			out, code := containerExec(t, c, []string{"test", "-x", binDir + "/" + bin})
 			if code != 0 {
 				t.Errorf("expected %s/%s installed from upstream nixhome, got exit=%d out=%q",
 					binDir, bin, code, out)
