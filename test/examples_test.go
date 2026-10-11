@@ -82,9 +82,9 @@ func TestExamples_ConfigValid(t *testing.T) {
 	root := testutil.RepoRoot()
 	for _, ex := range exampleSpecs {
 		t.Run(ex.name, func(t *testing.T) {
-			p := filepath.Join(root, "examples", ex.name, ".devcell.toml")
+			p := filepath.Join(root, "examples", ex.name, "devcell.toml")
 			if _, err := os.Stat(p); err != nil {
-				t.Fatalf(".devcell.toml missing: %v", err)
+				t.Fatalf("devcell.toml missing: %v", err)
 			}
 			c, err := cfg.LoadFile(p)
 			if err != nil {

@@ -25,7 +25,7 @@ func runWithDefaultClaude(t *testing.T, args ...string) (string, string, int) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, binaryPath, args...)
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "HOME="+home, "DEVCELL_BUNK=1", "XDG_CONFIG_HOME=")
+	cmd.Env = append(os.Environ(), "HOME="+home, "DEVCELL_CELL_ID=1", "XDG_CONFIG_HOME=")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
@@ -39,7 +39,7 @@ func runWithDefaultClaude(t *testing.T, args ...string) (string, string, int) {
 	return stdout.String(), stderr.String(), code
 }
 
-// `cell --engine` with default_command = "claude" becomes `cell claude
+// `devcell --engine` with default_command = "claude" becomes `devcell claude
 // --engine`; the agent command does not parse flags, so the missing value
 // must be caught before the cell boots.
 func TestCellStringFlag_MissingValueFailsBeforeBoot(t *testing.T) {
@@ -53,38 +53,38 @@ func TestCellStringFlag_MissingValueFailsBeforeBoot(t *testing.T) {
 	} {
 		stdout, stderr, code := runWithDefaultClaude(t, tc.args...)
 		if code != 1 {
-			t.Errorf("cell %v: exit code = %d, want 1\nstdout: %s\nstderr: %s", tc.args, code, stdout, stderr)
+			t.Errorf("devcell %v: exit code = %d, want 1\nstdout: %s\nstderr: %s", tc.args, code, stdout, stderr)
 		}
 		if want := "flag needs an argument: " + tc.flag; !strings.Contains(stderr, want) {
-			t.Errorf("cell %v: stderr must contain %q, got:\n%s", tc.args, want, stderr)
+			t.Errorf("devcell %v: stderr must contain %q, got:\n%s", tc.args, want, stderr)
 		}
 		if strings.Contains(stdout, "Network") {
-			t.Errorf("cell %v: the cell booted (Network phase printed):\n%s", tc.args, stdout)
+			t.Errorf("devcell %v: the cell booted (Network phase printed):\n%s", tc.args, stdout)
 		}
 		assertFlagUsageError(t, tc.args, tc.flag, stderr)
 	}
 }
 
 // assertFlagUsageError checks that a flag error shows the flag's own help
-// line and points at `cell --help`, and is not followed by the version
+// line and points at `devcell --help`, and is not followed by the version
 // banner (that banner is for bug reports, not for typos).
 func assertFlagUsageError(t *testing.T, args []string, flag, stderr string) {
 	t.Helper()
 	if !strings.Contains(stderr, flag+" string") {
-		t.Errorf("cell %v: stderr must show the %s help line, got:\n%s", args, flag, stderr)
+		t.Errorf("devcell %v: stderr must show the %s help line, got:\n%s", args, flag, stderr)
 	}
-	if !strings.Contains(stderr, "cell --help") {
-		t.Errorf("cell %v: stderr must point at 'cell --help', got:\n%s", args, stderr)
+	if !strings.Contains(stderr, "devcell --help") {
+		t.Errorf("devcell %v: stderr must point at 'cell --help', got:\n%s", args, stderr)
 	}
 	if strings.Contains(stderr, "\n cell v") {
-		t.Errorf("cell %v: stderr must not print the version banner after a usage error, got:\n%s", args, stderr)
+		t.Errorf("devcell %v: stderr must not print the version banner after a usage error, got:\n%s", args, stderr)
 	}
 }
 
 func TestCellStringFlag_WithValueStillRuns(t *testing.T) {
 	stdout, stderr, code := runWithDefaultClaude(t, "--engine", "docker", "--dry-run")
 	if code != 0 {
-		t.Fatalf("cell --engine docker --dry-run: exit code = %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
+		t.Fatalf("devcell --engine docker --dry-run: exit code = %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
 	if !strings.Contains(stdout, "docker") {
 		t.Errorf("want the docker run argv on stdout, got:\n%s", stdout)
@@ -97,7 +97,7 @@ func TestCellStringFlag_MissingValueWithoutDefaultCommandExits1(t *testing.T) {
 	home := scaffoldedHome(t)
 	cmd := exec.Command(binaryPath, "--engine")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "HOME="+home, "DEVCELL_BUNK=1", "XDG_CONFIG_HOME=")
+	cmd.Env = append(os.Environ(), "HOME="+home, "DEVCELL_CELL_ID=1", "XDG_CONFIG_HOME=")
 	out, err := cmd.CombinedOutput()
 	var exitErr *exec.ExitError
 	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
@@ -118,21 +118,21 @@ func TestCellStringFlag_CobraSubcommandShowsFlagHelp(t *testing.T) {
 		wantHelp string
 	}{
 		{[]string{"build", "--engine"}, "--engine string"},
-		{[]string{"build", "--no-such-flag"}, "cell build --help"},
+		{[]string{"build", "--no-such-flag"}, "devcell build --help"},
 	} {
 		cmd := exec.Command(binaryPath, tc.args...)
 		cmd.Dir = home
-		cmd.Env = append(os.Environ(), "HOME="+home, "DEVCELL_BUNK=1", "XDG_CONFIG_HOME=")
+		cmd.Env = append(os.Environ(), "HOME="+home, "DEVCELL_CELL_ID=1", "XDG_CONFIG_HOME=")
 		out, err := cmd.CombinedOutput()
 		var exitErr *exec.ExitError
 		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
-			t.Fatalf("cell %v: want exit 1, got %v\noutput: %s", tc.args, err, out)
+			t.Fatalf("devcell %v: want exit 1, got %v\noutput: %s", tc.args, err, out)
 		}
 		if !strings.Contains(string(out), tc.wantHelp) {
-			t.Errorf("cell %v: want %q in output, got:\n%s", tc.args, tc.wantHelp, out)
+			t.Errorf("devcell %v: want %q in output, got:\n%s", tc.args, tc.wantHelp, out)
 		}
 		if strings.Contains(string(out), "\n cell v") {
-			t.Errorf("cell %v: must not print the version banner after a usage error:\n%s", tc.args, out)
+			t.Errorf("devcell %v: must not print the version banner after a usage error:\n%s", tc.args, out)
 		}
 	}
 }

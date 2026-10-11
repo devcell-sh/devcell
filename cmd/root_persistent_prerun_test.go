@@ -9,7 +9,7 @@ import (
 )
 
 // TestPersistentPreRun_SetsRunnerStackFromConfig pins the fix for the bug
-// where `cell build` produced devcell-user:base-pure even when .devcell.toml
+// where `devcell build` produced devcell-user:base-pure even when .devcell.toml
 // said stack="ultimate". Root cause: docker.Stack was only set in rootCmd's
 // RunE (which is skipped when a subcommand is invoked), not in
 // PersistentPreRun (which fires for every subcommand).
@@ -69,7 +69,7 @@ modules = ["desktop"]
 }
 
 // TestPersistentPreRun_NoConfig_LeavesDefaults verifies the silent-skip
-// behavior: if there's no .devcell.toml (e.g. user runs `cell --help` from
+// behavior: if there's no .devcell.toml (e.g. user runs `devcell --help` from
 // a stray directory), PersistentPreRun should not panic and should not
 // overwrite an already-set Stack with garbage.
 func TestPersistentPreRun_NoConfig_LeavesDefaults(t *testing.T) {

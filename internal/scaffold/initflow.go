@@ -46,7 +46,7 @@ func RunInitFlow(opts InitFlowOptions) (*InitFlowResult, error) {
 
 	// Check if already initialized — ask to overwrite unless -y or --force.
 	if !opts.Force && !opts.Yes {
-		if _, err := os.Stat(filepath.Join(opts.BaseDir, ".devcell.toml")); err == nil {
+		if IsInitialized(opts.BaseDir) {
 			overwrite, cErr := ux.GetConfirmation("Project already initialized. Re-initialize?")
 			if cErr != nil {
 				return nil, fmt.Errorf("confirmation: %w", cErr)
@@ -72,7 +72,7 @@ func RunInitFlow(opts InitFlowOptions) (*InitFlowResult, error) {
 		return nil, err
 	}
 
-	// For scaffold: pass nixhomeSrc only if it's a local path (persisted in .devcell.toml).
+	// For scaffold: pass nixhomeSrc only if it's a local path (persisted in devcell.toml).
 	nixhomePath := ""
 	if opts.NixhomeSrc != "" && !IsGitURL(opts.NixhomeSrc) {
 		nixhomePath = opts.NixhomeSrc
@@ -140,7 +140,7 @@ func validateNixhomeStructure(nixhomePath string) error {
 }
 
 // detectOllamaModels tries to detect ollama and returns a commented-out
-// TOML snippet for .devcell.toml.
+// TOML snippet for devcell.toml.
 func detectOllamaModels() string {
 	ctx := context.Background()
 	if !ollama.Detect(ctx, ollama.DefaultBaseURL) {

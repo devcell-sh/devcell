@@ -9,12 +9,12 @@ import (
 //
 //	cell ▸ DIMM · devcell #304
 //
-// Color: "cell" + the chevron + "#bunk" use the muted palette so the eye lands
-// on the cell name (brand orange + bold) and project (default fg). Two
+// Color: "cell" + the chevron + "#cellID" use the muted palette so the eye
+// lands on the cell name (brand orange + bold) and project (default fg). Two
 // segments are suppressed when they carry no signal:
 //   - cell name empty (single-pane default `main`)
-//   - bunk "0" or "" — the no-multiplexer fallback; surfacing "#0" is noise.
-func Banner(cell, project, bunk string) string {
+//   - cellID "0" or "" (the no-multiplexer fallback; surfacing "#0" is noise).
+func Banner(cell, project, cellID string) string {
 	chevron := StyleMuted.Render("▸")
 	parts := []string{StyleMuted.Render("cell"), chevron}
 	if cell != "" {
@@ -24,8 +24,8 @@ func Banner(cell, project, bunk string) string {
 		)
 	}
 	parts = append(parts, project)
-	if bunk != "" && bunk != "0" {
-		parts = append(parts, StyleMuted.Render("#"+bunk))
+	if cellID != "" && cellID != "0" {
+		parts = append(parts, StyleMuted.Render("#"+cellID))
 	}
 	return strings.Join(parts, " ")
 }

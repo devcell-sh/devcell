@@ -26,7 +26,7 @@ func qemuTestHomeWithTOML(t *testing.T, projectTOML string) string {
 	if err := os.WriteFile(filepath.Join(cfgDir, "devcell.toml"), []byte("[cell]\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(home, ".devcell.toml"), []byte(projectTOML), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(home, "devcell.toml"), []byte(projectTOML), 0644); err != nil {
 		t.Fatal(err)
 	}
 	return home
@@ -38,7 +38,7 @@ func TestEngineQemu_DryRunShell(t *testing.T) {
 	home := qemuTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=winkit", "shell", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home, "TERM=xterm-256color")
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home, "TERM=xterm-256color")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
@@ -49,7 +49,7 @@ func TestEngineQemu_DryRunShell(t *testing.T) {
 		{"ssh command", "ssh"},
 		{"WSL guest (wsl)", "wsl"},
 		{"WSL guest (-d winkit)", "-d winkit"},
-		{"bunk SSH port (10122+100)", "127.0.0.1:10222"},
+		{"cell ID SSH port (10122+100)", "127.0.0.1:10222"},
 		{"TERM forwarded", "TERM=xterm-256color"},
 	} {
 		if !strings.Contains(s, tc.want) {
@@ -65,7 +65,7 @@ func TestEngineQemu_DryRunClaude(t *testing.T) {
 	home := qemuTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=winkit", "claude", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
@@ -84,7 +84,7 @@ func TestEngineQemu_DryRunCustomSSHPort(t *testing.T) {
 	home := qemuTestHomeWithTOML(t, "[cell]\nwinkit_ssh_port = 3333\n")
 	cmd := exec.Command(binaryPath, "--engine=winkit", "shell", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
@@ -110,7 +110,7 @@ func TestEngineQemu_DeprecatedAliasForWinkit(t *testing.T) {
 	home := qemuTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=qemu", "shell", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
@@ -129,7 +129,7 @@ func TestBackgroundFlag_StrippedFromArgsQemu(t *testing.T) {
 	home := qemuTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=winkit", "--background", "shell", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
@@ -149,7 +149,7 @@ func TestEngineQemu_NoDebugOnLinux(t *testing.T) {
 	home := qemuTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=winkit", "shell")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected error on non-darwin without --debug, got exit 0:\n%s", out)
@@ -170,7 +170,7 @@ func TestEngineQemu_DebugMockOutput(t *testing.T) {
 	home := qemuTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=winkit", "--debug", "shell")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0 with --debug mock, got: %v\noutput: %s", err, out)
@@ -194,7 +194,7 @@ func TestEngineQemu_DebugMockNoDocker(t *testing.T) {
 	home := qemuTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=winkit", "--debug", "shell")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
@@ -210,7 +210,7 @@ func TestEngineQemu_BuildDryRun(t *testing.T) {
 	home := qemuTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=winkit", "build", "--dry-run", "--stack=base")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
@@ -237,7 +237,7 @@ func TestEngineWinkit_DryRunTakesStackAndForceFromArgs(t *testing.T) {
 	home := qemuTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=winkit", "shell", "--stack=go", "--force", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)

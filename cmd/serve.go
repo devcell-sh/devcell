@@ -37,7 +37,7 @@ import (
 // @description
 // @description ## Quick start
 // @description
-// @description 1. Start the server: `cell serve` (or `cell serve --port 9090`)
+// @description 1. Start the server: `devcell serve` (or `devcell serve --port 9090`)
 // @description 2. The server prints an API key on startup. Set `DEVCELL_API_KEY` env var to use a fixed key.
 // @description 3. Send requests with `Authorization: Bearer <key>` header.
 // @description
@@ -364,7 +364,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	return <-errCh
 }
 
-const serveContainerName = "cell-serve"
+const serveContainerName = "devcell-serve"
 
 func startServeDaemon() error {
 	ctx := context.Background()

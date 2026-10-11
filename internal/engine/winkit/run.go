@@ -101,12 +101,12 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		logf("runtime.GOOS=%s (not darwin): entering mock mode", runtime.GOOS)
 	}
 	logf("binary=%q  defaultFlags=%v  userArgs=%v", opts.Binary, opts.DefaultFlags, opts.Args)
-	logf("cellName=%q  baseDir=%q  hostHome=%q  guest=%s  stack=%q", c.Name, c.BaseDir, c.HostHome, g.label(), c.Stack)
+	logf("cellName=%q  baseDir=%q  hostHome=%q  guest=%s  stack=%q", c.WorkspaceName, c.BaseDir, c.HostHome, g.label(), c.Stack)
 	logf("background=%v  dryRun=%v  debug=%v  force=%v", opts.Background, dryRun, debug, opts.Force)
 
 	// --- env var assembly ---
 	logf("assembling env vars to forward into VM")
-	envVars := guestEnvVars(c.Config, c.Name)
+	envVars := guestEnvVars(c.Config, c.WorkspaceName)
 	envVars = append(envVars, "PATH="+s6.WSL1ExecPATH(s6.WSL1SessionEnv(c.HostUser)))
 	for _, kv := range envVars {
 		logf("  env: %s", kv)
@@ -200,7 +200,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	logf("guest SSH ready")
 
 	if g.full {
-		setRuntimeWallpaper(ctx, ch, c.Name, logf)
+		setRuntimeWallpaper(ctx, ch, c.WorkspaceName, logf)
 	}
 
 	activateS6Session(ctx, ch, c.HostUser, logf)
@@ -364,7 +364,7 @@ func detachVM(ctx context.Context, c engine.Cell, g guest, sshPort, rdpPort, vnc
 		return fmt.Errorf("waiting for guest SSH: %w", err)
 	}
 
-	fmt.Printf("VM %q started (PID %d)\n", c.Name, machine.PID())
+	fmt.Printf("VM %q started (PID %d)\n", c.WorkspaceName, machine.PID())
 	fmt.Printf("  SSH:    ssh -p %d %s@127.0.0.1\n", ch.port, ch.user)
 	fmt.Printf("  RDP:    127.0.0.1:%d\n", rdpPort)
 	fmt.Printf("  VNC:    127.0.0.1:%d\n", vncPort)
@@ -454,7 +454,7 @@ func guestEnvVars(cellCfg cfg.CellConfig, cellName string) []string {
 		envs = append(envs, "TERM="+term)
 	}
 	return append(envs, cell.GuestEnv(cell.EnvInput{
-		CellName:  cellName,
+		WorkspaceName: cellName,
 		Git:       cellCfg.Git,
 		Timezone:  cellCfg.Cell.Timezone,
 		Locale:    cellCfg.Cell.Locale,

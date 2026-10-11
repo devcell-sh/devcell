@@ -18,9 +18,9 @@ func TestScaffold_CreatesAllFiles(t *testing.T) {
 	if err := scaffold.Scaffold(dir, "", "", false); err != nil {
 		t.Fatalf("Scaffold failed: %v", err)
 	}
-	// .devcell.toml in project root
-	if _, err := os.Stat(filepath.Join(dir, ".devcell.toml")); err != nil {
-		t.Errorf("missing .devcell.toml in project root: %v", err)
+	// devcell.toml in project root
+	if _, err := os.Stat(filepath.Join(dir, "devcell.toml")); err != nil {
+		t.Errorf("missing devcell.toml in project root: %v", err)
 	}
 	// Build artifacts in .devcell/ subdir
 	for _, name := range []string{"flake.nix"} {
@@ -75,10 +75,10 @@ func TestScaffold_DevcellTomlIsValidTOML(t *testing.T) {
 	if err := scaffold.Scaffold(dir, "", "", false); err != nil {
 		t.Fatal(err)
 	}
-	data, _ := os.ReadFile(filepath.Join(dir, ".devcell.toml"))
+	data, _ := os.ReadFile(filepath.Join(dir, "devcell.toml"))
 	var v interface{}
 	if _, err := toml.Decode(string(data), &v); err != nil {
-		t.Errorf(".devcell.toml is not valid TOML: %v\ncontent:\n%s", err, string(data))
+		t.Errorf("devcell.toml is not valid TOML: %v\ncontent:\n%s", err, string(data))
 	}
 }
 
@@ -119,10 +119,10 @@ func TestScaffold_WithModelsSnippet_InjectsIntoToml(t *testing.T) {
 	if err := scaffold.Scaffold(dir, snippet, "", false); err != nil {
 		t.Fatal(err)
 	}
-	data, _ := os.ReadFile(filepath.Join(dir, ".devcell.toml"))
+	data, _ := os.ReadFile(filepath.Join(dir, "devcell.toml"))
 	s := string(data)
 	if !strings.Contains(s, "deepseek-r1:70b") {
-		t.Errorf("expected detected models in .devcell.toml, got:\n%s", s)
+		t.Errorf("expected detected models in devcell.toml, got:\n%s", s)
 	}
 	if !strings.Contains(s, "qwen3:32b") {
 		t.Errorf("expected qwen3:32b in devcell.toml, got:\n%s", s)
@@ -134,11 +134,11 @@ func TestScaffold_EmptySnippet_ShowsCommentedLLMReference(t *testing.T) {
 	if err := scaffold.Scaffold(dir, "", "", false); err != nil {
 		t.Fatal(err)
 	}
-	data, _ := os.ReadFile(filepath.Join(dir, ".devcell.toml"))
+	data, _ := os.ReadFile(filepath.Join(dir, "devcell.toml"))
 	s := string(data)
 	for _, want := range []string{"# [llm]", "# [llm.providers.ollama]"} {
 		if !strings.Contains(s, want) {
-			t.Errorf("expected %q in .devcell.toml, got:\n%s", want, s)
+			t.Errorf("expected %q in devcell.toml, got:\n%s", want, s)
 		}
 	}
 	if strings.Contains(s, "{{MODELS_SECTION}}") {
@@ -152,10 +152,10 @@ func TestScaffold_WithSnippet_StillValidTOML(t *testing.T) {
 	if err := scaffold.Scaffold(dir, snippet, "", false); err != nil {
 		t.Fatal(err)
 	}
-	data, _ := os.ReadFile(filepath.Join(dir, ".devcell.toml"))
+	data, _ := os.ReadFile(filepath.Join(dir, "devcell.toml"))
 	var v interface{}
 	if _, err := toml.Decode(string(data), &v); err != nil {
-		t.Errorf(".devcell.toml is not valid TOML: %v\ncontent:\n%s", err, string(data))
+		t.Errorf("devcell.toml is not valid TOML: %v\ncontent:\n%s", err, string(data))
 	}
 }
 
@@ -353,10 +353,10 @@ func TestScaffold_WithStack_TomlHasStack(t *testing.T) {
 	if err := scaffold.Scaffold(dir, "", "", false, "go"); err != nil {
 		t.Fatal(err)
 	}
-	data, _ := os.ReadFile(filepath.Join(dir, ".devcell.toml"))
+	data, _ := os.ReadFile(filepath.Join(dir, "devcell.toml"))
 	s := string(data)
 	if !strings.Contains(s, `stack = "go"`) {
-		t.Errorf(".devcell.toml should contain stack = \"go\", got:\n%s", s)
+		t.Errorf("devcell.toml should contain stack = \"go\", got:\n%s", s)
 	}
 }
 
@@ -365,10 +365,10 @@ func TestScaffold_WithStack_TomlIsValidTOML(t *testing.T) {
 	if err := scaffold.Scaffold(dir, "", "", false, "python"); err != nil {
 		t.Fatal(err)
 	}
-	data, _ := os.ReadFile(filepath.Join(dir, ".devcell.toml"))
+	data, _ := os.ReadFile(filepath.Join(dir, "devcell.toml"))
 	var v interface{}
 	if _, err := toml.Decode(string(data), &v); err != nil {
-		t.Errorf(".devcell.toml is not valid TOML: %v\ncontent:\n%s", err, string(data))
+		t.Errorf("devcell.toml is not valid TOML: %v\ncontent:\n%s", err, string(data))
 	}
 }
 
@@ -632,13 +632,13 @@ func TestSyncNixhome_OverwritesExisting(t *testing.T) {
 
 // --- Scaffold local-first ---
 
-func TestScaffold_WritesDotDevcellToml(t *testing.T) {
+func TestScaffold_WritesDevcellToml(t *testing.T) {
 	dir := t.TempDir()
 	if err := scaffold.Scaffold(dir, "", "", false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, ".devcell.toml")); err != nil {
-		t.Error(".devcell.toml should exist in project root")
+	if _, err := os.Stat(filepath.Join(dir, "devcell.toml")); err != nil {
+		t.Error("devcell.toml should exist in project root")
 	}
 }
 
@@ -674,14 +674,13 @@ func TestScaffold_NoBuildArtifactsInProjectRoot(t *testing.T) {
 	}
 }
 
-func TestScaffold_NoOldStyleDevcellToml(t *testing.T) {
+func TestScaffold_NoDotDevcellToml(t *testing.T) {
 	dir := t.TempDir()
 	if err := scaffold.Scaffold(dir, "", "", false); err != nil {
 		t.Fatal(err)
 	}
-	// Old-style devcell.toml (without dot) should NOT be created
-	if _, err := os.Stat(filepath.Join(dir, "devcell.toml")); err == nil {
-		t.Error("old-style devcell.toml should NOT be created")
+	if _, err := os.Stat(filepath.Join(dir, ".devcell.toml")); err == nil {
+		t.Error("deprecated .devcell.toml should NOT be created by scaffold")
 	}
 }
 
@@ -697,11 +696,19 @@ func TestScaffold_IsInitializedAfterScaffold(t *testing.T) {
 
 // --- IsInitialized ---
 
+func TestIsInitialized_TrueWhenDevcellTomlExists(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "devcell.toml"), []byte("[cell]\n"), 0644)
+	if !scaffold.IsInitialized(dir) {
+		t.Error("IsInitialized should return true when devcell.toml exists")
+	}
+}
+
 func TestIsInitialized_TrueWhenDotDevcellTomlExists(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, ".devcell.toml"), []byte("[cell]\n"), 0644)
 	if !scaffold.IsInitialized(dir) {
-		t.Error("IsInitialized should return true when .devcell.toml exists")
+		t.Error("IsInitialized should return true when deprecated .devcell.toml exists")
 	}
 }
 
@@ -709,15 +716,6 @@ func TestIsInitialized_FalseWhenEmpty(t *testing.T) {
 	dir := t.TempDir()
 	if scaffold.IsInitialized(dir) {
 		t.Error("IsInitialized should return false in empty dir")
-	}
-}
-
-func TestIsInitialized_FalseWhenOnlyGlobalTomlExists(t *testing.T) {
-	dir := t.TempDir()
-	// Old-style devcell.toml (without dot) should NOT count as initialized
-	os.WriteFile(filepath.Join(dir, "devcell.toml"), []byte("[cell]\n"), 0644)
-	if scaffold.IsInitialized(dir) {
-		t.Error("IsInitialized should return false for old-style devcell.toml (without dot)")
 	}
 }
 

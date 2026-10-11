@@ -16,7 +16,7 @@ func runCellWithGlobalConfig(t *testing.T, toml string, args ...string) (string,
 	}
 	cmd := exec.Command(binaryPath, args...)
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
@@ -38,6 +38,6 @@ func TestInvalidConfig_StopsCell(t *testing.T) {
 // --version and help still run, so a broken config can be diagnosed.
 func TestInvalidConfig_VersionStillRuns(t *testing.T) {
 	if out, err := runCellWithGlobalConfig(t, "[cell]\nstak = \"go\"\n", "--version"); err != nil {
-		t.Fatalf("cell --version failed: %v\n%s", err, out)
+		t.Fatalf("devcell --version failed: %v\n%s", err, out)
 	}
 }

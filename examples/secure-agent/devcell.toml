@@ -1,8 +1,8 @@
 #:schema https://devcell.sh/schema/v0.0.0/devcell.json
-# .devcell.toml — Secure AI agent (deny-by-default egress)
+# devcell.toml — Secure AI agent (deny-by-default egress)
 # This example shows a locked-down cell for running AI coding agents
 # with outbound traffic restricted to only the services they need.
-# Run with `cell claude --solitary` for full lockdown.
+# Run with `devcell claude --solitary` for full lockdown.
 
 [cell]
 stack = "dev"

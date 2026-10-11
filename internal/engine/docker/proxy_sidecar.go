@@ -18,24 +18,24 @@ const DefaultSquidImage = "ubuntu/squid:latest@sha256:6a097f68bae708cedbabd6188d
 
 // ProxySidecarOpts holds everything needed to start a proxy sidecar.
 type ProxySidecarOpts struct {
-	AppName     string
-	CellName    string
-	Bunk        string
-	CellHome    string
-	InternalNet string
-	EgressNet   string // "devcell-network"
-	Proxy       cfg.NetworkProxySection
-	SquidImage  string // defaults to DefaultSquidImage if empty
+	CellName      string
+	WorkspaceName string
+	CellID        string
+	WorkspaceHome string
+	InternalNet   string
+	EgressNet     string // "devcell-network"
+	Proxy         cfg.NetworkProxySection
+	SquidImage    string // defaults to DefaultSquidImage if empty
 }
 
-// ProxySidecarName returns the gateway sidecar container name for a given app.
-func ProxySidecarName(appName string) string {
-	return "cell-" + appName + "-gw"
+// ProxySidecarName returns the gateway sidecar container name for a given cell.
+func ProxySidecarName(cellName string) string {
+	return "devcell-" + cellName + "-gw"
 }
 
-// InternalNetworkName returns the internal network name for a given app.
-func InternalNetworkName(appName string) string {
-	return "cell-" + appName + "-internal"
+// InternalNetworkName returns the internal network name for a given cell.
+func InternalNetworkName(cellName string) string {
+	return "devcell-" + cellName + "-internal"
 }
 
 // ProxyConfDir returns the host-side directory for squid config files.
@@ -91,7 +91,7 @@ func RemoveNetwork(ctx context.Context, name string) error {
 // network, connects it to the egress network, and waits for TCP readiness
 // on port 3128.
 func EnsureProxySidecar(ctx context.Context, opts ProxySidecarOpts) error {
-	gwName := ProxySidecarName(opts.AppName)
+	gwName := ProxySidecarName(opts.CellName)
 
 	if ContainerRunning(ctx, gwName) {
 		ux.Debugf("proxy: gateway %s already running", gwName)
@@ -110,7 +110,7 @@ func EnsureProxySidecar(ctx context.Context, opts ProxySidecarOpts) error {
 	}
 	ux.Debugf("proxy: allow=%d block=%d mode=%s", len(allow), len(opts.Proxy.Block), opts.Proxy.ResolvedMode())
 
-	confDir := ProxyConfDir(opts.CellHome, opts.CellName)
+	confDir := ProxyConfDir(opts.WorkspaceHome, opts.WorkspaceName)
 	ux.Debugf("proxy: config dir=%s", confDir)
 	if err := os.MkdirAll(confDir, 0o755); err != nil {
 		return fmt.Errorf("create proxy config dir: %w", err)
@@ -137,21 +137,35 @@ func EnsureProxySidecar(ctx context.Context, opts ProxySidecarOpts) error {
 	// Remove any stopped leftover with the same name.
 	_ = exec.CommandContext(ctx, "docker", "rm", "-f", gwName).Run()
 
-	args := []string{
-		"run", "-d", "--rm",
+	// Use docker create + cp + start instead of a bind mount for the config
+	// directory. Bind mounts resolve paths on the Docker daemon's host, which
+	// breaks in Docker-in-Docker: the daemon can't find container-local paths.
+	// docker cp works from any context because it streams a tar archive.
+	createArgs := []string{
+		"create", "--rm",
 		"--name", gwName,
 		"--network", opts.InternalNet,
-		"--cap-drop=ALL",
 		"--add-host", "host.docker.internal:host-gateway",
-		"--label", "devcell.cellid=" + opts.Bunk,
+		"--label", "devcell.cellid=" + opts.CellID,
 		"--label", "devcell.role=proxy",
-		"--label", "devcell.cell=" + opts.CellName,
-		"--label", "devcell.app=" + opts.AppName,
-		"-v", confDir + ":/etc/squid:ro",
+		"--label", "devcell.cell=" + opts.WorkspaceName,
+		"--label", "devcell.app=" + opts.CellName,
 		image,
 	}
-	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd := exec.CommandContext(ctx, "docker", createArgs...)
 	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("create gateway %q: %w: %s", gwName, err, strings.TrimSpace(string(out)))
+	}
+
+	cpCmd := exec.CommandContext(ctx, "docker", "cp", confDir+"/.", gwName+":/etc/squid/")
+	if out, err := cpCmd.CombinedOutput(); err != nil {
+		_ = exec.CommandContext(ctx, "docker", "rm", "-f", gwName).Run()
+		return fmt.Errorf("copy squid config into %q: %w: %s", gwName, err, strings.TrimSpace(string(out)))
+	}
+
+	startCmd := exec.CommandContext(ctx, "docker", "start", gwName)
+	if out, err := startCmd.CombinedOutput(); err != nil {
+		_ = exec.CommandContext(ctx, "docker", "rm", "-f", gwName).Run()
 		return fmt.Errorf("start gateway %q: %w: %s", gwName, err, strings.TrimSpace(string(out)))
 	}
 
@@ -166,7 +180,7 @@ func EnsureProxySidecar(ctx context.Context, opts ProxySidecarOpts) error {
 	deadline := time.Now().Add(30 * time.Second)
 	for {
 		check := exec.CommandContext(ctx, "docker", "exec", gwName,
-			"sh", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/3128 2>/dev/null || nc -z 127.0.0.1 3128 2>/dev/null")
+			"bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/3128 2>/dev/null")
 		if check.Run() == nil {
 			ux.Debugf("proxy: gateway %s ready", gwName)
 			return nil
@@ -189,18 +203,23 @@ func RemoveProxySidecar(ctx context.Context, name string) error {
 
 // CleanupOrphanedProxies finds proxy sidecars whose corresponding cell
 // container is no longer running, and removes them along with their
-// internal networks.
-func CleanupOrphanedProxies(ctx context.Context) error {
+// internal networks. skipCellName is the current cell being started: its
+// gateway is not orphaned, just pre-created before the container boots.
+func CleanupOrphanedProxies(ctx context.Context, skipCellName string) error {
 	out, err := exec.CommandContext(ctx, "docker", "ps",
 		"--filter", "label=devcell.role=proxy",
 		"--format", "{{.Names}}").Output()
 	if err != nil {
 		return nil
 	}
+	skipGW := ProxySidecarName(skipCellName)
 	names := strings.Fields(strings.TrimSpace(string(out)))
 	for _, gwName := range names {
-		// cell-<app>-gw -> cell-<app>-run
-		cellName := strings.TrimSuffix(gwName, "-gw") + "-run"
+		if gwName == skipGW {
+			continue
+		}
+		// devcell-<cell>-gw -> devcell-<cell>
+		cellName := strings.TrimSuffix(gwName, "-gw")
 		if ContainerRunning(ctx, cellName) {
 			continue
 		}

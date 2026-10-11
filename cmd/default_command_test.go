@@ -10,7 +10,7 @@ import (
 // rewriteDefaultCommand receives os.Args[1:] (everything after the binary
 // name) and the resolved default command. It must inject the default command
 // in front of user args so flags like `-c` reach the inner binary — the bug
-// was `cell -c` dying at cobra flag parsing while `cell claude -c` worked.
+// was `devcell -c` dying at cobra flag parsing while `devcell claude -c` worked.
 
 func testKnownCmds() map[string]bool {
 	return map[string]bool{
@@ -23,7 +23,7 @@ func TestRewriteDefaultCommand_ForwardsFlags(t *testing.T) {
 	got := rewriteDefaultCommand([]string{"-c"}, "claude", testKnownCmds())
 	want := []string{"claude", "-c"}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("cell -c with default claude: got %v, want %v", got, want)
+		t.Errorf("devcell -c with default claude: got %v, want %v", got, want)
 	}
 }
 
@@ -60,7 +60,7 @@ func TestRewriteDefaultCommand_ExplicitSubcommandWins(t *testing.T) {
 }
 
 func TestRewriteDefaultCommand_UnknownPositionalNotRewritten(t *testing.T) {
-	// `cell abc` must NOT become `cell claude abc` — an unknown positional
+	// `devcell abc` must NOT become `devcell claude abc` — an unknown positional
 	// falls through to rootCmd.RunE, which reports "unknown command".
 	for _, args := range [][]string{
 		{"abc"},

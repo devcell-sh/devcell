@@ -15,7 +15,7 @@ func TestCodex_DeveloperInstructions_ContainerContext(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "codex", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("codex --dry-run failed: %v\noutput: %s", err, out)
@@ -52,7 +52,7 @@ append_system_prompt = "Custom instructions from TOML"
 
 	cmd := exec.Command(binaryPath, "codex", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("codex --dry-run failed: %v\noutput: %s", err, out)
@@ -71,7 +71,7 @@ func TestCodex_DeveloperInstructions_NoAppendPrompt(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "codex", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("codex --dry-run failed: %v\noutput: %s", err, out)
@@ -102,7 +102,7 @@ append_system_prompt = 'say "hello" and use C:\path'
 
 	cmd := exec.Command(binaryPath, "codex", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("codex --dry-run failed: %v\noutput: %s", err, out)
@@ -134,7 +134,7 @@ system_prompt = "Replace me"
 
 	cmd := exec.Command(binaryPath, "codex", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("codex --dry-run failed: %v\noutput: %s", err, out)

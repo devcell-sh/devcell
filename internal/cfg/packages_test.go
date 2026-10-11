@@ -54,7 +54,7 @@ func TestLoadLayered_ProjectChannelOverridesGlobalPackage(t *testing.T) {
 	dir := t.TempDir()
 	global := writeTOML(t, dir, "global.toml", "[cell]\npackages = [\"uv\", \"jq\"]\n")
 	project := writeTOML(t, dir, "project.toml", "[packages.nix]\nunstable = [\"uv\"]\n")
-	c, err := cfg.LoadLayered(global, project, func(string) string { return "" })
+	c, err := cfg.LoadLayered(global, func(string) string { return "" }, project)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestLoadLayered_EmptyCellPackagesClearsGlobal(t *testing.T) {
 	dir := t.TempDir()
 	global := writeTOML(t, dir, "global.toml", "[cell]\npackages = [\"htop\"]\n")
 	project := writeTOML(t, dir, "project.toml", "[cell]\npackages = []\n")
-	c, err := cfg.LoadLayered(global, project, func(string) string { return "" })
+	c, err := cfg.LoadLayered(global, func(string) string { return "" }, project)
 	if err != nil {
 		t.Fatal(err)
 	}

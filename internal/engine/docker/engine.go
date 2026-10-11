@@ -55,10 +55,10 @@ func useCell(c engine.Cell) {
 // zero.
 func hostConfig(c engine.Cell) config.Config {
 	return config.Config{
-		Bunk:          c.Bunk,
-		AppName:       c.AppName,
-		CellName:      c.Name,
-		CellHome:      c.Home,
+		CellID:        c.CellID,
+		CellName:      c.CellName,
+		WorkspaceName: c.WorkspaceName,
+		WorkspaceHome: c.WorkspaceHome,
 		ConfigDir:     c.ConfigDir,
 		BuildDir:      c.BuildDir,
 		ContainerName: c.ContainerName,

@@ -7,8 +7,8 @@ import (
 	"testing"
 )
 
-// `cell init --upgrade` rewrites the config files to the current syntax
-// (the same migration as `cell config migrate`) and stops there: no
+// `devcell init --upgrade` rewrites the config files to the current syntax
+// (the same migration as `devcell config migrate`) and stops there: no
 // scaffold, no flake resolution, no engine init.
 func TestInitUpgrade_MigratesConfigAndStops(t *testing.T) {
 	home := scaffoldedHome(t)
@@ -52,14 +52,16 @@ func TestInitUpgrade_ProjectFileFirst(t *testing.T) {
 	if err := os.WriteFile(global, []byte(legacyGlobalTOML), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(home, ".devcell.toml"), []byte("[cell]\nthin = true\n"), 0o644); err != nil {
+	// Project config with deprecated key (canonical name).
+	projectCfg := filepath.Join(home, "devcell.toml")
+	if err := os.WriteFile(projectCfg, []byte("[cell]\nthin = true\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	out, err := runCellIn(t, home, "init", "--upgrade")
 	if err != nil {
 		t.Fatalf("exit: %v\n%s", err, out)
 	}
-	p, g := strings.Index(out, "/.devcell.toml —"), strings.Index(out, "/devcell.toml —")
+	p, g := strings.Index(out, home+"/devcell.toml —"), strings.Index(out, "/.config/devcell/devcell.toml —")
 	if p < 0 || g < 0 || p > g {
 		t.Errorf("want the project row before the global row:\n%s", out)
 	}
@@ -76,7 +78,9 @@ func TestInitUpgrade_ReadOnlyGlobalIsSkipped(t *testing.T) {
 	if err := os.Chmod(global, 0o444); err != nil { // WriteFile keeps an existing file's mode
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(home, ".devcell.toml"), []byte("[cell]\nthin = true\n"), 0o644); err != nil {
+	// Replace the canonical project config with one containing a deprecated key.
+	projectCfg := filepath.Join(home, "devcell.toml")
+	if err := os.WriteFile(projectCfg, []byte("[cell]\nthin = true\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	out, err := runCellIn(t, home, "init", "--upgrade")
@@ -92,7 +96,7 @@ func TestInitUpgrade_ReadOnlyGlobalIsSkipped(t *testing.T) {
 	if matches, _ := filepath.Glob(global + ".bak-*"); len(matches) != 0 {
 		t.Errorf("no backup expected for a skipped file, got %v", matches)
 	}
-	if b, _ := os.ReadFile(filepath.Join(home, ".devcell.toml")); strings.Contains(string(b), "thin") {
+	if b, _ := os.ReadFile(projectCfg); strings.Contains(string(b), "thin") {
 		t.Errorf("project file must still be migrated:\n%s", b)
 	}
 }
@@ -117,7 +121,7 @@ func TestInitUpgrade_NixStoreSymlinkGlobalNamesSource(t *testing.T) {
 	if err := os.Symlink(target, global); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(home, ".devcell.toml"), []byte("[cell]\nthin = true\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(home, "devcell.toml"), []byte("[cell]\nthin = true\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	out, err := runCellIn(t, home, "init", "--upgrade")

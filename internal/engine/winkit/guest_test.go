@@ -48,7 +48,7 @@ func TestEngine_IsRegisteredForWinkit(t *testing.T) {
 
 // Every verb rejects a guest winkit cannot run before touching the host.
 func TestEngine_UnknownGuestErrors(t *testing.T) {
-	c := engine.Cell{Name: "main", HostHome: t.TempDir(), Stack: "base", Guest: engine.MacOS}
+	c := engine.Cell{WorkspaceName: "main", HostHome: t.TempDir(), Stack: "base", Guest: engine.MacOS}
 	ctx := context.Background()
 
 	for verb, err := range map[string]error{
@@ -140,7 +140,7 @@ func TestBuild_FullGuestBuildsFullWSLStage(t *testing.T) {
 	})
 
 	err := Engine{}.Build(context.Background(), engine.BuildOpts{Cell: engine.Cell{
-		Name: "main", HostHome: home, Stack: "base", Guest: engine.WindowsFull,
+		WorkspaceName: "main", HostHome: home, Stack: "base", Guest: engine.WindowsFull,
 	}})
 	require.NoError(t, err)
 
@@ -179,7 +179,7 @@ func TestRun_DryRunFullGuest(t *testing.T) {
 	home := t.TempDir()
 	out := captureStdout(t, func() {
 		require.NoError(t, Engine{}.Run(context.Background(), engine.RunOpts{
-			Cell:   engine.Cell{Name: "main", HostHome: home, BaseDir: home, Stack: "base", Guest: engine.WindowsFull},
+			Cell:   engine.Cell{WorkspaceName: "main", HostHome: home, BaseDir: home, Stack: "base", Guest: engine.WindowsFull},
 			Binary: "claude",
 			DryRun: true,
 		}))

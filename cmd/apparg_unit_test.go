@@ -6,7 +6,7 @@ import (
 )
 
 func TestParseContainerNames(t *testing.T) {
-	input := "cell-devcell-271-run\ncell-devcell-246-run\n"
+	input := "devcell-devcell-271\ndevcell-devcell-246\n"
 	names := parseContainerNames(input)
 	if len(names) != 2 {
 		t.Fatalf("expected 2 names, got %d: %v", len(names), names)
@@ -16,11 +16,19 @@ func TestParseContainerNames(t *testing.T) {
 	}
 }
 
-func TestParseContainerNames_IgnoresNonCell(t *testing.T) {
-	input := "cell-devcell-271-run\nsome-other-container\nryuk-abc123\n"
+func TestParseContainerNames_IgnoresNonDevcell(t *testing.T) {
+	input := "devcell-devcell-271\nsome-other-container\nryuk-abc123\n"
 	names := parseContainerNames(input)
 	if len(names) != 1 || names[0] != "devcell-271" {
 		t.Errorf("expected [devcell-271], got: %v", names)
+	}
+}
+
+func TestParseContainerNames_IgnoresSidecars(t *testing.T) {
+	input := "devcell-myproject-3\ndevcell-myproject-3-gw\n"
+	names := parseContainerNames(input)
+	if len(names) != 1 || names[0] != "myproject-3" {
+		t.Errorf("expected [myproject-3], got: %v", names)
 	}
 }
 
@@ -31,9 +39,8 @@ func TestParseContainerNames_Empty(t *testing.T) {
 	}
 }
 
-func TestParseContainerNames_ArbitraryAppName(t *testing.T) {
-	// App names aren't always "devcell-*" — they're based on the directory name.
-	input := "cell-myproject-3-run\ncell-foo-bar-0-run\n"
+func TestParseContainerNames_ArbitraryCellName(t *testing.T) {
+	input := "devcell-myproject-3\ndevcell-foo-bar-0\n"
 	names := parseContainerNames(input)
 	if len(names) != 2 {
 		t.Fatalf("expected 2 names, got %d: %v", len(names), names)
@@ -54,7 +61,6 @@ func TestResolveAppArg_FullNamePassthrough(t *testing.T) {
 }
 
 func TestResolveAppArg_SuffixNoMatch(t *testing.T) {
-	// No running containers will match in test env — falls through to raw value.
 	got := resolveAppArg("999")
 	if got != "999" {
 		t.Errorf("expected 999, got %q", got)
@@ -67,7 +73,6 @@ func TestSelectCellOptions_Sorted(t *testing.T) {
 		"devcell-246":  "24689",
 		"myproject-42": "4289",
 	}
-	// Verify the picker would present sorted names.
 	var names []string
 	for name := range apps {
 		names = append(names, name)

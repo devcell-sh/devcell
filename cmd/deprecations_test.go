@@ -41,7 +41,7 @@ func withArgs(t *testing.T, args ...string) {
 	t.Helper()
 	old := osArgs
 	t.Cleanup(func() { osArgs = old })
-	osArgs = append([]string{"cell"}, args...)
+	osArgs = append([]string{"devcell"}, args...)
 }
 
 // warnDeprecatedFlagsOutput returns what warnDeprecatedFlags prints for args.
@@ -128,7 +128,7 @@ func TestWarnDeprecatedFlags_DeadEngineFlags(t *testing.T) {
 		want string
 	}{
 		{[]string{"--qemu-ssh-host", "10.0.0.5", "shell"}, "remove it; it has no effect (winkit forwards SSH on 127.0.0.1)"},
-		{[]string{"--qemu-display=cocoa", "shell"}, "remove it; it has no effect (use `cell vnc` or `cell rdp` to see the VM)"},
+		{[]string{"--qemu-display=cocoa", "shell"}, "remove it; it has no effect (use `devcell vnc` or `devcell rdp` to see the VM)"},
 		{[]string{"--tart-ssh-port", "22", "shell"}, "remove it; it has no effect (tart runs commands with tart exec)"},
 		{[]string{"--tart-ssh-host=localhost", "shell"}, "remove it; it has no effect (tart runs commands with tart exec)"},
 	} {

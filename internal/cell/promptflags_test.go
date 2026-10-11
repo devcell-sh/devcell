@@ -14,9 +14,9 @@ import (
 func promptFlagsConfig(t *testing.T) config.Config {
 	t.Helper()
 	return config.Config{
-		AppName:  "devcell-85",
-		BaseDir:  t.TempDir(),
-		CellName: "main",
+		CellName:      "devcell-85",
+		BaseDir:       t.TempDir(),
+		WorkspaceName: "main",
 		HostUser: "dmitry",
 		HostHome: "/Users/dmitry",
 	}

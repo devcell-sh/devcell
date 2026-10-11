@@ -15,7 +15,7 @@ import (
 	"github.com/DimmKirr/devcell/internal/ux"
 )
 
-// Init scaffolds .devcell.toml and the .devcell/ build context in the
+// Init scaffolds devcell.toml and the .devcell/ build context in the
 // project, then locks the nix flake inputs, or updates them with
 // opts.Update or opts.Force. It builds no image; Build does.
 func (Engine) Init(_ context.Context, opts engine.InitOpts) error {
@@ -37,16 +37,16 @@ func (Engine) Init(_ context.Context, opts engine.InitOpts) error {
 		return err
 	}
 
-	// The build dir is .devcell/ now that .devcell.toml exists.
+	// The build dir is .devcell/ now that devcell.toml exists.
 	buildDir := config.ResolveBuildDir(c.BaseDir, c.ConfigDir, true)
-	fmt.Printf(" Created .devcell.toml + .devcell/ in %s\n", c.BaseDir)
+	fmt.Printf(" Created devcell.toml + .devcell/ in %s\n", c.BaseDir)
 
 	lockOnly, label := flakeLockMode(opts.Update, opts.Force)
 	if err := updateFlakeLockWithSpinner(buildDir, lockOnly, label); err != nil {
 		return err
 	}
 
-	fmt.Println(" Run 'cell build' to build the image, or 'cell claude' to build and start.")
+	fmt.Println(" Run 'devcell build' to build the image, or 'devcell claude' to build and start.")
 	return nil
 }
 

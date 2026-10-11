@@ -20,7 +20,7 @@ docker_host = "unix:///var/run/docker.sock"
 [onepassword]
 documents = ["x"]
 `)
-	_, err := cfg.LoadLayered("", p, func(string) string { return "" })
+	_, err := cfg.LoadLayered("", func(string) string { return "" }, p)
 	if err == nil {
 		t.Fatal("want an error for unknown keys")
 	}

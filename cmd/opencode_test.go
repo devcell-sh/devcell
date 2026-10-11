@@ -9,14 +9,14 @@ import (
 	"testing"
 )
 
-// TestOpencode_NoArgs_InjectsDot verifies that "cell opencode" (no user args)
+// TestOpencode_NoArgs_InjectsDot verifies that "devcell opencode" (no user args)
 // injects "." so opencode opens in the current directory.
 func TestOpencode_NoArgs_InjectsDot(t *testing.T) {
 	home := scaffoldedHome(t)
 
 	cmd := exec.Command(binaryPath, "opencode", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opencode --dry-run failed: %v\noutput: %s", err, out)
@@ -32,14 +32,14 @@ func TestOpencode_NoArgs_InjectsDot(t *testing.T) {
 	}
 }
 
-// TestOpencode_WithArgs_NoDot verifies that "cell opencode --model foo" does NOT
+// TestOpencode_WithArgs_NoDot verifies that "devcell opencode --model foo" does NOT
 // inject "." — user args are passed through as-is.
 func TestOpencode_WithArgs_NoDot(t *testing.T) {
 	home := scaffoldedHome(t)
 
 	cmd := exec.Command(binaryPath, "opencode", "--dry-run", "--model", "foo")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opencode --dry-run failed: %v\noutput: %s", err, out)
@@ -51,7 +51,7 @@ func TestOpencode_WithArgs_NoDot(t *testing.T) {
 	}
 }
 
-// TestOpencode_DebugOnly_InjectsDot verifies that "cell opencode --debug" still
+// TestOpencode_DebugOnly_InjectsDot verifies that "devcell opencode --debug" still
 // injects "." since --debug is a devcell flag, not an opencode arg.
 // Also verifies --debug is translated to --log-level DEBUG for opencode.
 func TestOpencode_DebugOnly_InjectsDot(t *testing.T) {
@@ -59,7 +59,7 @@ func TestOpencode_DebugOnly_InjectsDot(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "opencode", "--debug", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opencode --debug --dry-run failed: %v\noutput: %s", err, out)
@@ -84,7 +84,7 @@ func TestOpencode_ConfigContentEnvInjected(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "opencode", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opencode --dry-run failed: %v\noutput: %s", err, out)
@@ -130,7 +130,7 @@ models = ["deepseek-r1:32b", "qwen3:8b"]
 
 	cmd := exec.Command(binaryPath, "opencode", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opencode --dry-run failed: %v\noutput: %s", err, out)
@@ -180,7 +180,7 @@ func TestOpencode_ConfigContentNoModels(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "opencode", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opencode --dry-run failed: %v\noutput: %s", err, out)
@@ -233,7 +233,7 @@ models = ["qwen3:8b"]
 
 	cmd := exec.Command(binaryPath, "opencode", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home, "DEVCELL_CELL_NAME=main")
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home, "DEVCELL_CELL_NAME=main")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opencode --dry-run failed: %v\noutput: %s", err, out)
@@ -289,7 +289,7 @@ models = ["deepseek-r1:32b"]
 
 	cmd := exec.Command(binaryPath, "opencode", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home, "DEVCELL_CELL_NAME=main")
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home, "DEVCELL_CELL_NAME=main")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opencode --dry-run failed: %v\noutput: %s", err, out)
@@ -342,7 +342,7 @@ func extractEnvFromArgv(argv, key string) string {
 	return rest
 }
 
-// TestOpencode_OpenRouterFlag_InjectsEnv verifies "cell opencode --openrouter --dry-run"
+// TestOpencode_OpenRouterFlag_InjectsEnv verifies "devcell opencode --openrouter --dry-run"
 // forwards the resolved OPENROUTER_API_KEY and emits the built-in openrouter provider
 // (no npm override) in OPENCODE_CONFIG_CONTENT.
 func TestOpencode_OpenRouterFlag_InjectsEnv(t *testing.T) {
@@ -361,7 +361,7 @@ models = ["moonshotai/kimi-k3", "deepseek/deepseek-v4-pro"]
 
 	cmd := exec.Command(binaryPath, "opencode", "--openrouter", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home, "OPENROUTER_API_KEY=sk-or-test-key")
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home, "OPENROUTER_API_KEY=sk-or-test-key")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opencode --openrouter --dry-run failed: %v\noutput: %s", err, out)
@@ -426,7 +426,7 @@ provider = "openrouter"
 
 	cmd := exec.Command(binaryPath, "opencode", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home, "OPENROUTER_API_KEY=sk-or-test-key")
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home, "OPENROUTER_API_KEY=sk-or-test-key")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opencode --dry-run failed: %v\noutput: %s", err, out)
@@ -443,7 +443,7 @@ func TestOpencode_OpenRouterNoKey_Error(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "opencode", "--openrouter", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = []string{"DEVCELL_BUNK=1", "HOME=" + home, "PATH=" + os.Getenv("PATH")}
+	cmd.Env = []string{"DEVCELL_CELL_ID=1", "HOME=" + home, "PATH=" + os.Getenv("PATH")}
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected error when OPENROUTER_API_KEY is missing, but got success:\n%s", out)

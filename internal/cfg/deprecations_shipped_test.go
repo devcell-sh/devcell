@@ -58,7 +58,7 @@ func TestShippedConfigsUseNoDeprecatedKeys(t *testing.T) {
 	var files []string
 	for _, pattern := range []string{
 		"../scaffold/templates/*.toml.tmpl",
-		"../../examples/*/.devcell.toml",
+		"../../examples/*/devcell.toml",
 	} {
 		m, err := filepath.Glob(pattern)
 		if err != nil {

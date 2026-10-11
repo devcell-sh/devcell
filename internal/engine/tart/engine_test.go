@@ -33,7 +33,7 @@ func TestBuild_RejectsUnknownStage(t *testing.T) {
 func TestNewBuildParams(t *testing.T) {
 	t.Setenv("DEVCELL_TART_OCI_IMAGE", "")
 	cell := engine.Cell{
-		Name:     "dev",
+		WorkspaceName: "dev",
 		HostHome: "/home/u",
 		BaseDir:  "/home/u/proj",
 		Stack:    "go",

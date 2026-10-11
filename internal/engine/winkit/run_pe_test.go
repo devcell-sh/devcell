@@ -12,7 +12,7 @@ import (
 
 // cellWith is a PE cell on stack base with the given [cell] section.
 func cellWith(name, home string, section cfg.CellSection) engine.Cell {
-	return engine.Cell{Name: name, HostHome: home, Stack: "base", Config: cfg.CellConfig{Cell: section}}
+	return engine.Cell{WorkspaceName: name, HostHome: home, Stack: "base", Config: cfg.CellConfig{Cell: section}}
 }
 
 func TestPEStartOpts_UsesWinkitImage(t *testing.T) {

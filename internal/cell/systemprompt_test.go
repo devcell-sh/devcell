@@ -12,7 +12,7 @@ import (
 
 func sampleConfig() config.Config {
 	return config.Config{
-		AppName:  "devcell-85",
+		CellName: "devcell-85",
 		BaseDir:  "/Users/dmitry/dev/dimmkirr/devcell",
 		HostUser: "dmitry",
 		HostHome: "/Users/dmitry",

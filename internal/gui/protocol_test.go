@@ -87,8 +87,8 @@ func TestParseDockerPS_Single(t *testing.T) {
 		output string
 		want   string
 	}{
-		{gui.RDP, "cell-myproject-3-run\t0.0.0.0:389->3389/tcp", "389"},
-		{gui.VNC, "cell-myproject-3-run\t0.0.0.0:350->5900/tcp", "350"},
+		{gui.RDP, "devcell-myproject-3\t0.0.0.0:389->3389/tcp", "389"},
+		{gui.VNC, "devcell-myproject-3\t0.0.0.0:350->5900/tcp", "350"},
 	} {
 		t.Run(string(tc.p), func(t *testing.T) {
 			m, err := tc.p.ParseDockerPS(tc.output)
@@ -108,8 +108,8 @@ func TestParseDockerPS_Multi(t *testing.T) {
 		output              string
 		wantProj, wantOther string
 	}{
-		{gui.RDP, "cell-proj-3-run\t0.0.0.0:389->3389/tcp\ncell-other-5-run\t0.0.0.0:589->3389/tcp", "389", "589"},
-		{gui.VNC, "cell-proj-3-run\t0.0.0.0:350->5900/tcp\ncell-other-5-run\t0.0.0.0:550->5900/tcp", "350", "550"},
+		{gui.RDP, "devcell-proj-3\t0.0.0.0:389->3389/tcp\ndevcell-other-5\t0.0.0.0:589->3389/tcp", "389", "589"},
+		{gui.VNC, "devcell-proj-3\t0.0.0.0:350->5900/tcp\ndevcell-other-5\t0.0.0.0:550->5900/tcp", "350", "550"},
 	} {
 		t.Run(string(tc.p), func(t *testing.T) {
 			m, err := tc.p.ParseDockerPS(tc.output)
@@ -129,7 +129,7 @@ func TestParseDockerPS_Multi(t *testing.T) {
 func TestParseDockerPS_SkipsOtherPorts(t *testing.T) {
 	for _, p := range []gui.Protocol{gui.RDP, gui.VNC} {
 		t.Run(string(p), func(t *testing.T) {
-			m, err := p.ParseDockerPS("cell-proj-3-run\t0.0.0.0:8080->80/tcp")
+			m, err := p.ParseDockerPS("devcell-proj-3\t0.0.0.0:8080->80/tcp")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -145,9 +145,9 @@ func TestParseDockerPS_SkipsOtherPorts(t *testing.T) {
 // protocol its own host port, and a cell publishing only the other protocol's
 // port is skipped.
 func TestParseDockerPS_OnlyOwnProtocol(t *testing.T) {
-	output := "cell-both-1-run\t0.0.0.0:389->3389/tcp, 0.0.0.0:350->5900/tcp\n" +
-		"cell-rdponly-2-run\t0.0.0.0:489->3389/tcp\n" +
-		"cell-vnconly-3-run\t0.0.0.0:450->5900/tcp"
+	output := "devcell-both-1\t0.0.0.0:389->3389/tcp, 0.0.0.0:350->5900/tcp\n" +
+		"devcell-rdponly-2\t0.0.0.0:489->3389/tcp\n" +
+		"devcell-vnconly-3\t0.0.0.0:450->5900/tcp"
 	for _, tc := range []struct {
 		p    gui.Protocol
 		want map[string]string
@@ -191,16 +191,16 @@ func TestParseDockerPS_EmptyOutput(t *testing.T) {
 // 1150). The lookup must return the actual docker port (7350), not the
 // env-computed one (1150). The same holds for RDP (7389 vs 1189).
 func TestParseDockerPS_DirPortMismatch(t *testing.T) {
-	// Simulate: container started with bunk=3, SESSION_PORT_PREFIX=7
-	// Container name: cell-devcell-73-3-run, VNC host port: 7350
+	// Simulate: container started with cellID=3, SESSION_PORT_PREFIX=7
+	// Container name: devcell-devcell-73-3, VNC host port: 7350
 	// Current pane: %11 → computed port would be 1150 (wrong)
 	for _, tc := range []struct {
 		p              gui.Protocol
 		output         string
 		want, computed string
 	}{
-		{gui.RDP, "cell-devcell-73-3-run\t0.0.0.0:7389->3389/tcp", "7389", "1189"},
-		{gui.VNC, "cell-devcell-73-3-run\t0.0.0.0:7350->5900/tcp", "7350", "1150"},
+		{gui.RDP, "devcell-devcell-73-3\t0.0.0.0:7389->3389/tcp", "7389", "1189"},
+		{gui.VNC, "devcell-devcell-73-3\t0.0.0.0:7350->5900/tcp", "7350", "1150"},
 	} {
 		t.Run(string(tc.p), func(t *testing.T) {
 			m, err := tc.p.ParseDockerPS(tc.output)
@@ -226,8 +226,8 @@ func TestParseDockerPS_MultiSession(t *testing.T) {
 		output       string
 		want3, want5 string
 	}{
-		{gui.RDP, "cell-devcell-73-3-run\t0.0.0.0:7389->3389/tcp\ncell-devcell-73-5-run\t0.0.0.0:7589->3389/tcp", "7389", "7589"},
-		{gui.VNC, "cell-devcell-73-3-run\t0.0.0.0:7350->5900/tcp\ncell-devcell-73-5-run\t0.0.0.0:7550->5900/tcp", "7350", "7550"},
+		{gui.RDP, "devcell-devcell-73-3\t0.0.0.0:7389->3389/tcp\ndevcell-devcell-73-5\t0.0.0.0:7589->3389/tcp", "7389", "7589"},
+		{gui.VNC, "devcell-devcell-73-3\t0.0.0.0:7350->5900/tcp\ndevcell-devcell-73-5\t0.0.0.0:7550->5900/tcp", "7350", "7550"},
 	} {
 		t.Run(string(tc.p), func(t *testing.T) {
 			m, err := tc.p.ParseDockerPS(tc.output)

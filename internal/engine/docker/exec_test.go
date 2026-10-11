@@ -8,11 +8,11 @@ import (
 
 func TestBuildExecArgv_Basic(t *testing.T) {
 	argv := docker.BuildExecArgv(docker.ExecSpec{
-		ContainerName: "cell-foo-0-run",
+		ContainerName: "devcell-foo-0",
 		Binary:        "zsh",
 		TTY:           true,
 	})
-	want := []string{"docker", "exec", "-it", "cell-foo-0-run", "zsh"}
+	want := []string{"docker", "exec", "-it", "devcell-foo-0", "zsh"}
 	if len(argv) != len(want) {
 		t.Fatalf("got %v, want %v", argv, want)
 	}
@@ -25,12 +25,12 @@ func TestBuildExecArgv_Basic(t *testing.T) {
 
 func TestBuildExecArgv_WithArgs(t *testing.T) {
 	argv := docker.BuildExecArgv(docker.ExecSpec{
-		ContainerName: "cell-foo-0-run",
+		ContainerName: "devcell-foo-0",
 		Binary:        "ls",
 		Args:          []string{"-la", "/workspace"},
 		TTY:           true,
 	})
-	want := []string{"docker", "exec", "-it", "cell-foo-0-run", "ls", "-la", "/workspace"}
+	want := []string{"docker", "exec", "-it", "devcell-foo-0", "ls", "-la", "/workspace"}
 	if len(argv) != len(want) {
 		t.Fatalf("got %v, want %v", argv, want)
 	}
@@ -43,7 +43,7 @@ func TestBuildExecArgv_WithArgs(t *testing.T) {
 
 func TestBuildExecArgv_NoTTY(t *testing.T) {
 	argv := docker.BuildExecArgv(docker.ExecSpec{
-		ContainerName: "cell-foo-0-run",
+		ContainerName: "devcell-foo-0",
 		Binary:        "zsh",
 		TTY:           false,
 	})
@@ -52,7 +52,7 @@ func TestBuildExecArgv_NoTTY(t *testing.T) {
 			t.Error("-it should not be present when TTY is false")
 		}
 	}
-	want := []string{"docker", "exec", "cell-foo-0-run", "zsh"}
+	want := []string{"docker", "exec", "devcell-foo-0", "zsh"}
 	if len(argv) != len(want) {
 		t.Fatalf("got %v, want %v", argv, want)
 	}
@@ -65,7 +65,7 @@ func TestBuildExecArgv_NoTTY(t *testing.T) {
 
 func TestBuildExecArgv_WithUser(t *testing.T) {
 	argv := docker.BuildExecArgv(docker.ExecSpec{
-		ContainerName: "cell-foo-0-run",
+		ContainerName: "devcell-foo-0",
 		User:          "dmitry",
 		Binary:        "claude",
 		TTY:           true,

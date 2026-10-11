@@ -22,7 +22,7 @@ func TestStart_DryRun(t *testing.T) {
 	cmd := exec.Command(binaryPath, "--dry-run", "--plain-text", "start")
 	cmd.Dir = home
 	cmd.Env = append(os.Environ(),
-		"DEVCELL_BUNK=0",
+		"DEVCELL_CELL_ID=0",
 		"HOME="+home,
 	)
 	out, err := cmd.CombinedOutput()

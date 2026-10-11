@@ -16,7 +16,7 @@ import (
 )
 
 func peCell(home string) engine.Cell {
-	return engine.Cell{Name: "test-cell", HostHome: home, Stack: "base", Guest: engine.WindowsPE}
+	return engine.Cell{WorkspaceName: "test-cell", HostHome: home, Stack: "base", Guest: engine.WindowsPE}
 }
 
 func TestPEBuildConfig_SetsWinPEWithWSL1Nix(t *testing.T) {

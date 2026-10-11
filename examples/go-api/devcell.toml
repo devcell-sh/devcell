@@ -1,5 +1,5 @@
 #:schema https://devcell.sh/schema/v0.0.0/devcell.json
-# .devcell.toml — KiCad PCB schematics
+# devcell.toml — Go REST API
 # DevCell project configuration. Optional global defaults: ~/.config/devcell/devcell.toml
 # Every option is listed below with its default. Uncomment what you need.
 
@@ -8,12 +8,12 @@
 # Base stack: base (minimal, default), dev (~3 GB seed), ultimate (~15 GB, every module).
 stack = "base"
 #
-# Addon modules composed on top of the stack (run `cell modules list`).
-modules = ["electronics"]
+# Addon modules composed on top of the stack (run `devcell modules list`).
+modules = ["go"]
 #
 # Nix packages from the stable channel: the default place for tools
-# (pre-commit, ruff, httpie and most CLIs are in nixpkgs). Run `cell build` after editing.
-packages = ["xdot"]
+# (pre-commit, ruff, httpie and most CLIs are in nixpkgs). Run `devcell build` after editing.
+packages = ["curl", "jq"]
 #
 # Image tag and registry overrides. Env: IMAGE_TAG, DEVCELL_REGISTRY.
 # image_tag = "v1.2.3-ultimate"
@@ -30,7 +30,7 @@ packages = ["xdot"]
 # volumes = ["~/data:/data:ro"]
 #
 # Port forwards from container to host. A bare port is the same on both sides.
-# ports = ["3000", "8080:3000"]
+ports = ["8080"]
 #
 # MCP servers to enable.
 # mcps = ["playwright", "aws-api"]
@@ -39,8 +39,8 @@ packages = ["xdot"]
 # timezone = "America/New_York"
 # locale = "en_US.UTF-8"
 #
-# Container hostname. Default: "cell-<project>-<bunk>". Env: DEVCELL_HOSTNAME.
-# hostname = "cell-myproject-1"
+# Container hostname. Default: "devcell-<cellname>". Env: DEVCELL_HOSTNAME.
+# hostname = "devcell-myproject-1"
 #
 # Fixed MAC address for the container NIC (locally administered: 2/6/A/E first nibble).
 # mac_address = "e2:2d:42:13:81:d2"
@@ -99,8 +99,8 @@ packages = ["xdot"]
 # nixhome = "~/dev/home"           # local nixhome checkout. Env: DEVCELL_NIXHOME_PATH
 
 # --- Desktop GUI (Xvfb + VNC/RDP + window manager) ---
-[gui]
-enabled = true
+# [gui]
+# enabled = true
 # wm = "icewm"                     # icewm, fluxbox
 # resolution = "1920x1080x24"      # logical resolution, before scaling
 # scale = 1                        # 1 = 96 DPI, 2 = 192 DPI (HiDPI)
@@ -178,7 +178,7 @@ enabled = true
 
 # --- More packages ---
 # Newer nix channels, only when stable is too old. A package listed in more
-# than one channel comes from the newest. Run `cell build` after editing.
+# than one channel comes from the newest. Run `devcell build` after editing.
 # [packages.nix]
 # unstable = ["uv"]                # nixpkgs-unstable: recent, cached
 # edge = ["claude-code"]           # master: newest, may build from source
@@ -194,13 +194,13 @@ enabled = true
 
 # --- Network egress proxy (deny-by-default outbound) ---
 # Lock down outbound traffic: only allow-listed destinations are reachable.
-# Use `cell claude --solitary` for full lockdown (auto-enables proxy + strips
+# Use `devcell claude --solitary` for full lockdown (auto-enables proxy + strips
 # privileged, dangerous caps, docker socket, ports).
 # [network.proxy]
 # enabled = true
 # mode = "allow"                     # "allow" = deny by default; "block" = allow by default
-# presets = ["claude", "github", "nix"]
-# allow = []                         # custom domains/CIDRs on top of presets
+# presets = ["claude", "github", "go"]
+# allow = ["api.example.com"]        # custom domains/CIDRs on top of presets
 # block = []                         # deny-holes carved from the allow list
 
 # --- WireGuard tunnels (one [[wireguard]] block per tunnel) ---

@@ -1,6 +1,6 @@
 package main
 
-// White-box tests for renderCellList (`cell rdp --list`, `cell vnc --list`).
+// White-box tests for renderCellList (`devcell rdp --list`, `devcell vnc --list`).
 // Package main for access to unexported symbols.
 
 import (
@@ -58,7 +58,7 @@ func renderCellListOutput(t *testing.T, p gui.Protocol, format string, m map[str
 func TestGUIFormat_JSONFormat(t *testing.T) {
 	for _, tc := range guiFormatCases {
 		t.Run(string(tc.p), func(t *testing.T) {
-			m := map[string]gui.CellEndpoint{"devcell-42-run": ep("127.0.0.1", tc.port, "docker")}
+			m := map[string]gui.CellEndpoint{"devcell-42": ep("127.0.0.1", tc.port, "docker")}
 
 			out := renderCellListOutput(t, tc.p, "json", m)
 
@@ -69,8 +69,8 @@ func TestGUIFormat_JSONFormat(t *testing.T) {
 			if len(result) != 1 {
 				t.Fatalf("want 1 entry, got %d", len(result))
 			}
-			if result[0]["app_name"] != "devcell-42-run" {
-				t.Errorf("want app_name=devcell-42-run, got %q", result[0]["app_name"])
+			if result[0]["app_name"] != "devcell-42" {
+				t.Errorf("want app_name=devcell-42, got %q", result[0]["app_name"])
 			}
 			if !strings.Contains(result[0]["address"], tc.port) {
 				t.Errorf("want address to contain port %s, got %q", tc.port, result[0]["address"])
@@ -113,11 +113,11 @@ func TestGUIFormat_EmptyMapText(t *testing.T) {
 func TestGUIFormat_TextContainsCellNameAndPort(t *testing.T) {
 	for _, tc := range guiFormatCases {
 		t.Run(string(tc.p), func(t *testing.T) {
-			m := map[string]gui.CellEndpoint{"cell-abc-run": ep("127.0.0.1", tc.port, "docker")}
+			m := map[string]gui.CellEndpoint{"devcell-abc": ep("127.0.0.1", tc.port, "docker")}
 
 			out := renderCellListOutput(t, tc.p, "text", m)
 
-			if !strings.Contains(out, "cell-abc-run") {
+			if !strings.Contains(out, "devcell-abc") {
 				t.Errorf("text output should contain app name, got: %q", out)
 			}
 			if !strings.Contains(out, tc.port) {
@@ -130,7 +130,7 @@ func TestGUIFormat_TextContainsCellNameAndPort(t *testing.T) {
 func TestGUIFormat_URLIncludedInJSON(t *testing.T) {
 	for _, tc := range guiFormatCases {
 		t.Run(string(tc.p), func(t *testing.T) {
-			m := map[string]gui.CellEndpoint{"cell-1-run": ep("127.0.0.1", tc.port, "docker")}
+			m := map[string]gui.CellEndpoint{"devcell-1": ep("127.0.0.1", tc.port, "docker")}
 
 			out := renderCellListOutput(t, tc.p, "json", m)
 
@@ -197,13 +197,13 @@ func TestGUIFormat_MixedDockerAndVM(t *testing.T) {
 	for _, tc := range guiFormatCases {
 		t.Run(string(tc.p), func(t *testing.T) {
 			m := map[string]gui.CellEndpoint{
-				"cell-myproject-3-run": ep("127.0.0.1", tc.port, "docker"),
+				"devcell-myproject-3": ep("127.0.0.1", tc.port, "docker"),
 				"winkit-main":          ep("127.0.0.1", tc.vmPort, "winkit"),
 			}
 
 			out := renderCellListOutput(t, tc.p, "text", m)
 
-			if !strings.Contains(out, "cell-myproject-3-run") {
+			if !strings.Contains(out, "devcell-myproject-3") {
 				t.Errorf("text output must contain docker app name, got: %q", out)
 			}
 			if !strings.Contains(out, "winkit-main") {

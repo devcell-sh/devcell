@@ -16,9 +16,9 @@ import (
 func promptFileConfig(t *testing.T, cellName string) config.Config {
 	t.Helper()
 	return config.Config{
-		AppName:  "devcell-85",
-		BaseDir:  t.TempDir(),
-		CellName: cellName,
+		CellName:      "devcell-85",
+		BaseDir:       t.TempDir(),
+		WorkspaceName: cellName,
 		HostUser: "dmitry",
 		HostHome: "/Users/dmitry",
 	}
@@ -65,7 +65,7 @@ func TestWritePromptFile_ReturnsContainerPathNotHostPath(t *testing.T) {
 func TestWritePromptFile_NamespacedPerCell(t *testing.T) {
 	base := t.TempDir()
 	mk := func(cell string) config.Config {
-		return config.Config{AppName: "devcell-85", BaseDir: base, CellName: cell}
+		return config.Config{CellName: "devcell-85", BaseDir: base, WorkspaceName: cell}
 	}
 
 	pathA, err := WritePromptFile(mk("alpha"), "additional-systemprompt.md", "content-alpha")

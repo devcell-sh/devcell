@@ -32,13 +32,13 @@ func TestBanner_OmitsEmptyCellName(t *testing.T) {
 	}
 }
 
-func TestBanner_OmitsZeroBunk(t *testing.T) {
-	// bunk="0" is the no-multiplexer fallback. Suppress it so single-pane
+func TestBanner_OmitsZeroCellID(t *testing.T) {
+	// cellID="0" is the no-multiplexer fallback. Suppress it so single-pane
 	// users don't see a meaningless "#0".
 	got := plain(ux.Banner("DIMM", "devcell", "0"))
 	want := "cell ▸ DIMM · devcell"
 	if got != want {
-		t.Errorf("zero-bunk: want %q, got %q", want, got)
+		t.Errorf("zero cellID: want %q, got %q", want, got)
 	}
 }
 

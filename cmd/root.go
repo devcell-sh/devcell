@@ -21,24 +21,24 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:          "cell",
+	Use:          "devcell",
 	SilenceUsage: true, // don't dump usage after handled errors
 	Short:        "Run AI coding agents in a devcell container",
-	Long: `cell launches AI coding agents (claude, codex, opencode) and utility
+	Long: `devcell launches AI coding agents (claude, codex, opencode) and utility
 tools inside a consistent Docker dev environment.`,
 	Args: cobra.ArbitraryArgs,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		debug, _ := cmd.Flags().GetBool("debug")
 		if debug {
-			fmt.Fprintf(os.Stderr, "cell %s\n", version.Full())
+			fmt.Fprintf(os.Stderr, "devcell %s\n", version.Full())
 		}
 		warnDeprecatedFlags(os.Stderr)
 		// Set docker engine globals BEFORE any subcommand RunE so that
 		// docker.UserImageTag() / PickImageTag() reflect the project's
-		// stack from .devcell.toml.
+		// stack from devcell.toml.
 		//
 		// Best-effort: silently skips when config can't be loaded (e.g.,
-		// `cell --help` before cwd has a .devcell.toml, or stray cwd).
+		// `devcell --help` before cwd has a devcell.toml, or stray cwd).
 		// Subcommands that need a working config fail with a better error
 		// later in their own RunE.
 		if c, err := config.LoadFromOS(); err == nil {
@@ -71,7 +71,7 @@ tools inside a consistent Docker dev environment.`,
 
 // rewriteDefaultCommand injects the configured default command in front of
 // the user's args (os.Args[1:]) so flags and positionals reach the inner
-// binary: `cell -c` becomes `cell claude -c`. This must happen BEFORE
+// binary: `devcell -c` becomes `devcell claude -c`. This must happen BEFORE
 // rootCmd.Execute() — the root command parses flags, so an agent flag like
 // -c would die there as "unknown shorthand flag" and never reach the
 // default-command dispatch in RunE. An explicit subcommand, help/version,
@@ -132,7 +132,7 @@ const (
 	qemuSSHPortDeprecation = "use --winkit-ssh-port instead, e.g. --winkit-ssh-port 2222"
 	qemuISODeprecation     = "use --winkit-windows-iso instead, e.g. --winkit-windows-iso ~/Downloads/Win11_ARM64.iso"
 	qemuSSHHostDeprecation = "remove it; it has no effect (winkit forwards SSH on 127.0.0.1)"
-	qemuDisplayDeprecation = "remove it; it has no effect (use `cell vnc` or `cell rdp` to see the VM)"
+	qemuDisplayDeprecation = "remove it; it has no effect (use `devcell vnc` or `devcell rdp` to see the VM)"
 	tartSSHFlagDeprecation = "remove it; it has no effect (tart runs commands with tart exec)"
 )
 
@@ -167,7 +167,7 @@ func warnDeprecatedFlags(w io.Writer) {
 
 // warnConfigDeprecations goes to stderr so --format json/yaml stdout stays
 // parseable. Only the config file name is shown: the global file is always
-// devcell.toml and the project file .devcell.toml, so the base name is
+// devcell.toml, so the base name is
 // unambiguous and the row stays short.
 func warnConfigDeprecations(w io.Writer, c cfg.CellConfig) {
 	for _, u := range c.DeprecatedUses {
@@ -180,7 +180,7 @@ func warnConfigDeprecations(w io.Writer, c cfg.CellConfig) {
 }
 
 // skipsConfigCheck lists invocations that must work with a broken config:
-// shell completion, help, --version, and `cell config` itself (migrate
+// shell completion, help, --version, and `devcell config` itself (migrate
 // loads and reports the files on its own; the startup rows would only
 // repeat what it is about to fix).
 func skipsConfigCheck(arg string) bool {
@@ -220,7 +220,7 @@ func Execute() {
 		if errors.As(err, &ue) {
 			os.Exit(1)
 		}
-		fmt.Fprintf(os.Stderr, "\n cell %s\n", version.Full())
+		fmt.Fprintf(os.Stderr, "\n devcell %s\n", version.Full())
 		baseVer, userVer := docker.ImageVersions(context.Background())
 		if baseVer != "" {
 			fmt.Fprintf(os.Stderr, " Base image: %s\n", baseVer)
@@ -251,7 +251,7 @@ func init() {
 	_ = rootCmd.PersistentFlags().MarkHidden("vagrant-provider")
 	rootCmd.PersistentFlags().String("vagrant-box", "", "no effect (the vagrant engine was retired)")
 	_ = rootCmd.PersistentFlags().MarkHidden("vagrant-box")
-	rootCmd.PersistentFlags().String("winkit-ssh-port", "", "SSH port for winkit engine (default: allocated per bunk)")
+	rootCmd.PersistentFlags().String("winkit-ssh-port", "", "SSH port for winkit engine (default: allocated per cell ID)")
 	rootCmd.PersistentFlags().String("winkit-windows-iso", "", "path to Windows ARM64 ISO for winkit engine")
 	rootCmd.PersistentFlags().String("qemu-ssh-port", "", "deprecated alias for --winkit-ssh-port")
 	_ = rootCmd.PersistentFlags().MarkHidden("qemu-ssh-port")
@@ -441,10 +441,10 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 	userArgs = stripCellFlags(userArgs)
 	applyOutputFlagsWithLog(filepath.Base(binary))
 
-	// Override cell name via --cell-name flag. Must precede config.LoadFromOS,
-	// which resolves c.CellName (and c.CellHome) from DEVCELL_CELL_NAME.
+	// Override workspace name via --cell-name flag. Must precede config.LoadFromOS,
+	// which resolves workspace name from DEVCELL_WORKSPACE.
 	if sn := scanStringFlag("--cell-name"); sn != "" {
-		os.Setenv("DEVCELL_CELL_NAME", sn)
+		os.Setenv("DEVCELL_WORKSPACE", sn)
 	}
 
 	c, err := config.LoadFromOS()
@@ -457,7 +457,7 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 		os.Setenv("DEVCELL_BASE_IMAGE", bi)
 	}
 
-	// First-run: scaffold .devcell.toml + .devcell/ files.
+	// First-run: scaffold devcell.toml + .devcell/ files.
 	if !scaffold.IsInitialized(c.BaseDir) {
 		globalCfg := cfg.LoadFromOS(c.ConfigDir, c.BaseDir)
 		result, err := scaffold.RunInitFlow(scaffold.InitFlowOptions{

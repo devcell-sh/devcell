@@ -193,8 +193,8 @@ func TestArgv_ContainerName(t *testing.T) {
 	if !ok {
 		t.Fatal("missing --name flag")
 	}
-	if name != "cell-myproject-3-run" {
-		t.Errorf("want cell-myproject-3-run, got %q", name)
+	if name != "devcell-myproject-3" {
+		t.Errorf("want devcell-myproject-3, got %q", name)
 	}
 }
 
@@ -205,8 +205,8 @@ func TestArgv_HostnameDefault(t *testing.T) {
 	if !ok {
 		t.Fatal("missing --hostname flag")
 	}
-	if host != "cell-myproject-3" {
-		t.Errorf("want default cell-myproject-3, got %q", host)
+	if host != "devcell-myproject-3" {
+		t.Errorf("want default devcell-myproject-3, got %q", host)
 	}
 }
 
@@ -265,6 +265,7 @@ func TestArgv_MandatoryEnvVars(t *testing.T) {
 		s.CellCfg.GUI.Enabled = boolPtr(true)
 	})
 	mustHaveEnv := []string{
+		"CELL_NAME=myproject-3",
 		"APP_NAME=myproject-3",
 		"HOST_USER=bob",
 		"HOME=/home/bob",
@@ -279,19 +280,25 @@ func TestArgv_MandatoryEnvVars(t *testing.T) {
 	}
 }
 
-func TestArgv_CellNameEnvVar(t *testing.T) {
+func TestArgv_WorkspaceEnvVar(t *testing.T) {
 	argv := buildArgv(t)
+	if !hasArg(argv, "DEVCELL_WORKSPACE=main") {
+		t.Errorf("missing -e DEVCELL_WORKSPACE=main in argv: %v", argv)
+	}
 	if !hasArg(argv, "DEVCELL_CELL_NAME=main") {
-		t.Errorf("missing -e DEVCELL_CELL_NAME=main in argv: %v", argv)
+		t.Errorf("missing deprecated -e DEVCELL_CELL_NAME=main in argv: %v", argv)
 	}
 }
 
-func TestArgv_CellNameEnvVar_Explicit(t *testing.T) {
+func TestArgv_WorkspaceEnvVar_Explicit(t *testing.T) {
 	argv := buildArgv(t, func(s *docker.RunSpec) {
-		s.Config.CellName = "bunkhouse"
+		s.Config.WorkspaceName = "bunkhouse"
 	})
+	if !hasArg(argv, "DEVCELL_WORKSPACE=bunkhouse") {
+		t.Errorf("missing -e DEVCELL_WORKSPACE=bunkhouse in argv: %v", argv)
+	}
 	if !hasArg(argv, "DEVCELL_CELL_NAME=bunkhouse") {
-		t.Errorf("missing -e DEVCELL_CELL_NAME=bunkhouse in argv: %v", argv)
+		t.Errorf("missing deprecated -e DEVCELL_CELL_NAME=bunkhouse in argv: %v", argv)
 	}
 }
 
@@ -1097,7 +1104,7 @@ func TestUserImageTag_PerCell_AgreesWithConfig(t *testing.T) {
 		docker.PerCellImage = true
 		t.Setenv("DEVCELL_CELL_NAME", tc.cellName)
 		t.Setenv("TMUX_SESSION_NAME", tc.tmux)
-		want := "devcell-user:" + config.ResolveCellName(os.Getenv)
+		want := "devcell-user:" + config.ResolveWorkspaceName(os.Getenv)
 		if got := docker.UserImageTag(); got != want {
 			t.Errorf("DEVCELL_CELL_NAME=%q TMUX_SESSION_NAME=%q: UserImageTag = %q, want %q",
 				tc.cellName, tc.tmux, got, want)
@@ -1936,7 +1943,7 @@ func TestArgv_ProxyEnabled_UsesInternalNetwork(t *testing.T) {
 		s.ProxyEnabled = true
 	})
 	c := baseConfig()
-	wantNet := docker.InternalNetworkName(c.AppName)
+	wantNet := docker.InternalNetworkName(c.CellName)
 	if !hasConsecutive(argv, "--network", wantNet) {
 		t.Errorf("proxy mode should use --network %s", wantNet)
 	}
@@ -1982,7 +1989,7 @@ func TestArgv_ProxyEnabled_InjectsProxyEnv(t *testing.T) {
 		s.ProxyEnabled = true
 	})
 	c := baseConfig()
-	proxyURL := "http://" + docker.ProxySidecarName(c.AppName) + ":3128"
+	proxyURL := "http://" + docker.ProxySidecarName(c.CellName) + ":3128"
 	wantVars := []string{
 		"HTTP_PROXY=" + proxyURL,
 		"HTTPS_PROXY=" + proxyURL,
@@ -2042,7 +2049,7 @@ func TestArgv_Solitary_UsesInternalNetwork(t *testing.T) {
 		s.ProxyEnabled = true
 	})
 	c := baseConfig()
-	wantNet := docker.InternalNetworkName(c.AppName)
+	wantNet := docker.InternalNetworkName(c.CellName)
 	if !hasConsecutive(argv, "--network", wantNet) {
 		t.Errorf("solitary should use --network %s", wantNet)
 	}
@@ -2054,7 +2061,7 @@ func TestArgv_Solitary_InjectsProxyEnv(t *testing.T) {
 		s.ProxyEnabled = true
 	})
 	c := baseConfig()
-	wantURL := "http://" + docker.ProxySidecarName(c.AppName) + ":3128"
+	wantURL := "http://" + docker.ProxySidecarName(c.CellName) + ":3128"
 	found := false
 	for _, a := range argv {
 		if a == "HTTP_PROXY="+wantURL {

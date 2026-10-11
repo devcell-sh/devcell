@@ -86,9 +86,9 @@ func TestInit_ForceRegeneratesKeysAndDrivers(t *testing.T) {
 		t.Run(fmt.Sprintf("force=%v", force), func(t *testing.T) {
 			home := t.TempDir()
 			t.Setenv("HOME", home)
-			c := engine.Cell{Name: "main", HostHome: home, Stack: "base"}
+			c := engine.Cell{WorkspaceName: "main", HostHome: home, Stack: "base"}
 
-			key := filepath.Join(keyDir(home, c.Name), "id_ed25519")
+			key := filepath.Join(keyDir(home, c.WorkspaceName), "id_ed25519")
 			require.NoError(t, os.MkdirAll(filepath.Dir(key), 0o700))
 			require.NoError(t, os.WriteFile(key, []byte("old key"), 0o600))
 			stubInitMedia(t, home, func() {
@@ -113,7 +113,7 @@ func TestInit_CreatesTheGuestsTemplateDir(t *testing.T) {
 	t.Setenv("HOME", home)
 	stubInitMedia(t, home, func() {})
 
-	c := engine.Cell{Name: "main", HostHome: home, Stack: "base", Guest: engine.WindowsFull}
+	c := engine.Cell{WorkspaceName: "main", HostHome: home, Stack: "base", Guest: engine.WindowsFull}
 	require.NoError(t, Engine{}.Init(context.Background(), engine.InitOpts{Cell: c}))
 
 	assert.DirExists(t, templateDir(home, guestFull, "base", nil))
@@ -130,7 +130,7 @@ func TestInit_StackOverridesCellStack(t *testing.T) {
 	t.Setenv("HOME", home)
 	stubInitMedia(t, home, func() {})
 
-	c := engine.Cell{Name: "main", HostHome: home, Stack: "base"}
+	c := engine.Cell{WorkspaceName: "main", HostHome: home, Stack: "base"}
 	require.NoError(t, Engine{}.Init(context.Background(), engine.InitOpts{Cell: c, Stack: "go"}))
 
 	assert.DirExists(t, templateDir(home, guestFull, "go", nil))

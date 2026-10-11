@@ -88,7 +88,7 @@ func TestRun_TakesCellArgs(t *testing.T) {
 	home := t.TempDir()
 	out := captureStdout(t, func() {
 		require.NoError(t, Engine{}.Run(context.Background(), engine.RunOpts{
-			Cell:   engine.Cell{Name: "main", HostHome: home, BaseDir: home, Stack: "base"},
+			Cell:   engine.Cell{WorkspaceName: "main", HostHome: home, BaseDir: home, Stack: "base"},
 			Binary: "claude",
 			Args:   []string{"--force", "--stack=go", "-c"},
 			DryRun: true,
@@ -225,7 +225,7 @@ func TestRun_GuestCommandIncludesPATH(t *testing.T) {
 	home := t.TempDir()
 	out := captureStdout(t, func() {
 		require.NoError(t, Engine{}.Run(context.Background(), engine.RunOpts{
-			Cell:   engine.Cell{Name: "main", HostHome: home, HostUser: "dmitry", BaseDir: home, Stack: "base"},
+			Cell:   engine.Cell{WorkspaceName: "main", HostHome: home, HostUser: "dmitry", BaseDir: home, Stack: "base"},
 			Binary: "claude",
 			DryRun: true,
 		}))
@@ -325,7 +325,7 @@ func TestRun_SkipsSFTPWhenBaseDirEmpty(t *testing.T) {
 	home := t.TempDir()
 	out := captureStdout(t, func() {
 		require.NoError(t, Engine{}.Run(context.Background(), engine.RunOpts{
-			Cell:   engine.Cell{Name: "main", HostHome: home, BaseDir: "", Stack: "base"},
+			Cell:   engine.Cell{WorkspaceName: "main", HostHome: home, BaseDir: "", Stack: "base"},
 			Binary: "claude",
 			DryRun: true,
 		}))
@@ -352,7 +352,7 @@ func TestDetachVM_BootsAndPrintsInfo(t *testing.T) {
 
 	out := captureStdout(t, func() {
 		err := detachVM(context.Background(),
-			engine.Cell{Name: "test-cell", HostHome: home, BaseDir: home, Stack: "base", Guest: engine.WindowsFull},
+			engine.Cell{WorkspaceName: "test-cell", HostHome: home, BaseDir: home, Stack: "base", Guest: engine.WindowsFull},
 			guestFull, 20022, 23389, 5900, t.Logf)
 		require.NoError(t, err)
 	})
@@ -376,7 +376,7 @@ func TestDetachVM_StopsOnSSHFailure(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // immediate cancel so waitForSSH fails fast
-	err := detachVM(ctx, engine.Cell{Name: "c", HostHome: home, BaseDir: home, Stack: "base", Guest: engine.WindowsFull},
+	err := detachVM(ctx, engine.Cell{WorkspaceName: "c", HostHome: home, BaseDir: home, Stack: "base", Guest: engine.WindowsFull},
 		guestFull, 20022, 23389, 5900, t.Logf)
 
 	require.Error(t, err)

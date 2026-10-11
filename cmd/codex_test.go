@@ -8,14 +8,14 @@ import (
 	"testing"
 )
 
-// TestCodex_OllamaFlag_InjectsFlags verifies that "cell codex --ollama --dry-run"
+// TestCodex_OllamaFlag_InjectsFlags verifies that "devcell codex --ollama --dry-run"
 // passes --oss --local-provider ollama and CODEX_OSS_BASE_URL.
 func TestCodex_OllamaFlag_InjectsFlags(t *testing.T) {
 	home := scaffoldedHome(t)
 
 	cmd := exec.Command(binaryPath, "codex", "--ollama", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("codex --ollama --dry-run failed: %v\noutput: %s", err, out)
@@ -39,7 +39,7 @@ func TestCodex_OllamaFlag_Stripped(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "codex", "--ollama", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("codex --ollama --dry-run failed: %v\noutput: %s", err, out)
@@ -60,7 +60,7 @@ func TestCodex_NoOllama_NoOSSFlags(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "codex", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("codex --dry-run failed: %v\noutput: %s", err, out)
@@ -91,7 +91,7 @@ provider = "ollama"
 
 	cmd := exec.Command(binaryPath, "codex", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("codex --dry-run failed: %v\noutput: %s", err, out)
@@ -126,7 +126,7 @@ model = "qwen2.5-coder:32b"
 
 	cmd := exec.Command(binaryPath, "codex", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("codex --dry-run failed: %v\noutput: %s", err, out)
@@ -138,14 +138,14 @@ model = "qwen2.5-coder:32b"
 	}
 }
 
-// TestCodex_OpenRouterFlag_InjectsConfig verifies "cell codex --openrouter --dry-run"
+// TestCodex_OpenRouterFlag_InjectsConfig verifies "devcell codex --openrouter --dry-run"
 // passes -c model_providers overrides for OpenRouter and resolves the API key.
 func TestCodex_OpenRouterFlag_InjectsConfig(t *testing.T) {
 	home := scaffoldedHome(t)
 
 	cmd := exec.Command(binaryPath, "codex", "--openrouter", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home, "OPENROUTER_API_KEY=sk-or-test-key")
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home, "OPENROUTER_API_KEY=sk-or-test-key")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("codex --openrouter --dry-run failed: %v\noutput: %s", err, out)
@@ -172,7 +172,7 @@ func TestCodex_OpenRouterFlag_Stripped(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "codex", "--openrouter", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home, "OPENROUTER_API_KEY=sk-or-test-key")
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home, "OPENROUTER_API_KEY=sk-or-test-key")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("codex --openrouter --dry-run failed: %v\noutput: %s", err, out)
@@ -202,7 +202,7 @@ model = "openrouter/moonshotai/kimi-k3"
 
 	cmd := exec.Command(binaryPath, "codex", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home, "OPENROUTER_API_KEY=sk-or-test-key")
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home, "OPENROUTER_API_KEY=sk-or-test-key")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("codex --dry-run failed: %v\noutput: %s", err, out)
@@ -232,7 +232,7 @@ provider = "ollama"
 
 	cmd := exec.Command(binaryPath, "codex", "--openrouter", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home, "OPENROUTER_API_KEY=sk-or-test-key")
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home, "OPENROUTER_API_KEY=sk-or-test-key")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("codex --openrouter --dry-run failed: %v\noutput: %s", err, out)
@@ -253,7 +253,7 @@ func TestCodex_OpenRouterNoKey_Error(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "codex", "--openrouter", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = []string{"DEVCELL_BUNK=1", "HOME=" + home, "PATH=" + os.Getenv("PATH")}
+	cmd.Env = []string{"DEVCELL_CELL_ID=1", "HOME=" + home, "PATH=" + os.Getenv("PATH")}
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected error when OPENROUTER_API_KEY is missing, but got success:\n%s", out)

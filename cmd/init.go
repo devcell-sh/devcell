@@ -15,7 +15,7 @@ import (
 
 var initCmd = &cobra.Command{
 	Use:   "init",
-	Short: "Initialize .devcell.toml and .devcell/ build context in current directory",
+	Short: "Initialize devcell.toml and .devcell/ build context in current directory",
 	RunE:  runInit,
 	Args:  cobra.NoArgs,
 }
@@ -24,7 +24,7 @@ func init() {
 	initCmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompts and proceed with defaults")
 	initCmd.Flags().Bool("force", false, "Overwrite existing files and update flake inputs (implies --update)")
 	initCmd.Flags().Bool("update", false, "update nix flake inputs (pull latest) instead of just resolving")
-	initCmd.Flags().Bool("upgrade", false, "rewrite deprecated keys in devcell.toml and .devcell.toml to the current syntax, then exit (same as `cell config migrate`)")
+	initCmd.Flags().Bool("upgrade", false, "rewrite deprecated keys in devcell config files (same as `devcell config migrate`)")
 	initCmd.Flags().Bool("no-cache", false, "Force re-download of cached IPSW restore image (tart only)")
 	initCmd.Flags().String("stack", "", "stack name (base, dev [seed], ultimate [general development], bbb [specialist tools]; legacy: go, node, python, fullstack, electronics)")
 	initCmd.Flags().StringSlice("modules", nil, "explicit module list (comma-separated, e.g. go,infra,electronics)")
@@ -73,7 +73,7 @@ func runInit(cmd *cobra.Command, _ []string) error {
 	return e.Init(context.Background(), initOpts(cmd, engineCell(c, cellCfg)))
 }
 
-// initOpts is the engine.InitOpts for `cell init` on cell c: every init
+// initOpts is the engine.InitOpts for `devcell init` on cell c: every init
 // flag, whichever engines read it.
 func initOpts(cmd *cobra.Command, c engine.Cell) engine.InitOpts {
 	flags := cmd.Flags()

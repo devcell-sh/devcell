@@ -324,7 +324,7 @@ image_tag = "v0.0.0-go"
 SHARED = "project"
 EXTRA = "yes"
 `)
-	c, err := cfg.LoadLayered(globalPath, projectPath, func(string) string { return "" })
+	c, err := cfg.LoadLayered(globalPath, func(string) string { return "" }, projectPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -336,6 +336,100 @@ EXTRA = "yes"
 	}
 	if c.Env["EXTRA"] != "yes" {
 		t.Errorf("EXTRA: want yes, got %q", c.Env["EXTRA"])
+	}
+}
+
+// Both devcell.toml and .devcell.toml are valid project configs.
+// When both exist, .devcell.toml merges on top of devcell.toml.
+func TestLoadFromOSWithDirs_BothProjectConfigs_DotFileWins(t *testing.T) {
+	globalDir := t.TempDir()
+	writeTOML(t, globalDir, "devcell.toml", `
+[cell]
+image_tag = "v0.0.0-global"
+[env]
+FROM = "global"
+`)
+	projectDir := t.TempDir()
+	writeTOML(t, projectDir, "devcell.toml", `
+[cell]
+stack = "base"
+[env]
+FROM = "devcell-toml"
+LOCAL = "yes"
+`)
+	writeTOML(t, projectDir, ".devcell.toml", `
+[cell]
+stack = "ultimate"
+[env]
+FROM = "dotfile"
+`)
+	c, err := cfg.LoadFromOSWithDirs(globalDir, projectDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Cell.Stack != "ultimate" {
+		t.Errorf("stack: want ultimate (.devcell.toml wins), got %q", c.Cell.Stack)
+	}
+	if c.Env["FROM"] != "dotfile" {
+		t.Errorf("FROM: want dotfile (.devcell.toml wins), got %q", c.Env["FROM"])
+	}
+	if c.Env["LOCAL"] != "yes" {
+		t.Errorf("LOCAL: want yes (from devcell.toml), got %q", c.Env["LOCAL"])
+	}
+}
+
+func TestLoadFromOSWithDirs_OnlyDotFile_NoDeprecation(t *testing.T) {
+	globalDir := t.TempDir()
+	writeTOML(t, globalDir, "devcell.toml", `[cell]`)
+	projectDir := t.TempDir()
+	writeTOML(t, projectDir, ".devcell.toml", `
+[cell]
+stack = "ultimate"
+`)
+	c, err := cfg.LoadFromOSWithDirs(globalDir, projectDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Cell.Stack != "ultimate" {
+		t.Errorf("stack: want ultimate, got %q", c.Cell.Stack)
+	}
+	for _, d := range c.DeprecatedUses {
+		if d.Name == ".devcell.toml" {
+			t.Errorf("unexpected deprecation warning for .devcell.toml")
+		}
+	}
+}
+
+func TestLoadLayered_VariadicProjectPaths(t *testing.T) {
+	dir := t.TempDir()
+	globalPath := writeTOML(t, dir, "global.toml", `
+[cell]
+image_tag = "v0.0.0-global"
+[env]
+A = "global"
+`)
+	p1 := writeTOML(t, dir, "layer1.toml", `
+[env]
+A = "layer1"
+B = "layer1"
+`)
+	p2 := writeTOML(t, dir, "layer2.toml", `
+[env]
+A = "layer2"
+C = "layer2"
+`)
+	c, err := cfg.LoadLayered(globalPath, func(string) string { return "" }, p1, p2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Env["A"] != "layer2" {
+		t.Errorf("A: want layer2 (last layer wins), got %q", c.Env["A"])
+	}
+	if c.Env["B"] != "layer1" {
+		t.Errorf("B: want layer1, got %q", c.Env["B"])
+	}
+	if c.Env["C"] != "layer2" {
+		t.Errorf("C: want layer2, got %q", c.Env["C"])
 	}
 }
 
@@ -1249,8 +1343,8 @@ modules = ["desktop"]
 `)
 	c, err := cfg.LoadLayered(
 		filepath.Join(dir, "devcell.toml"),
-		filepath.Join(dir, ".devcell.toml"),
 		func(string) string { return "" },
+		filepath.Join(dir, ".devcell.toml"),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -1598,7 +1692,7 @@ modules = ["desktop"]
 stack = "go"
 modules = ["electronics"]
 `)
-	c, err := cfg.LoadLayered(globalPath, projectPath, func(string) string { return "" })
+	c, err := cfg.LoadLayered(globalPath, func(string) string { return "" }, projectPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1775,15 +1869,15 @@ func TestResolvedPublishIP(t *testing.T) {
 
 func TestResolvedHostname_DefaultsToComputed(t *testing.T) {
 	t.Setenv("DEVCELL_HOSTNAME", "")
-	got := cfg.CellSection{}.ResolvedHostname("cell-myapp-0")
-	if got != "cell-myapp-0" {
+	got := cfg.CellSection{}.ResolvedHostname("devcell-myapp-0")
+	if got != "devcell-myapp-0" {
 		t.Errorf("want computed default, got %q", got)
 	}
 }
 
 func TestResolvedHostname_TOMLOverridesComputed(t *testing.T) {
 	t.Setenv("DEVCELL_HOSTNAME", "")
-	got := cfg.CellSection{Hostname: "from-toml"}.ResolvedHostname("cell-myapp-0")
+	got := cfg.CellSection{Hostname: "from-toml"}.ResolvedHostname("devcell-myapp-0")
 	if got != "from-toml" {
 		t.Errorf("toml value should win over computed, got %q", got)
 	}
@@ -1791,7 +1885,7 @@ func TestResolvedHostname_TOMLOverridesComputed(t *testing.T) {
 
 func TestResolvedHostname_EnvOverridesTOML(t *testing.T) {
 	t.Setenv("DEVCELL_HOSTNAME", "from-env")
-	got := cfg.CellSection{Hostname: "from-toml"}.ResolvedHostname("cell-myapp-0")
+	got := cfg.CellSection{Hostname: "from-toml"}.ResolvedHostname("devcell-myapp-0")
 	if got != "from-env" {
 		t.Errorf("env should win over toml, got %q", got)
 	}
@@ -2365,7 +2459,7 @@ stack = "ultimate"
 [[volumes]]
 mount = "/Users/dmitry/Library/Mobile\ Documents/com\~apple\~CloudDocs/foo:/bar"
 `)
-	_, err := cfg.LoadLayered(globalPath, projectPath, func(string) string { return "" })
+	_, err := cfg.LoadLayered(globalPath, func(string) string { return "" }, projectPath)
 	if err == nil {
 		t.Fatal("LoadLayered must return an error when project TOML has a parse error; got nil")
 	}
@@ -2381,7 +2475,7 @@ func TestLoadLayered_MissingProjectFile_NoError(t *testing.T) {
 	globalPath := writeTOML(t, dir, "global.toml", `[cell]
 stack = "go"
 `)
-	_, err := cfg.LoadLayered(globalPath, dir+"/nonexistent.toml", func(string) string { return "" })
+	_, err := cfg.LoadLayered(globalPath, func(string) string { return "" }, dir+"/nonexistent.toml")
 	if err != nil {
 		t.Errorf("missing project file should not be an error: %v", err)
 	}
@@ -3680,6 +3774,43 @@ func TestSanitizeForSolitary_NothingToStrip(t *testing.T) {
 		if stringsContain([]string{s}, "privileged") || stringsContain([]string{s}, "cap") {
 			t.Errorf("shouldn't report stripping items that weren't there, got %v", stripped)
 		}
+	}
+}
+
+func TestSanitizeForSolitary_DefaultsPresetsWhenEmpty(t *testing.T) {
+	c := cfg.CellConfig{}
+	stripped := cfg.SanitizeForSolitary(&c)
+	if len(c.Network.Proxy.Presets) == 0 {
+		t.Fatal("solitary should inject default presets when none configured")
+	}
+	if !stringsContain(c.Network.Proxy.Presets, "claude") {
+		t.Error("default presets should include claude")
+	}
+	if !stringsContain(c.Network.Proxy.Presets, "github") {
+		t.Error("default presets should include github")
+	}
+	found := false
+	for _, s := range stripped {
+		if strings.Contains(s, "presets defaulted") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("stripped should report preset defaulting")
+	}
+}
+
+func TestSanitizeForSolitary_KeepsExistingPresets(t *testing.T) {
+	c := cfg.CellConfig{
+		Network: cfg.NetworkSection{
+			Proxy: cfg.NetworkProxySection{
+				Presets: []string{"claude"},
+			},
+		},
+	}
+	cfg.SanitizeForSolitary(&c)
+	if len(c.Network.Proxy.Presets) != 1 || c.Network.Proxy.Presets[0] != "claude" {
+		t.Errorf("existing presets should be preserved, got %v", c.Network.Proxy.Presets)
 	}
 }
 

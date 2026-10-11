@@ -207,7 +207,7 @@ func TestLoadLayered_SecretsOnePasswordMergesAcrossLayers(t *testing.T) {
 	dir := t.TempDir()
 	global := writeTOML(t, dir, "global.toml", "[op]\ndocuments = [\"global-doc\"]\n")
 	project := writeTOML(t, dir, "project.toml", "[secrets.onepassword]\ndocuments = [\"project-doc\"]\n")
-	c, err := cfg.LoadLayered(global, project, func(string) string { return "" })
+	c, err := cfg.LoadLayered(global, func(string) string { return "" }, project)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +221,7 @@ func TestLoadLayered_KeepsDeprecationsFromBothLayers(t *testing.T) {
 	dir := t.TempDir()
 	global := writeTOML(t, dir, "global.toml", "[ports]\nforward = [\"3000\"]\n")
 	project := writeTOML(t, dir, "project.toml", "[mcp]\nenabled = [\"playwright\"]\n")
-	c, err := cfg.LoadLayered(global, project, func(string) string { return "" })
+	c, err := cfg.LoadLayered(global, func(string) string { return "" }, project)
 	if err != nil {
 		t.Fatal(err)
 	}

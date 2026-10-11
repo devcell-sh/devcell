@@ -1,6 +1,6 @@
 package main
 
-// `cell nix-store` — push/pull a /nix volume as an OCI layer against a
+// `devcell nix-store` — push/pull a /nix volume as an OCI layer against a
 // remote registry. Replaces the `crane` CLI usage in
 // .github/workflows/build.dev.yml so the local cache-roundtrip test
 // and the CI workflow share a single Go code path (CELL-293).

@@ -62,7 +62,7 @@ func runBuild(cmd *cobra.Command, _ []string) error {
 	return e.Build(context.Background(), buildOpts(cmd, engineCell(c, cellCfg)))
 }
 
-// buildOpts is the engine.BuildOpts for `cell build` on cell c: every build
+// buildOpts is the engine.BuildOpts for `devcell build` on cell c: every build
 // flag, whichever engines read it.
 func buildOpts(cmd *cobra.Command, c engine.Cell) engine.BuildOpts {
 	flags := cmd.Flags()

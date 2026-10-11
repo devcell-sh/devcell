@@ -2,22 +2,28 @@
 
 ## Terminology
 
-The runtime model has seven entities. Use these words consistently in code, comments, error messages, log output, docs, and prose — a rename in one layer without the others is what made the old naming ambiguous.
+The runtime model has seven entities. Use these words consistently in code, comments, error messages, log output, docs, and prose.
 
-- **cell** — a named, persistent identity, and a boundary: one shared `$HOME` (`~/.devcell/<cellName>/`), one network, one secrets scope. May host many projects. May be running or stopped. Defaults to `main`; override with `DEVCELL_CELL_NAME`, or inherit from `TMUX_SESSION_NAME`.
+- **workspace** — a persistent grouping and a boundary: one shared `$HOME` (`~/.devcell/<workspaceName>/`), one network, one secrets scope. May host many projects. May be running or stopped. Defaults to `main`; override with `DEVCELL_WORKSPACE`, or inherit from `TMUX_SESSION_NAME`.
 - **project** — a host directory with code, mounted into a container.
-- **container** — the running docker instance for one (cell, project) pair. Ephemeral.
+- **cell** — the engine-agnostic runtime unit for one (workspace, project) pair. Composed from a workspace name + project name + cell ID.
 - **stack** — the image variant a container is built from.
 - **module** — a toggleable Nix capability composed into a stack.
 - **engine**: how a cell is run. One of `docker`, `tart`, `winkit` (go-winkit, which uses vz on macOS hosts and qemu on Linux hosts). Set with `--engine` or `[cell] engine`, or derived from the guest.
 - **guest**: the OS image inside a cell. One of `linux`, `macos`, `winpe` (Windows PE + WSL1), `windows-full` (full Windows + WSL2, internal only for now). Set with `--os` or `[cell] os`. Each engine runs only some guests; the capability table in `internal/engine` is the one place that says which.
+
+### Identity chain
+
+`workspaceName` (`DEVCELL_WORKSPACE`) > `projectName` (dir basename) > `cellId` (`DEVCELL_CELL_ID`) > `cellName` (project + cellId) > container name (`cell-<cellName>-run`).
 
 ### Retired words
 
 Do not use these as devcell-layer terms:
 
 - ~~**session**~~ — tmux owns this word.
-- ~~**workspace**~~ — survives only in `internal/serve/` for the MS-TSWP RDP protocol, where it is the protocol's own term. `WorkspaceResource` is still pending a rename to `Cell`.
+- ~~**bunk**~~ — replaced by **cell ID** (`DEVCELL_CELL_ID`). The old env var `DEVCELL_BUNK` is deprecated.
+
+Note: `workspace` also appears in `internal/serve/` for the MS-TSWP RDP protocol, where it is the protocol's own term. `WorkspaceResource` is still pending a rename to `Cell`.
 
 ## Git Policy
 

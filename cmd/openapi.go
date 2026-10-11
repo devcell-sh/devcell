@@ -10,7 +10,7 @@ import (
 
 var openapiCmd = &cobra.Command{
 	Use:   "openapi",
-	Short: "Print the JSON Schema for .devcell.toml",
+	Short: "Print the JSON Schema for devcell.toml",
 	Long:  "Prints the JSON Schema (draft 2020-12) describing the devcell.toml config format. The schema is embedded at build time and matches the running binary's config surface.",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {

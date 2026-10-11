@@ -18,21 +18,21 @@ import (
 func withOSArgs(t *testing.T, args ...string) {
 	t.Helper()
 	old := osArgs
-	osArgs = append([]string{"cell"}, args...)
+	osArgs = append([]string{"devcell"}, args...)
 	t.Cleanup(func() { osArgs = old })
 }
 
 func TestEngineCell_FillsEveryField(t *testing.T) {
 	withOSArgs(t, "shell")
 	c := config.Config{
-		Bunk:          "3",
-		AppName:       "proj-3",
-		CellName:      "dev",
-		CellHome:      "/home/u/.devcell/dev",
+		CellID:        "3",
+		CellName:      "proj-3",
+		WorkspaceName: "dev",
+		WorkspaceHome: "/home/u/.devcell/dev",
 		ConfigDir:     "/home/u/.config/devcell",
 		BuildDir:      "/home/u/proj/.devcell",
-		ContainerName: "cell-proj-3-run",
-		Hostname:      "cell-proj-3",
+		ContainerName: "devcell-proj-3",
+		Hostname:      "devcell-proj-3",
 		VNCPort:       "35950",
 		RDPPort:       "35989",
 		BaseDir:       "/home/u/proj",
@@ -47,8 +47,8 @@ func TestEngineCell_FillsEveryField(t *testing.T) {
 	got := engineCell(c, cellCfg)
 
 	want := engine.Cell{
-		Name:          "dev",
-		Home:          "/home/u/.devcell/dev",
+		WorkspaceName: "dev",
+		WorkspaceHome: "/home/u/.devcell/dev",
 		HostHome:      "/home/u",
 		HostUser:      "u",
 		BaseDir:       "/home/u/proj",
@@ -59,10 +59,10 @@ func TestEngineCell_FillsEveryField(t *testing.T) {
 		Modules:       []string{"infra"},
 		VNCPort:       "35950",
 		RDPPort:       "35989",
-		Bunk:          "3",
-		AppName:       "proj-3",
-		ContainerName: "cell-proj-3-run",
-		Hostname:      "cell-proj-3",
+		CellID:        "3",
+		CellName:      "proj-3",
+		ContainerName: "devcell-proj-3",
+		Hostname:      "devcell-proj-3",
 		Guest:         engine.MacOS,
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -86,7 +86,7 @@ func TestDockerEngineIsLinkedIn(t *testing.T) {
 // Every cell flag an agent command scans lands in its RunOpts field, for
 // whichever engine reads it.
 func TestRunOpts_MapsCellFlags(t *testing.T) {
-	c := engine.Cell{Name: "dev"}
+	c := engine.Cell{WorkspaceName: "dev"}
 	env := map[string]string{"A": "1"}
 
 	t.Run("all set", func(t *testing.T) {
@@ -141,7 +141,7 @@ func commandWithFlags(t *testing.T, real *cobra.Command, declare func(*cobra.Com
 	}
 	for name := range names {
 		if real.Flags().Lookup(name) == nil && real.Flags().ShorthandLookup(name) == nil {
-			t.Errorf("cell %s has no --%s flag", real.Use, name)
+			t.Errorf("devcell %s has no --%s flag", real.Use, name)
 		}
 	}
 	return cmd
@@ -160,7 +160,7 @@ func TestBuildOpts_MapsFlags(t *testing.T) {
 	}
 	cmd := commandWithFlags(t, buildCmd, declare, "--update", "--stack=go", "--image=devcell-user:x",
 		"--force", "--no-cache", "--stage=base", "--build-threads=16")
-	c := engine.Cell{Name: "dev"}
+	c := engine.Cell{WorkspaceName: "dev"}
 
 	got := buildOpts(cmd, c)
 
@@ -182,7 +182,7 @@ func TestInitOpts_MapsFlags(t *testing.T) {
 		cmd.Flags().StringSlice("modules", nil, "")
 	}
 	cmd := commandWithFlags(t, initCmd, declare, "--yes", "--force", "--update", "--stack=go", "--modules=infra,go")
-	c := engine.Cell{Name: "dev"}
+	c := engine.Cell{WorkspaceName: "dev"}
 
 	got := initOpts(cmd, c)
 
@@ -280,7 +280,7 @@ func recordExit(t *testing.T) *[]int {
 func TestRunEngine_PassesOpts(t *testing.T) {
 	var got engine.RunOpts
 	n := useFakeEngine(t, func(opts engine.RunOpts) error { got = opts; return nil })
-	want := engine.RunOpts{Cell: engine.Cell{Name: "dev"}, Binary: "claude", Args: []string{"-p", "hi"}, DryRun: true}
+	want := engine.RunOpts{Cell: engine.Cell{WorkspaceName: "dev"}, Binary: "claude", Args: []string{"-p", "hi"}, DryRun: true}
 
 	if err := runEngine(n, want); err != nil {
 		t.Fatalf("runEngine: %v", err)

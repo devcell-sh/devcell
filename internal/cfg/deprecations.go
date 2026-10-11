@@ -192,6 +192,8 @@ func (u DeprecatedUse) Warning() string {
 // old name is still read when the new one is unset (Getenv) and warns once
 // per invocation (ApplyEnv records it, checkConfig prints it).
 var renamedEnvVars = []struct{ name, deprecated string }{
+	{"DEVCELL_WORKSPACE", "DEVCELL_CELL_NAME"},
+	{"DEVCELL_CELL_ID", "DEVCELL_BUNK"},
 	{"DEVCELL_WINKIT_SSH_PORT", "DEVCELL_QEMU_SSH_PORT"},
 	{"DEVCELL_WINKIT_WINDOWS_ISO", "DEVCELL_QEMU_WINDOWS_ISO"},
 	{"DEVCELL_WINKIT_CPUS", "DEVCELL_QEMU_CPUS"},

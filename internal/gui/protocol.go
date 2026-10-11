@@ -98,7 +98,7 @@ func (p Protocol) ParseDockerPS(output string) (map[string]string, error) {
 		if len(parts) != 2 {
 			continue
 		}
-		name := parts[0]  // e.g. cell-myproject-3-run
+		name := parts[0]  // e.g. devcell-myproject-3
 		ports := parts[1] // e.g. 0.0.0.0:389->3389/tcp, 0.0.0.0:350->5900/tcp
 
 		hostPort, ok := p.hostPort(ports)
@@ -106,9 +106,8 @@ func (p Protocol) ParseDockerPS(output string) (map[string]string, error) {
 			continue
 		}
 
-		// Strip "cell-" prefix and "-run" suffix to get the cell name.
-		cellName := strings.TrimPrefix(name, "cell-")
-		cellName = strings.TrimSuffix(cellName, "-run")
+		// Strip "devcell-" prefix to get the cell name.
+		cellName := strings.TrimPrefix(name, "devcell-")
 		result[cellName] = hostPort
 	}
 	return result, nil

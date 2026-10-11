@@ -186,7 +186,7 @@ func ResolveWindowsISO(envISO, configISO, home string) (string, error) {
 			"Run: cell init --engine winkit  (downloads automatically)\n"+
 			"Or download from: %s\n"+
 			"Then set: export DEVCELL_WINKIT_WINDOWS_ISO=/path/to/Win11_ARM64.iso\n"+
-			"Or add to .devcell.toml:\n"+
+			"Or add to devcell.toml:\n"+
 			"  [cell]\n"+
 			"  winkit_windows_iso = \"/path/to/Win11_ARM64.iso\"", WindowsISODownloadURL)
 	}

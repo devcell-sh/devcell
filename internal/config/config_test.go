@@ -18,61 +18,61 @@ func env(pairs ...string) func(string) string {
 	return func(k string) string { return m[k] }
 }
 
-// --- Bunk ---
+// --- CellID ---
 
 func TestCellID_ExplicitCellID(t *testing.T) {
-	c := config.Load("/cwd", env("DEVCELL_BUNK", "3"))
-	if c.Bunk != "3" {
-		t.Errorf("want 3, got %q", c.Bunk)
+	c := config.Load("/cwd", env("DEVCELL_CELL_ID", "3"))
+	if c.CellID != "3" {
+		t.Errorf("want 3, got %q", c.CellID)
 	}
 }
 
 func TestCellID_FromTmuxPane(t *testing.T) {
 	c := config.Load("/cwd", env("TMUX_PANE", "%5"))
-	if c.Bunk != "5" {
-		t.Errorf("want 5, got %q", c.Bunk)
+	if c.CellID != "5" {
+		t.Errorf("want 5, got %q", c.CellID)
 	}
 }
 
 func TestCellID_TmuxPaneMultiDigit(t *testing.T) {
 	c := config.Load("/cwd", env("TMUX_PANE", "%12"))
-	if c.Bunk != "12" {
-		t.Errorf("want 12, got %q", c.Bunk)
+	if c.CellID != "12" {
+		t.Errorf("want 12, got %q", c.CellID)
 	}
 }
 
 func TestCellID_FallbackZero(t *testing.T) {
 	c := config.Load("/cwd", env())
-	if c.Bunk != "0" {
-		t.Errorf("want 0, got %q", c.Bunk)
+	if c.CellID != "0" {
+		t.Errorf("want 0, got %q", c.CellID)
 	}
 }
 
 func TestCellID_CellIDTakesPriorityOverTmux(t *testing.T) {
-	c := config.Load("/cwd", env("DEVCELL_BUNK", "7", "TMUX_PANE", "%3"))
-	if c.Bunk != "7" {
-		t.Errorf("want 7, got %q", c.Bunk)
+	c := config.Load("/cwd", env("DEVCELL_CELL_ID", "7", "TMUX_PANE", "%3"))
+	if c.CellID != "7" {
+		t.Errorf("want 7, got %q", c.CellID)
 	}
 }
 
 func TestCellID_FromZellijPane(t *testing.T) {
 	c := config.Load("/cwd", env("ZELLIJ", "0", "ZELLIJ_PANE_ID", "5"))
-	if c.Bunk != "5" {
-		t.Errorf("want 5, got %q", c.Bunk)
+	if c.CellID != "5" {
+		t.Errorf("want 5, got %q", c.CellID)
 	}
 }
 
 func TestCellID_ZellijPaneMultiDigit(t *testing.T) {
 	c := config.Load("/cwd", env("ZELLIJ", "0", "ZELLIJ_PANE_ID", "12"))
-	if c.Bunk != "12" {
-		t.Errorf("want 12, got %q", c.Bunk)
+	if c.CellID != "12" {
+		t.Errorf("want 12, got %q", c.CellID)
 	}
 }
 
 func TestCellID_CellIDTakesPriorityOverZellij(t *testing.T) {
-	c := config.Load("/cwd", env("DEVCELL_BUNK", "7", "ZELLIJ", "0", "ZELLIJ_PANE_ID", "3"))
-	if c.Bunk != "7" {
-		t.Errorf("want 7, got %q", c.Bunk)
+	c := config.Load("/cwd", env("DEVCELL_CELL_ID", "7", "ZELLIJ", "0", "ZELLIJ_PANE_ID", "3"))
+	if c.CellID != "7" {
+		t.Errorf("want 7, got %q", c.CellID)
 	}
 }
 
@@ -80,8 +80,8 @@ func TestCellID_CellIDTakesPriorityOverZellij(t *testing.T) {
 // innermost real pane is tmux's — keep the existing TMUX_PANE behavior.
 func TestCellID_TmuxTakesPriorityOverZellij(t *testing.T) {
 	c := config.Load("/cwd", env("TMUX_PANE", "%4", "ZELLIJ", "0", "ZELLIJ_PANE_ID", "9"))
-	if c.Bunk != "4" {
-		t.Errorf("want 4, got %q", c.Bunk)
+	if c.CellID != "4" {
+		t.Errorf("want 4, got %q", c.CellID)
 	}
 }
 
@@ -89,55 +89,54 @@ func TestCellID_TmuxTakesPriorityOverZellij(t *testing.T) {
 // hijack the fallback — only treat zellij as active when its flag is set.
 func TestCellID_ZellijFlagMissingFallsBack(t *testing.T) {
 	c := config.Load("/cwd", env("ZELLIJ_PANE_ID", "5"))
-	if c.Bunk != "0" {
-		t.Errorf("want 0 (no ZELLIJ flag), got %q", c.Bunk)
+	if c.CellID != "0" {
+		t.Errorf("want 0 (no ZELLIJ flag), got %q", c.CellID)
 	}
 }
 
-// --- AppName ---
+// --- CellName ---
 
-func TestAppName_Basic(t *testing.T) {
-	c := config.Load("/Users/bob/dev/myproject", env("DEVCELL_BUNK", "3"))
-	if c.AppName != "myproject-3" {
-		t.Errorf("want myproject-3, got %q", c.AppName)
+func TestCellName_Basic(t *testing.T) {
+	c := config.Load("/Users/bob/dev/myproject", env("DEVCELL_CELL_ID", "3"))
+	if c.CellName != "myproject-3" {
+		t.Errorf("want myproject-3, got %q", c.CellName)
 	}
 }
 
-func TestAppName_WithSpaces(t *testing.T) {
-	c := config.Load("/Users/bob/My Project", env("DEVCELL_BUNK", "0"))
-	// Should not crash; AppName should be non-empty
-	if c.AppName == "" {
-		t.Error("AppName must not be empty for path with spaces")
+func TestCellName_WithSpaces(t *testing.T) {
+	c := config.Load("/Users/bob/My Project", env("DEVCELL_CELL_ID", "0"))
+	if c.CellName == "" {
+		t.Error("CellName must not be empty for path with spaces")
 	}
 }
 
-// --- CellName / CellHome ---
+// --- WorkspaceName / WorkspaceHome ---
 
 func TestCellHome_WithDevcellCellName(t *testing.T) {
 	c := config.Load("/cwd", env("DEVCELL_CELL_NAME", "myproject", "HOME", "/home/bob"))
-	if c.CellHome != "/home/bob/.devcell/myproject" {
-		t.Errorf("want /home/bob/.devcell/myproject, got %q", c.CellHome)
+	if c.WorkspaceHome != "/home/bob/.devcell/myproject" {
+		t.Errorf("want /home/bob/.devcell/myproject, got %q", c.WorkspaceHome)
 	}
 }
 
 func TestCellHome_DevcellCellOverridesTmux(t *testing.T) {
 	c := config.Load("/cwd", env("DEVCELL_CELL_NAME", "override", "TMUX_SESSION_NAME", "work", "HOME", "/home/bob"))
-	if c.CellHome != "/home/bob/.devcell/override" {
-		t.Errorf("want /home/bob/.devcell/override, got %q", c.CellHome)
+	if c.WorkspaceHome != "/home/bob/.devcell/override" {
+		t.Errorf("want /home/bob/.devcell/override, got %q", c.WorkspaceHome)
 	}
 }
 
 func TestCellHome_WithTmuxSession(t *testing.T) {
 	c := config.Load("/cwd", env("TMUX_SESSION_NAME", "work", "HOME", "/home/bob"))
-	if c.CellHome != "/home/bob/.devcell/work" {
-		t.Errorf("want /home/bob/.devcell/work, got %q", c.CellHome)
+	if c.WorkspaceHome != "/home/bob/.devcell/work" {
+		t.Errorf("want /home/bob/.devcell/work, got %q", c.WorkspaceHome)
 	}
 }
 
 func TestCellHome_DefaultMain(t *testing.T) {
 	c := config.Load("/cwd", env("HOME", "/home/bob"))
-	if c.CellHome != "/home/bob/.devcell/main" {
-		t.Errorf("want /home/bob/.devcell/main, got %q", c.CellHome)
+	if c.WorkspaceHome != "/home/bob/.devcell/main" {
+		t.Errorf("want /home/bob/.devcell/main, got %q", c.WorkspaceHome)
 	}
 }
 
@@ -159,7 +158,7 @@ func TestConfigDir_DefaultHome(t *testing.T) {
 
 // --- Exported resolvers: the single implementation other packages call ---
 
-func TestResolveCellName_Precedence(t *testing.T) {
+func TestResolveWorkspaceName_Precedence(t *testing.T) {
 	cases := []struct {
 		name string
 		env  func(string) string
@@ -171,11 +170,11 @@ func TestResolveCellName_Precedence(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := config.ResolveCellName(tc.env); got != tc.want {
-				t.Errorf("ResolveCellName = %q, want %q", got, tc.want)
+			if got := config.ResolveWorkspaceName(tc.env); got != tc.want {
+				t.Errorf("ResolveWorkspaceName = %q, want %q", got, tc.want)
 			}
-			if got := config.Load("/cwd", tc.env).CellName; got != tc.want {
-				t.Errorf("Load().CellName = %q, want %q", got, tc.want)
+			if got := config.Load("/cwd", tc.env).WorkspaceName; got != tc.want {
+				t.Errorf("Load().WorkspaceName = %q, want %q", got, tc.want)
 			}
 		})
 	}
@@ -275,55 +274,55 @@ func TestEnsureBuildDir_Idempotent(t *testing.T) {
 // --- PortPrefix / VNCPort ---
 
 func TestPortPrefix_NoPrefixCellID3(t *testing.T) {
-	c := config.Load("/cwd", env("DEVCELL_BUNK", "3"))
+	c := config.Load("/cwd", env("DEVCELL_CELL_ID", "3"))
 	if c.PortPrefix != "3" {
 		t.Errorf("want 3, got %q", c.PortPrefix)
 	}
 }
 
 func TestPortPrefix_WithPrefix(t *testing.T) {
-	c := config.Load("/cwd", env("SESSION_PORT_PREFIX", "1", "DEVCELL_BUNK", "3"))
+	c := config.Load("/cwd", env("SESSION_PORT_PREFIX", "1", "DEVCELL_CELL_ID", "3"))
 	if c.PortPrefix != "13" {
 		t.Errorf("want 13, got %q", c.PortPrefix)
 	}
 }
 
 func TestVNCPort_CellID3(t *testing.T) {
-	c := config.Load("/cwd", env("DEVCELL_BUNK", "3"))
+	c := config.Load("/cwd", env("DEVCELL_CELL_ID", "3"))
 	if c.VNCPort != "350" {
 		t.Errorf("want 350, got %q", c.VNCPort)
 	}
 }
 
 func TestVNCPort_CellID12(t *testing.T) {
-	c := config.Load("/cwd", env("DEVCELL_BUNK", "12"))
+	c := config.Load("/cwd", env("DEVCELL_CELL_ID", "12"))
 	if c.VNCPort != "1250" {
 		t.Errorf("want 1250, got %q", c.VNCPort)
 	}
 }
 
 func TestVNCPort_ParseableAsUint16(t *testing.T) {
-	for _, bunk := range []string{"0", "1", "3", "9", "12"} {
-		c := config.Load("/cwd", env("DEVCELL_BUNK", bunk))
+	for _, cellID := range []string{"0", "1", "3", "9", "12"} {
+		c := config.Load("/cwd", env("DEVCELL_CELL_ID", cellID))
 		n, err := strconv.ParseUint(c.VNCPort, 10, 16)
 		if err != nil || n == 0 {
-			t.Errorf("Bunk=%s VNCPort=%q is not a valid uint16 port", bunk, c.VNCPort)
+			t.Errorf("CellID=%s VNCPort=%q is not a valid uint16 port", cellID, c.VNCPort)
 		}
 	}
 }
 
 func TestVNCPort_HighCellID_Clamped(t *testing.T) {
-	// DEVCELL_BUNK=682 → portPrefix="682", VNCPort would be "68250" > 65535
-	c := config.Load("/cwd", env("DEVCELL_BUNK", "682"))
+	// DEVCELL_CELL_ID=682 → portPrefix="682", VNCPort would be "68250" > 65535
+	c := config.Load("/cwd", env("DEVCELL_CELL_ID", "682"))
 	n, err := strconv.ParseUint(c.VNCPort, 10, 16)
 	if err != nil || n == 0 || n > 65535 {
-		t.Errorf("Bunk=682 VNCPort=%q should be clamped to valid range, got parsed=%d err=%v", c.VNCPort, n, err)
+		t.Errorf("CellID=682 VNCPort=%q should be clamped to valid range, got parsed=%d err=%v", c.VNCPort, n, err)
 	}
 }
 
 func TestVNCPort_PrefixPlusCellID_Clamped(t *testing.T) {
-	// SESSION_PORT_PREFIX="681" + DEVCELL_BUNK="50" → portPrefix="68150", VNCPort would be "6815050"
-	c := config.Load("/cwd", env("SESSION_PORT_PREFIX", "681", "DEVCELL_BUNK", "50"))
+	// SESSION_PORT_PREFIX="681" + DEVCELL_CELL_ID="50" → portPrefix="68150", VNCPort would be "6815050"
+	c := config.Load("/cwd", env("SESSION_PORT_PREFIX", "681", "DEVCELL_CELL_ID", "50"))
 	n, err := strconv.ParseUint(c.VNCPort, 10, 16)
 	if err != nil || n == 0 || n > 65535 {
 		t.Errorf("VNCPort=%q should be clamped to valid range", c.VNCPort)
@@ -337,14 +336,14 @@ func TestVNCPort_PrefixPlusCellID_Clamped(t *testing.T) {
 // --- ContainerName ---
 
 func TestContainerName(t *testing.T) {
-	c := config.Load("/myproject", env("DEVCELL_BUNK", "3"))
-	if c.ContainerName != "cell-myproject-3-run" {
-		t.Errorf("want cell-myproject-3-run, got %q", c.ContainerName)
+	c := config.Load("/myproject", env("DEVCELL_CELL_ID", "3"))
+	if c.ContainerName != "devcell-myproject-3" {
+		t.Errorf("want devcell-myproject-3, got %q", c.ContainerName)
 	}
 }
 
 func TestContainerName_NoSpacesOrSlashes(t *testing.T) {
-	c := config.Load("/some/deep/path", env("DEVCELL_BUNK", "0"))
+	c := config.Load("/some/deep/path", env("DEVCELL_CELL_ID", "0"))
 	if strings.ContainsAny(c.ContainerName, " /") {
 		t.Errorf("ContainerName must not contain spaces or slashes: %q", c.ContainerName)
 	}
@@ -361,12 +360,12 @@ func TestImage_Default(t *testing.T) {
 
 // --- ResolveAvailablePorts ---
 
-// Use DEVCELL_BUNK=42 → port 4250/4289 (≥1024, no privileged-port hoist).
-// DEVCELL_BUNK=3 was privileged (350/389) and the new hoist breaks the
+// Use DEVCELL_CELL_ID=42 → port 4250/4289 (≥1024, no privileged-port hoist).
+// DEVCELL_CELL_ID=3 was privileged (350/389) and the new hoist breaks the
 // "free port unchanged" assertion — that case is covered separately.
 
 func TestResolveAvailablePorts_FreePortUnchanged(t *testing.T) {
-	c := config.Load("/cwd", env("DEVCELL_BUNK", "42"))
+	c := config.Load("/cwd", env("DEVCELL_CELL_ID", "42"))
 	orig := c.VNCPort
 	c.ResolveAvailablePorts()
 	// Port 4250 is almost certainly free in test — should stay the same
@@ -376,7 +375,7 @@ func TestResolveAvailablePorts_FreePortUnchanged(t *testing.T) {
 }
 
 func TestResolveAvailablePorts_OccupiedPortBumps(t *testing.T) {
-	c := config.Load("/cwd", env("DEVCELL_BUNK", "42"))
+	c := config.Load("/cwd", env("DEVCELL_CELL_ID", "42"))
 	// Occupy the preferred VNC port
 	ln, err := net.Listen("tcp", ":"+c.VNCPort)
 	if err != nil {
@@ -394,14 +393,14 @@ func TestResolveAvailablePorts_OccupiedPortBumps(t *testing.T) {
 	}
 }
 
-// Single-digit TMUX panes (DEVCELL_BUNK=3, =4, =9) compute ports in the
+// Single-digit TMUX panes (DEVCELL_CELL_ID=3, =4, =9) compute ports in the
 // privileged range (350, 489, etc.). resolveAvailablePort now hoists
 // those to the user range BEFORE scanning so docker doesn't trip on
 // "port already allocated" from a sibling cell using the same pane id.
-// Regression for the bug user hit 2026-05-15 with cell-devcell-4-run +
-// cell-upe-ui-4-run both targeting port 489.
+// Regression for the bug user hit 2026-05-15 with devcell-devcell-4 +
+// devcell-upe-ui-4 both targeting port 489.
 func TestResolveAvailablePorts_PrivilegedHoistedAboveWall(t *testing.T) {
-	c := config.Load("/cwd", env("DEVCELL_BUNK", "4"))
+	c := config.Load("/cwd", env("DEVCELL_CELL_ID", "4"))
 	// Pre-hoist computation: VNC=450, RDP=489. Both privileged.
 	c.ResolveAvailablePorts()
 	vnc, _ := strconv.Atoi(c.VNCPort)
@@ -417,7 +416,7 @@ func TestResolveAvailablePorts_PrivilegedHoistedAboveWall(t *testing.T) {
 // --- Purity ---
 
 func TestLoad_Idempotent(t *testing.T) {
-	e := env("DEVCELL_BUNK", "5", "HOME", "/home/bob", "TMUX_SESSION_NAME", "work")
+	e := env("DEVCELL_CELL_ID", "5", "HOME", "/home/bob", "TMUX_SESSION_NAME", "work")
 	c1 := config.Load("/myproject", e)
 	c2 := config.Load("/myproject", e)
 	if c1 != c2 {

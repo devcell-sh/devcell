@@ -20,7 +20,7 @@ func TestDockerEnumerator_ListCells_BasicDiscovery(t *testing.T) {
 	client := &fakeDockerClient{
 		containers: []container.Summary{
 			{
-				Names: []string{"/cell-myproject-42-run"},
+				Names: []string{"/devcell-myproject-42"},
 				Labels: map[string]string{
 					"devcell.basedir": "/Users/dmitry/dev/myorg/myproject",
 					"devcell.cellid":  "42",
@@ -41,8 +41,8 @@ func TestDockerEnumerator_ListCells_BasicDiscovery(t *testing.T) {
 		t.Fatalf("got %d cells, want 1", len(cells))
 	}
 	c := cells[0]
-	if c.ID != "cell-myproject-42-42" {
-		t.Errorf("ID = %q, want cell-myproject-42-42", c.ID)
+	if c.ID != "devcell-myproject-42-42" {
+		t.Errorf("ID = %q, want devcell-myproject-42-42", c.ID)
 	}
 	if c.Title != "myproject-42" {
 		t.Errorf("Title = %q, want myproject-42", c.Title)
@@ -59,12 +59,12 @@ func TestDockerEnumerator_ListCells_MultipleContainers(t *testing.T) {
 	client := &fakeDockerClient{
 		containers: []container.Summary{
 			{
-				Names:  []string{"/cell-projectA-1-run"},
+				Names:  []string{"/devcell-projectA-1"},
 				Labels: map[string]string{"devcell.basedir": "/dev/projectA", "devcell.cellid": "1"},
 				Ports:  []container.Port{{PrivatePort: 3389, PublicPort: 10089, Type: "tcp"}},
 			},
 			{
-				Names:  []string{"/cell-projectB-2-run"},
+				Names:  []string{"/devcell-projectB-2"},
 				Labels: map[string]string{"devcell.basedir": "/dev/projectB", "devcell.cellid": "2"},
 				Ports:  []container.Port{{PrivatePort: 3389, PublicPort: 20089, Type: "tcp"}},
 			},
@@ -89,7 +89,7 @@ func TestDockerEnumerator_ListCells_SkipsContainersWithoutRDP(t *testing.T) {
 	client := &fakeDockerClient{
 		containers: []container.Summary{
 			{
-				Names:  []string{"/cell-noport-1-run"},
+				Names:  []string{"/devcell-noport-1"},
 				Labels: map[string]string{"devcell.basedir": "/dev/noport", "devcell.cellid": "1"},
 				Ports:  []container.Port{{PrivatePort: 8080, PublicPort: 8080, Type: "tcp"}},
 			},
@@ -131,7 +131,7 @@ func TestDockerEnumerator_ListCells_TitleFromBasedir(t *testing.T) {
 	for _, tt := range tests {
 		client := &fakeDockerClient{
 			containers: []container.Summary{{
-				Names:  []string{"/cell-test-1-run"},
+				Names:  []string{"/devcell-test-1"},
 				Labels: map[string]string{"devcell.basedir": tt.basedir, "devcell.cellid": "1"},
 				Ports:  []container.Port{{PrivatePort: 3389, PublicPort: 3389, Type: "tcp"}},
 			}},

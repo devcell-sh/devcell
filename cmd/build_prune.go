@@ -16,7 +16,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// `cell build prune` — standalone cleanup subcommand. See CELL-101.
+// `devcell build prune` — standalone cleanup subcommand. See CELL-101.
 //
 // Default mode: prune the Docker daemon (containers, images, volumes, BuildKit
 // cache). `--pure` switches the target to the nix store (linux-builder VM on
@@ -26,7 +26,7 @@ import (
 // confirmation prompt.
 //
 // NOTE: `--pure` here means "target the nix store" (CELL-101) and is
-// UNRELATED to `--pure` on agent commands (`cell claude --pure`, etc.) which
+// UNRELATED to `--pure` on agent commands (`devcell claude --pure`, etc.) which
 // is a silent no-op after CELL-183. Both flags coexist in the cell CLI and
 // the prune meaning is preserved for now. See CELL-189 chain for the agent
 // flip context.

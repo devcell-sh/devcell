@@ -116,15 +116,15 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	ux.SaveCursor()
 
 	project := filepath.Base(c.BaseDir)
-	fmt.Println(" " + ux.Banner(c.CellName, project, c.Bunk))
+	fmt.Println(" " + ux.Banner(c.WorkspaceName, project, c.CellID))
 
 	if ux.Verbose {
 		fmt.Println()
 		const keyW = 8 // longest key is "Timezone" / "Modules" / "Network"
 		// Project / Cell
 		fmt.Println("   " + ux.KV(keyW, "Project", project+ux.StyleMuted.Render("  "+c.BaseDir)))
-		if c.CellName != "" {
-			fmt.Println("   " + ux.KV(keyW, "Cell", c.CellName+ux.StyleMuted.Render("  "+c.CellHome)))
+		if c.WorkspaceName != "" {
+			fmt.Println("   " + ux.KV(keyW, "Cell", c.WorkspaceName+ux.StyleMuted.Render("  "+c.WorkspaceHome)))
 		}
 		// Image — current tag + size, more useful than the in-container
 		// /etc/devcell/*-image-version strings (which can be missing).
@@ -144,7 +144,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		if mac == "" {
 			mac = "auto"
 		}
-		hostname := cellCfg.Cell.ResolvedHostname(c.AppName)
+		hostname := cellCfg.Cell.ResolvedHostname(c.CellName)
 		if envHost := os.Getenv("DEVCELL_HOSTNAME"); envHost != "" {
 			hostname = envHost
 		}
@@ -154,7 +154,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 			if opts.Solitary {
 				mode = "solitary"
 			}
-			netLine = InternalNetworkName(c.AppName) + ux.StyleMuted.Render(" · "+mode+" · hostname "+hostname+" · MAC "+mac)
+			netLine = InternalNetworkName(c.CellName) + ux.StyleMuted.Render(" · "+mode+" · hostname "+hostname+" · MAC "+mac)
 		}
 		fmt.Println("   " + ux.KV(keyW, "Network", netLine))
 		// Locale + timezone — combine on one row.
@@ -180,7 +180,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		// Boot dir — where the BootDirWatcher polls for in-container sentinels.
 		// Useful in --debug: `ls $bootdir/` after a boot shows the chain of
 		// fragments that fired (post-mortem). CELL-264.
-		fmt.Println("   " + ux.KV(keyW, "Boot", filepath.Join(c.CellHome, "boot")))
+		fmt.Println("   " + ux.KV(keyW, "Boot", filepath.Join(c.WorkspaceHome, "boot")))
 		fmt.Println()
 	}
 
@@ -218,20 +218,20 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 					return err
 				}
 			}
-			internalNet := InternalNetworkName(c.AppName)
+			internalNet := InternalNetworkName(c.CellName)
 			isolateGateway := !cellCfg.Network.Proxy.ResolvedAllowHostNetwork()
 			ux.Debugf("proxy: internal network=%s isolate_gateway=%v mode=%s",
 				internalNet, isolateGateway, cellCfg.Network.Proxy.ResolvedMode())
 			if err := EnsureIsolatedNetwork(ctx, internalNet, isolateGateway); err != nil {
 				return fmt.Errorf("internal network: %w", err)
 			}
-			gwName := ProxySidecarName(c.AppName)
+			gwName := ProxySidecarName(c.CellName)
 			ux.Debugf("proxy: starting gateway sidecar %s (egress via devcell-network)", gwName)
 			return EnsureProxySidecar(ctx, ProxySidecarOpts{
-				AppName:     c.AppName,
-				CellName:    c.CellName,
-				Bunk:        c.Bunk,
-				CellHome:    c.CellHome,
+				CellName:      c.CellName,
+				WorkspaceName: c.WorkspaceName,
+				CellID:        c.CellID,
+				WorkspaceHome: c.WorkspaceHome,
 				InternalNet: internalNet,
 				EgressNet:   "devcell-network",
 				Proxy:       cellCfg.Network.Proxy,
@@ -245,7 +245,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	// Orphan cleanup: remove stopped containers. Running containers are
 	// left alone so we can attach to them via docker exec.
 	if err := panel.Phase("Orphan cleanup", func() error {
-		_ = CleanupOrphanedProxies(ctx)
+		_ = CleanupOrphanedProxies(ctx, c.CellName)
 		if ContainerRunning(ctx, c.ContainerName) {
 			return nil
 		}
@@ -264,7 +264,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		return err
 	}
 
-	_ = panel.Phase("Backup", func() error { return backup.Backup(c.CellHome, time.Now()) })
+	_ = panel.Phase("Backup", func() error { return backup.Backup(c.WorkspaceHome, time.Now()) })
 
 	var imageID string
 	_ = panel.PhaseDetailed("Image pin", func() (string, error) {
@@ -292,9 +292,9 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 			probeVolume = ThinStoreVolume()
 		}
 		out, probeErr := ProbeDockerBind(
-			ctx, imageID, probeVolume, source, ".devcell.toml")
+			ctx, imageID, probeVolume, source, "devcell.toml")
 		if probeErr != nil {
-			ux.Debugf("docker bind probe: FAILED source=%q marker=.devcell.toml: %v output=%q",
+			ux.Debugf("docker bind probe: FAILED source=%q marker=devcell.toml: %v output=%q",
 				source, probeErr, out)
 		} else {
 			ux.Debugf("docker bind probe: OK source=%q %s", source, out)
@@ -437,7 +437,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	}
 
 	if binary == "claude" {
-		sessID := cell.SessionID(c.AppName)
+		sessID := cell.SessionID(c.CellName)
 		if extraEnv == nil {
 			extraEnv = make(map[string]string)
 		}
@@ -453,7 +453,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 			if valErr := cfg.ValidateWireguard(cellCfg); valErr != nil {
 				return fmt.Errorf("wireguard config: %w", valErr)
 			}
-			return PrepareWireguard(c.CellHome, cellCfg)
+			return PrepareWireguard(c.WorkspaceHome, cellCfg)
 		}); err != nil {
 			return err
 		}
@@ -463,7 +463,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	// compat) sentinel files from the entrypoint's _notify. Boot progress
 	// is now consumed from docker logs (JSONL events from devcell-event and
 	// _notify), not from polling sentinel files.
-	bootDir := filepath.Join(c.CellHome, "boot")
+	bootDir := filepath.Join(c.WorkspaceHome, "boot")
 	_ = os.RemoveAll(bootDir)
 	if err := os.MkdirAll(bootDir, 0o755); err != nil {
 		ux.Debugf("boot dir: %v", err)
@@ -484,7 +484,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	useFlake := opts.UseFlake || cellCfg.Cell.FlakeEnabled()
 	trustFlake := false
 	if useFlake {
-		trustFlake = resolveTrustFlake(c.BaseDir, c.CellHome)
+		trustFlake = resolveTrustFlake(c.BaseDir, c.WorkspaceHome)
 	}
 
 	spec := newRunSpec(opts, c)
@@ -665,10 +665,10 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	}
 
 	if proxyEnabled && !ContainerRunning(ctx, c.ContainerName) {
-		gwName := ProxySidecarName(c.AppName)
+		gwName := ProxySidecarName(c.CellName)
 		ux.Debugf("proxy: cell container gone, removing gateway %s", gwName)
 		_ = RemoveProxySidecar(ctx, gwName)
-		_ = RemoveNetwork(ctx, InternalNetworkName(c.AppName))
+		_ = RemoveNetwork(ctx, InternalNetworkName(c.CellName))
 	}
 
 	return agentExit(waitErr)

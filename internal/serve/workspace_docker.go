@@ -78,9 +78,8 @@ func findRDPPort(ports []container.Port) uint16 {
 
 func containerShortName(names []string) string {
 	if len(names) == 0 {
-		return "cell"
+		return "devcell"
 	}
 	name := strings.TrimPrefix(names[0], "/")
-	name = strings.TrimSuffix(name, "-run")
 	return name
 }

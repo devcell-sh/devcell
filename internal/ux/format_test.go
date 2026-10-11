@@ -38,7 +38,7 @@ func TestPrintTable_JSONOutputIsValidJSON(t *testing.T) {
 
 	headers := []string{"APP_NAME", "PORT", "URL"}
 	rows := [][]string{
-		{"devcell-123-run", "3389", "rdp://127.0.0.1:3389"},
+		{"devcell-123", "3389", "rdp://127.0.0.1:3389"},
 	}
 
 	out := captureStdout(func() { ux.PrintTable(headers, rows) })
@@ -50,8 +50,8 @@ func TestPrintTable_JSONOutputIsValidJSON(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("want 1 entry, got %d", len(result))
 	}
-	if got := result[0]["app_name"]; got != "devcell-123-run" {
-		t.Errorf("want app_name=devcell-123-run, got %q", got)
+	if got := result[0]["app_name"]; got != "devcell-123" {
+		t.Errorf("want app_name=devcell-123, got %q", got)
 	}
 	if got := result[0]["port"]; got != "3389" {
 		t.Errorf("want port=3389, got %q", got)
@@ -66,7 +66,7 @@ func TestPrintTable_YAMLOutputIsValidYAML(t *testing.T) {
 	defer func() { ux.OutputFormat = "text" }()
 
 	headers := []string{"APP_NAME", "PORT"}
-	rows := [][]string{{"devcell-42-run", "5900"}}
+	rows := [][]string{{"devcell-42", "5900"}}
 
 	out := captureStdout(func() { ux.PrintTable(headers, rows) })
 
@@ -77,8 +77,8 @@ func TestPrintTable_YAMLOutputIsValidYAML(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("want 1 entry, got %d", len(result))
 	}
-	if got := result[0]["app_name"]; got != "devcell-42-run" {
-		t.Errorf("want app_name=devcell-42-run, got %q", got)
+	if got := result[0]["app_name"]; got != "devcell-42" {
+		t.Errorf("want app_name=devcell-42, got %q", got)
 	}
 	if got := result[0]["port"]; got != "5900" {
 		t.Errorf("want port=5900, got %q", got)

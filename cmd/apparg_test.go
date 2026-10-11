@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// TestRDP_PositionalArgInHelp verifies "cell rdp" shows positional arg syntax.
+// TestRDP_PositionalArgInHelp verifies "devcell rdp" shows positional arg syntax.
 func TestRDP_PositionalArgInHelp(t *testing.T) {
 	out, err := exec.Command(binaryPath, "rdp", "--help").CombinedOutput()
 	if err != nil {
@@ -21,7 +21,7 @@ func TestRDP_PositionalArgInHelp(t *testing.T) {
 	}
 }
 
-// TestVNC_PositionalArgInHelp verifies "cell vnc" shows positional arg syntax.
+// TestVNC_PositionalArgInHelp verifies "devcell vnc" shows positional arg syntax.
 func TestVNC_PositionalArgInHelp(t *testing.T) {
 	out, err := exec.Command(binaryPath, "vnc", "--help").CombinedOutput()
 	if err != nil {
@@ -80,10 +80,10 @@ func TestRDP_HelpShowsExamples(t *testing.T) {
 		t.Fatalf("rdp --help failed: %v", err)
 	}
 	s := string(out)
-	if !strings.Contains(s, "cell rdp devcell-271") {
+	if !strings.Contains(s, "devcell rdp devcell-271") {
 		t.Errorf("expected positional example in help, got:\n%s", s)
 	}
-	if !strings.Contains(s, "cell rdp 271") {
+	if !strings.Contains(s, "devcell rdp 271") {
 		t.Errorf("expected suffix example in help, got:\n%s", s)
 	}
 }

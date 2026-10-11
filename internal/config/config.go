@@ -12,10 +12,10 @@ import (
 
 // Config holds all runtime variables resolved from environment and cwd.
 type Config struct {
-	Bunk          string
-	AppName       string
+	CellID        string
 	CellName      string
-	CellHome      string
+	WorkspaceName string
+	WorkspaceHome string
 	ConfigDir     string
 	BuildDir      string // build context dir: .devcell/ when project config exists, else ConfigDir
 	ImageTag      string
@@ -34,10 +34,10 @@ type Config struct {
 // Load resolves all config fields from cwd and an environment lookup function.
 // Pure — no os.* calls inside.
 func Load(cwd string, getenv func(string) string) Config {
-	bunk := resolveBunk(getenv)
-	cellName := ResolveCellName(getenv)
-	portPrefix := resolvePortPrefix(getenv, bunk)
-	appName := filepath.Base(cwd) + "-" + bunk
+	cellID := resolveCellID(getenv)
+	workspaceName := ResolveWorkspaceName(getenv)
+	portPrefix := resolvePortPrefix(getenv, cellID)
+	cellName := filepath.Base(cwd) + "-" + cellID
 	home := getenv("HOME")
 	imageTag := "v0.0.0-ultimate"
 
@@ -47,16 +47,16 @@ func Load(cwd string, getenv func(string) string) Config {
 
 	configDir := ResolveConfigDir(getenv)
 	return Config{
-		Bunk:          bunk,
-		AppName:       appName,
+		CellID:        cellID,
 		CellName:      cellName,
-		CellHome:      home + "/.devcell/" + cellName,
+		WorkspaceName: workspaceName,
+		WorkspaceHome: home + "/.devcell/" + workspaceName,
 		ConfigDir:     configDir,
 		BuildDir:      configDir,
 		ImageTag:      imageTag,
 		Image:         "ghcr.io/devcell-sh/devcell:" + imageTag,
-		ContainerName: "cell-" + appName + "-run",
-		Hostname:      "cell-" + appName,
+		ContainerName: "devcell-" + cellName,
+		Hostname:      "devcell-" + cellName,
 		PortPrefix:    portPrefix,
 		VNCPort:       ClampPort(portPrefix + "50"),
 		RDPPort:       ClampPort(portPrefix + "89"),
@@ -74,8 +74,9 @@ func LoadFromOS() (Config, error) {
 		return Config{}, fmt.Errorf("getwd: %w", err)
 	}
 	c := Load(cwd, os.Getenv)
-	_, statErr := os.Stat(filepath.Join(cwd, ".devcell.toml"))
-	c.BuildDir = ResolveBuildDir(cwd, c.ConfigDir, statErr == nil)
+	_, err1 := os.Stat(filepath.Join(cwd, "devcell.toml"))
+	_, err2 := os.Stat(filepath.Join(cwd, ".devcell.toml"))
+	c.BuildDir = ResolveBuildDir(cwd, c.ConfigDir, err1 == nil || err2 == nil)
 	return c, nil
 }
 
@@ -89,13 +90,16 @@ func ResolveBuildDir(cwd, configDir string, projectConfigExists bool) string {
 	return configDir
 }
 
-// resolveBunk derives the per-pane id that seeds the VNC/RDP port prefix.
-// Priority: explicit DEVCELL_BUNK, then the active terminal multiplexer's pane id,
-// then "0". tmux is checked before zellij so a tmux pane nested inside zellij
-// (whose ZELLIJ* vars leak into the child) still keys off its real pane.
+// resolveCellID derives the per-pane id that seeds the VNC/RDP port prefix.
+// Priority: DEVCELL_CELL_ID, then DEVCELL_BUNK (deprecated), then the active
+// terminal multiplexer's pane id, then "0". tmux is checked before zellij so
+// a tmux pane nested inside zellij still keys off its real pane.
 //   - tmux:   TMUX_PANE="%5"        → "5"
 //   - zellij: ZELLIJ=0, ZELLIJ_PANE_ID="5" → "5"
-func resolveBunk(getenv func(string) string) string {
+func resolveCellID(getenv func(string) string) string {
+	if v := getenv("DEVCELL_CELL_ID"); v != "" {
+		return v
+	}
 	if v := getenv("DEVCELL_BUNK"); v != "" {
 		return v
 	}
@@ -112,9 +116,12 @@ func resolveBunk(getenv func(string) string) string {
 	return "0"
 }
 
-// ResolveCellName is the one implementation of cell-name precedence:
-// DEVCELL_CELL_NAME, then tmux's TMUX_SESSION_NAME, then "main".
-func ResolveCellName(getenv func(string) string) string {
+// ResolveWorkspaceName resolves the workspace name (persistent grouping):
+// DEVCELL_WORKSPACE, then DEVCELL_CELL_NAME (deprecated), then TMUX_SESSION_NAME, then "main".
+func ResolveWorkspaceName(getenv func(string) string) string {
+	if s := getenv("DEVCELL_WORKSPACE"); s != "" {
+		return s
+	}
 	if s := getenv("DEVCELL_CELL_NAME"); s != "" {
 		return s
 	}
@@ -124,8 +131,8 @@ func ResolveCellName(getenv func(string) string) string {
 	return "main"
 }
 
-func resolvePortPrefix(getenv func(string) string, bunk string) string {
-	return getenv("SESSION_PORT_PREFIX") + bunk
+func resolvePortPrefix(getenv func(string) string, cellID string) string {
+	return getenv("SESSION_PORT_PREFIX") + cellID
 }
 
 // ResolveConfigDir is the one implementation of the global config dir

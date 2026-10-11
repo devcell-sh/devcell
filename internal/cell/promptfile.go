@@ -69,9 +69,9 @@ func WriteBasePrompt(c config.Config, opts ResolveOpts) (string, error) {
 // shared path would let one cell boot with another cell's container context.
 //
 // The returned path is the container-side path: the project is bind-mounted
-// at /<AppName>, so translating is a prefix swap of BaseDir for that root.
+// at /<CellName>, so translating is a prefix swap of BaseDir for that root.
 func WritePromptFile(c config.Config, name, content string) (string, error) {
-	cell := c.CellName
+	cell := c.WorkspaceName
 	if cell == "" {
 		cell = "main"
 	}
@@ -86,5 +86,5 @@ func WritePromptFile(c config.Config, name, content string) (string, error) {
 		return "", fmt.Errorf("write prompt file %s: %w", hostPath, err)
 	}
 
-	return path.Join("/"+c.AppName, ".devcell", promptDirName, cell, name), nil
+	return path.Join("/"+c.CellName, ".devcell", promptDirName, cell, name), nil
 }

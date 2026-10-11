@@ -12,17 +12,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// `cell build df` — read-only sibling of `cell build prune` (CELL-98).
+// `devcell build df` — read-only sibling of `devcell build prune` (CELL-98).
 //
 // Shows the top-N largest images, containers, volumes, and build-cache
 // entries on the local Docker daemon, marking which are pinned by running
 // containers and which are reclaimable. Prints reclaim commands as hints
-// — never executes them. The destructive trigger stays in `cell build
+// — never executes them. The destructive trigger stays in `devcell build
 // prune`.
 var dfCmd = &cobra.Command{
 	Use:   "df",
 	Short: "Show Docker disk usage ranked by reclaimable size",
-	Long: `Read-only sibling of ` + "`cell build prune`" + `. Surfaces the top-N largest
+	Long: `Read-only sibling of ` + "`devcell build prune`" + `. Surfaces the top-N largest
 images, containers, volumes, and build-cache entries on the local
 Docker daemon, marking which are pinned by running containers and
 which are reclaimable. Prints reclaim commands as hints — never

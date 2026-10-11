@@ -2,7 +2,7 @@ package main
 
 import "testing"
 
-// `cell build df` flag defaults — pin these so the user-visible interface
+// `devcell build df` flag defaults — pin these so the user-visible interface
 // can't drift without a failing test. Mirror the table from CELL-98 spec.
 func TestDfCmd_TopFlag_DefaultsTo10(t *testing.T) {
 	got, err := dfCmd.Flags().GetInt("top")
@@ -68,7 +68,7 @@ func TestToEntryKinds_AcceptsBothSingularAndPlural(t *testing.T) {
 }
 
 // dfCmd must be registered as a subcommand of buildCmd, alongside `prune`,
-// so users run it as `cell build df` (not as a top-level command).
+// so users run it as `devcell build df` (not as a top-level command).
 func TestDfCmd_IsRegisteredUnderBuild(t *testing.T) {
 	found := false
 	for _, sub := range buildCmd.Commands() {

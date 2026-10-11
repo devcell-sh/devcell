@@ -6,13 +6,13 @@ import (
 	"testing"
 )
 
-// TestModels_NoOllama verifies that `cell models` exits cleanly when
+// TestModels_NoOllama verifies that `devcell models` exits cleanly when
 // ollama is not reachable. Cloud models from OpenRouter are shown instead.
 func TestModels_NoOllama(t *testing.T) {
 	cmd := exec.Command(binaryPath, "models")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("cell models failed: %v\noutput: %s", err, out)
+		t.Fatalf("devcell models failed: %v\noutput: %s", err, out)
 	}
 	// Either cloud models are shown (normal case) or a "no models" warning
 	// appears if OpenRouter is also unreachable. Either way, exit code is 0.

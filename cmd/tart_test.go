@@ -38,7 +38,7 @@ func TestEngineTart_DryRunPrintsTartExec(t *testing.T) {
 	home := tartTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=tart", "shell", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
@@ -60,7 +60,7 @@ func TestEngineTart_DryRunContainsBinary(t *testing.T) {
 	home := tartTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=tart", "claude", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
@@ -75,7 +75,7 @@ func TestEngineTart_DryRunNoDocker(t *testing.T) {
 	home := tartTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=tart", "claude", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
@@ -91,7 +91,7 @@ func TestBackgroundFlag_StrippedFromArgsTart(t *testing.T) {
 	home := tartTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=tart", "--background", "shell", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
@@ -121,7 +121,7 @@ func TestEngineTart_NoDebugOnLinux(t *testing.T) {
 	home := tartTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=tart", "shell")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected error on non-darwin without --debug, got exit 0:\n%s", out)
@@ -143,7 +143,7 @@ func TestEngineTart_DebugMockOutput(t *testing.T) {
 	home := tartTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=tart", "--debug", "shell")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0 with --debug mock, got: %v\noutput: %s", err, out)
@@ -171,7 +171,7 @@ func TestEngineTart_DebugMockNoDocker(t *testing.T) {
 	home := tartTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=tart", "--debug", "shell")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
@@ -187,7 +187,7 @@ func TestEngineTart_DryRunContainsNixSource(t *testing.T) {
 	home := tartTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=tart", "shell", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
@@ -232,7 +232,7 @@ func TestEngineTart_DryRunContainsEnvVars(t *testing.T) {
 	home := tartTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=tart", "shell", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home, "TERM=xterm-256color")
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home, "TERM=xterm-256color")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)

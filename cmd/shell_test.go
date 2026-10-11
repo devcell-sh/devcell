@@ -8,11 +8,11 @@ import (
 
 func TestShellExecArgv_DefaultZsh(t *testing.T) {
 	argv := docker.BuildExecArgv(docker.ExecSpec{
-		ContainerName: "cell-myproject-0-run",
+		ContainerName: "devcell-myproject-0",
 		Binary:        "zsh",
 		TTY:           true,
 	})
-	want := []string{"docker", "exec", "-it", "cell-myproject-0-run", "zsh"}
+	want := []string{"docker", "exec", "-it", "devcell-myproject-0", "zsh"}
 	if len(argv) != len(want) {
 		t.Fatalf("got %v, want %v", argv, want)
 	}
@@ -25,12 +25,12 @@ func TestShellExecArgv_DefaultZsh(t *testing.T) {
 
 func TestShellExecArgv_CustomCommand(t *testing.T) {
 	argv := docker.BuildExecArgv(docker.ExecSpec{
-		ContainerName: "cell-myproject-0-run",
+		ContainerName: "devcell-myproject-0",
 		Binary:        "bash",
 		Args:          []string{"-c", "echo hello"},
 		TTY:           false,
 	})
-	want := []string{"docker", "exec", "cell-myproject-0-run", "bash", "-c", "echo hello"}
+	want := []string{"docker", "exec", "devcell-myproject-0", "bash", "-c", "echo hello"}
 	if len(argv) != len(want) {
 		t.Fatalf("got %v, want %v", argv, want)
 	}

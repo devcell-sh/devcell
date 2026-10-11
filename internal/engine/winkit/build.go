@@ -75,8 +75,8 @@ func buildConfig(c engine.Cell, g guest, windowsISO, virtioISO string, pr *ux.Ph
 		nixHome = os.Getenv("DEVCELL_NIXHOME")
 	}
 	opts := buildOpts(g, nixHome)
-	if c.Name != "" {
-		opts.Hostname = c.Name
+	if c.WorkspaceName != "" {
+		opts.Hostname = c.WorkspaceName
 	}
 	opts.Ports = allocateBuildPorts()
 	workDir := buildWorkDir(c.BaseDir)
@@ -271,8 +271,8 @@ func imagePath(home string, g guest, stack string, modules []string) string {
 func startOpts(c engine.Cell, g guest, sshPort, rdpPort, vncPort uint16) gowinkit.StartOpts {
 	return gowinkit.StartOpts{
 		Image:    imagePath(c.HostHome, g, c.Stack, c.Modules),
-		Name:     c.Name,
-		StateDir: InstanceDir(c.HostHome, c.Name),
+		Name:     c.WorkspaceName,
+		StateDir: InstanceDir(c.HostHome, c.WorkspaceName),
 		SSHPort:  sshPort,
 		RDPPort:  rdpPort,
 		VNCPort:  vncPort,

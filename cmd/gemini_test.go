@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// TestGemini_DefaultFlags verifies "cell gemini --dry-run" produces a docker
+// TestGemini_DefaultFlags verifies "devcell gemini --dry-run" produces a docker
 // run argv whose tail invokes the gemini binary with --yolo (auto-approve).
 // Mirrors TestCodex_NoOllama_NoOSSFlags / TestClaude_NoOllama_NoEnv shape.
 func TestGemini_DefaultFlags(t *testing.T) {
@@ -16,7 +16,7 @@ func TestGemini_DefaultFlags(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "gemini", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("gemini --dry-run failed: %v\noutput: %s", err, out)
@@ -39,7 +39,7 @@ func TestGemini_ForwardsUserArgs(t *testing.T) {
 	cmd := exec.Command(binaryPath, "gemini",
 		"--model=gemini-2.5-pro", "-p", "hi", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("gemini --dry-run failed: %v\noutput: %s", err, out)
@@ -62,7 +62,7 @@ func TestGemini_StripCellFlags(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "gemini", "--debug", "--ollama", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("gemini --debug --ollama --dry-run failed: %v\noutput: %s", err, out)
@@ -84,12 +84,12 @@ func TestGemini_StripCellFlags(t *testing.T) {
 	}
 }
 
-// TestGemini_RegisteredOnRoot verifies `cell --help` lists gemini alongside
+// TestGemini_RegisteredOnRoot verifies `devcell --help` lists gemini alongside
 // the other agent subcommands so users can discover it.
 func TestGemini_RegisteredOnRoot(t *testing.T) {
 	out, err := exec.Command(binaryPath, "--help").CombinedOutput()
 	if err != nil {
-		t.Fatalf("cell --help failed: %v\noutput: %s", err, out)
+		t.Fatalf("devcell --help failed: %v\noutput: %s", err, out)
 	}
 	if !strings.Contains(string(out), "gemini") {
 		t.Errorf("expected 'gemini' subcommand in --help output:\n%s", out)
@@ -123,7 +123,7 @@ func TestGemini_BinaryReportsVersion(t *testing.T) {
 
 // TestGemini_BinaryAcceptsYoloFlag verifies `--yolo` is in gemini's --help —
 // i.e. the auto-approve flag we hardcode in cmd/gemini.go is still
-// recognized by the version pinned in pkgsEdge. Without this, `cell gemini`
+// recognized by the version pinned in pkgsEdge. Without this, `devcell gemini`
 // would silently pass an unrecognized flag and gemini-cli would error or
 // (worse) ignore it and prompt for approval interactively.
 //

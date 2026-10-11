@@ -2,7 +2,7 @@
   "$id": "https://devcell.sh/schema/v0.0.0/devcell.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "devcell project configuration (.devcell.toml) and global defaults (~/.config/devcell/devcell.toml). Generated from internal/cfg.CellConfig; do not edit.",
+  "description": "devcell project configuration (devcell.toml) and global defaults (~/.config/devcell/devcell.toml). Generated from internal/cfg.CellConfig; do not edit.",
   "properties": {
     "aws": {
       "additionalProperties": false,
@@ -65,7 +65,7 @@
           "type": "boolean"
         },
         "hostname": {
-          "description": "override container hostname; default: computed \"cell-\u003cbasename\u003e-\u003cbunk\u003e\"; env: DEVCELL_HOSTNAME",
+          "description": "override container hostname; default: computed \"devcell-\u003ccellname\u003e\"; env: DEVCELL_HOSTNAME",
           "type": "string"
         },
         "image_tag": {
@@ -300,7 +300,7 @@
           "type": "integer"
         },
         "winkit_ssh_port": {
-          "description": "SSH port for winkit engine; default: allocated per bunk; env: DEVCELL_WINKIT_SSH_PORT",
+          "description": "SSH port for winkit engine; default: allocated per cell ID; env: DEVCELL_WINKIT_SSH_PORT",
           "type": "integer"
         },
         "winkit_windows_iso": {

@@ -4,7 +4,7 @@
 //
 // Design separation between the three ux primitives:
 //
-//   - Banner — header. One row. Identity (cell · project #bunk).
+//   - Banner — header. One row. Identity (cell · project #cellID).
 //   - KV     — structured info table. N rows of key/value pairs, debug-gated.
 //   - PhaseRunner — sequential step list. N rows of `✓ name [— detail] <elapsed>`.
 //

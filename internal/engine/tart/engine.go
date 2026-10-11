@@ -70,7 +70,7 @@ func newBuildParams(opts engine.BuildOpts) (buildParams, error) {
 		return buildParams{}, fmt.Errorf("--stage must be \"base\" or \"full\", got %q", stage)
 	}
 	return buildParams{
-		cellName:   opts.Cell.Name,
+		cellName:   opts.Cell.WorkspaceName,
 		hostHome:   opts.Cell.HostHome,
 		projectDir: opts.Cell.BaseDir,
 		stack:      opts.Cell.WithStack(opts.Stack).Stack,
@@ -169,7 +169,7 @@ func prepareHost(cellName, hostHome, stack string, force bool) error {
 func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	binary, defaultFlags, userArgs := opts.Binary, opts.DefaultFlags, opts.Args
 	cellCfg := opts.Cell.Config
-	baseDir, hostHome, cellName := opts.Cell.BaseDir, opts.Cell.HostHome, opts.Cell.Name
+	baseDir, hostHome, cellName := opts.Cell.BaseDir, opts.Cell.HostHome, opts.Cell.WorkspaceName
 	dryRun, background, debug := opts.DryRun, opts.Background, opts.Debug
 
 	if err := cfg.ExpandEnv(cellCfg.Env, os.LookupEnv, nil); err != nil {
@@ -593,7 +593,7 @@ func guestEnv(cellCfg cfg.CellConfig, cellName string) []string {
 		envs = append(envs, "TERM="+term)
 	}
 	return append(envs, cell.GuestEnv(cell.EnvInput{
-		CellName:  cellName,
+		WorkspaceName: cellName,
 		Git:       cellCfg.Git,
 		Timezone:  cellCfg.Cell.Timezone,
 		Locale:    cellCfg.Cell.Locale,

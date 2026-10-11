@@ -13,7 +13,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// `cell cleanup` — reap GC roots that no RUNNING container references.
+// `devcell cleanup` — reap GC roots that no RUNNING container references.
 // See CELL-334. Retention rule: "in use" = running (docker ps), not merely
 // existing. Roots of stopped cells are reaped; those cells rebuild via the
 // hydration gate (CELL-38) on next start.
@@ -24,7 +24,7 @@ var cleanupCmd = &cobra.Command{
 no RUNNING devcell container references.
 
 Only root symlinks (and their -meta files) are removed — the nix store itself
-is untouched. Run ` + "`cell build prune --pure`" + ` afterwards to garbage-collect
+is untouched. Run ` + "`devcell build prune --pure`" + ` afterwards to garbage-collect
 the store paths the reaped roots were anchoring.
 
 Roots of stopped cells are reaped too: a stopped cell rebuilds automatically

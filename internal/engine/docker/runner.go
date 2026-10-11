@@ -74,7 +74,7 @@ func UserImageTag() string {
 		return tag
 	}
 	if PerCellImage {
-		return "devcell-user:" + config.ResolveCellName(os.Getenv)
+		return "devcell-user:" + config.ResolveWorkspaceName(os.Getenv)
 	}
 	tag := Stack
 	if tag == "" {
@@ -276,7 +276,7 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 
 	// Labels for VNC lookup: filter by basedir+cellid without inspecting all containers
 	argv = append(argv, "--label", "devcell.basedir="+c.BaseDir)
-	argv = append(argv, "--label", "devcell.cellid="+c.Bunk)
+	argv = append(argv, "--label", "devcell.cellid="+c.CellID)
 	argv = append(argv, "--label", "devcell.config-hash="+cfg.ConfigHash(spec.CellCfg))
 	argv = append(argv, "--label", "devcell.stack="+spec.CellCfg.Cell.ResolvedStack())
 	lifecycle := spec.Lifecycle
@@ -292,7 +292,7 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	e("HOST_USER", c.HostUser)
 	e("HOME", "/home/"+c.HostUser)
 	e("TERM", os.Getenv("TERM"))
-	e("HISTFILE", "/home/"+c.HostUser+"/zsh_history_"+c.AppName)
+	e("HISTFILE", "/home/"+c.HostUser+"/zsh_history_"+c.CellName)
 	e("TMPDIR", "/home/"+c.HostUser+"/tmp")
 	e("CODEX_OSS_BASE_URL", envOrDefault("CODEX_OSS_BASE_URL", "http://host.docker.internal:1234/v1"))
 	e("DEVCELL_HOST_PROJECT_DIR", c.BaseDir)
@@ -388,9 +388,9 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	// Emitted after .env.devcell and the DEVCELL_* flags above so [env] can
 	// override any of them; ExtraEnv and InheritEnv below still win over it.
 	for _, kv := range cell.GuestEnv(cell.EnvInput{
-		CellName:  c.CellName,
-		AppName:   c.AppName,
-		Workspace: "/" + c.AppName,
+		WorkspaceName: c.WorkspaceName,
+		CellName:      c.CellName,
+		ProjectDir:    "/" + c.CellName,
 		Git:       spec.CellCfg.Git,
 		Timezone:  spec.CellCfg.Cell.Timezone,
 		Locale:    spec.CellCfg.Cell.Locale,
@@ -404,7 +404,7 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 
 	// Proxy env vars: HTTP(S)_PROXY, ALL_PROXY, NO_PROXY (both cases)
 	if spec.ProxyEnabled {
-		proxyURL := "http://" + ProxySidecarName(c.AppName) + ":3128"
+		proxyURL := "http://" + ProxySidecarName(c.CellName) + ":3128"
 		noProxy := "localhost,127.0.0.1,::1"
 		for _, k := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"} {
 			e(k, proxyURL)
@@ -432,8 +432,8 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 
 	// Standard volumes
 	v(c.BaseDir + ":" + c.BaseDir)
-	v(c.BaseDir + ":/" + c.AppName)
-	v(c.CellHome + ":/home/" + c.HostUser)
+	v(c.BaseDir + ":/" + c.CellName)
+	v(c.WorkspaceHome + ":/home/" + c.HostUser)
 	if !spec.ProxyEnabled {
 		v("/var/run/docker.sock:/var/run/docker.sock")
 	}
@@ -462,7 +462,7 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	// "Duplicate mount point" error.
 	stdMounts := map[string]bool{
 		c.BaseDir:              true,
-		"/" + c.AppName:        true,
+		"/" + c.CellName:        true,
 		"/home/" + c.HostUser:  true,
 		"/var/run/docker.sock": true,
 		"/home/" + c.HostUser + "/.claude/commands":        true,
@@ -512,8 +512,8 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 				argv = append(argv, "-e", k)
 			}
 		}
-		wgDir := filepath.Join(c.CellHome, ".wg")
-		argv = append(argv, "-v", wgDir+":/home/"+c.HostUser+"/.devcell/"+c.CellName+"/.wg:ro")
+		wgDir := filepath.Join(c.WorkspaceHome, ".wg")
+		argv = append(argv, "-v", wgDir+":/home/"+c.HostUser+"/.devcell/"+c.WorkspaceName+"/.wg:ro")
 	}
 
 	// In-memory secrets mount — Playwright MCP reads .secrets-playwright from here
@@ -521,7 +521,7 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 
 	// Network
 	if spec.ProxyEnabled {
-		argv = append(argv, "--network", InternalNetworkName(c.AppName))
+		argv = append(argv, "--network", InternalNetworkName(c.CellName))
 	} else {
 		argv = append(argv, "--network", "devcell-network")
 	}
@@ -535,7 +535,7 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	}
 
 	// Workdir
-	argv = append(argv, "--workdir", "/"+c.AppName)
+	argv = append(argv, "--workdir", "/"+c.CellName)
 
 	// Go-generated entrypoint: s6 activation + gosu drop to user + exec CMD.
 	// The init script is written to bootDir by Run() before docker run.

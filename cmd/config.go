@@ -20,9 +20,9 @@ var configCmd = &cobra.Command{
 
 var configMigrateCmd = &cobra.Command{
 	Use:   "migrate",
-	Short: "Rewrite deprecated keys in devcell.toml and .devcell.toml to the current syntax",
+	Short: "Rewrite deprecated keys in devcell config files",
 	Long: `Rewrites every deprecated key in the global config (~/.config/devcell/devcell.toml)
-and the project config (.devcell.toml) to its current spelling, in place.
+and the project configs (devcell.toml and .devcell.toml) to their current spelling, in place.
 Comments, ordering and unrelated lines are kept. A changed file is first
 copied to <file>.bak-<timestamp>.
 
@@ -51,8 +51,8 @@ func runConfigMigrate(cmd *cobra.Command, args []string) error {
 }
 
 // migrateConfigFiles rewrites the project and global config files to the
-// current syntax and prints one row per file. Shared by `cell config
-// migrate` and `cell init --upgrade`. The project file goes first: it is
+// current syntax and prints one row per file. Shared by `devcell config
+// migrate` and `devcell init --upgrade`. The project file goes first: it is
 // the one being worked on, and inside a cell the global file is often a
 // read-only bind mount, which is reported as a skip with a hint rather
 // than a failure. A file that fails for another reason is reported and
@@ -60,6 +60,7 @@ func runConfigMigrate(cmd *cobra.Command, args []string) error {
 // file still gets its turn.
 func migrateConfigFiles(c config.Config, dryRun bool) error {
 	paths := []string{
+		filepath.Join(c.BaseDir, "devcell.toml"),
 		filepath.Join(c.BaseDir, ".devcell.toml"),
 		filepath.Join(c.ConfigDir, "devcell.toml"),
 	}
@@ -88,7 +89,7 @@ func migrateConfigFiles(c config.Config, dryRun bool) error {
 			continue
 		case errors.Is(err, cfg.ErrReadOnly):
 			printChanges(res)
-			ux.Warn(fmt.Sprintf("%s — read-only here, %s, or run `cell init --upgrade` on the host to migrate it", name, migratedCopy(path, res, dryRun)))
+			ux.Warn(fmt.Sprintf("%s — read-only here, %s, or run `devcell init --upgrade` on the host to migrate it", name, migratedCopy(path, res, dryRun)))
 			continue
 		}
 		if err != nil {

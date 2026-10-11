@@ -38,29 +38,29 @@ type Engine interface {
 // Cell is the cell and project a verb acts on, as cmd/ resolved them from
 // flags, the environment and the merged config.
 type Cell struct {
-	Name      string         // cell name; the cell's home is ~/.devcell/<Name>
-	Home      string         // the cell's home on the host, ~/.devcell/<Name>
-	HostHome  string         // host user's home directory
-	HostUser  string         // host user's login name ($USER); docker creates the same user in the container
-	BaseDir   string         // project directory on the host
-	ConfigDir string         // global config dir: $XDG_CONFIG_HOME/devcell or ~/.config/devcell
-	BuildDir  string         // build context: <BaseDir>/.devcell when the project has a .devcell.toml, else ConfigDir
-	Config    cfg.CellConfig // merged config, [env] expanded, engine flags folded in
-	Stack     string         // resolved stack
-	Modules   []string       // resolved [cell] modules
-	VNCPort   string         // host port forwarded to the guest's VNC server
-	RDPPort   string         // host port forwarded to the guest's RDP server
+	WorkspaceName string         // workspace name; home is ~/.devcell/<WorkspaceName>
+	WorkspaceHome string         // the workspace's home on the host, ~/.devcell/<WorkspaceName>
+	HostHome      string         // host user's home directory
+	HostUser      string         // host user's login name ($USER); docker creates the same user in the container
+	BaseDir       string         // project directory on the host
+	ConfigDir     string         // global config dir: $XDG_CONFIG_HOME/devcell or ~/.config/devcell
+	BuildDir      string         // build context: <BaseDir>/.devcell when the project has a devcell.toml, else ConfigDir
+	Config        cfg.CellConfig // merged config, [env] expanded, engine flags folded in
+	Stack         string         // resolved stack
+	Modules       []string       // resolved [cell] modules
+	VNCPort       string         // host port forwarded to the guest's VNC server
+	RDPPort       string         // host port forwarded to the guest's RDP server
 
-	// Bunk tells apart cells opened on the same project from different
-	// terminal panes: DEVCELL_BUNK, else the tmux or zellij pane id.
-	Bunk string
-	// AppName is <project dir name>-<Bunk>. Docker names the container
-	// after it and mounts the project at /<AppName>.
-	AppName string
-	// ContainerName is the docker container name, cell-<AppName>-run.
+	// CellID tells apart cells opened on the same project from different
+	// terminal panes: DEVCELL_CELL_ID, else the tmux or zellij pane id.
+	CellID string
+	// CellName is <project dir name>-<CellID>. Docker names the container
+	// after it and mounts the project at /<CellName>.
+	CellName string
+	// ContainerName is the docker container name, devcell-<CellName>.
 	ContainerName string
 	// Hostname is the guest hostname when neither [cell] hostname nor
-	// DEVCELL_HOSTNAME sets one: cell-<AppName>.
+	// DEVCELL_HOSTNAME sets one: devcell-<CellName>.
 	Hostname string
 
 	// Guest is the OS image the engine boots, from --os, else [cell] os,
@@ -150,15 +150,15 @@ type InitOpts struct {
 	Cell Cell
 	// Stack is the --stack value, "" when it is not given. Tart and winkit
 	// use it instead of Cell.Stack; docker writes it to the new
-	// .devcell.toml, which defaults to the base stack.
+	// devcell.toml, which defaults to the base stack.
 	Stack string
 	Force bool // regenerate what an earlier Init created, e.g. SSH keys (--force)
 
 	// Modules is the explicit [cell] modules list written to a new
-	// .devcell.toml (--modules). Docker only.
+	// devcell.toml (--modules). Docker only.
 	Modules []string
 	// Yes answers yes to every prompt, e.g. re-initializing a project that
-	// already has a .devcell.toml (--yes). Docker only.
+	// already has a devcell.toml (--yes). Docker only.
 	Yes bool
 	// Update updates the nix flake inputs to their latest revisions instead
 	// of only locking them (--update; --force implies it). Docker only.

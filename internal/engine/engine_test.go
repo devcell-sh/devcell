@@ -367,7 +367,7 @@ func TestExitError(t *testing.T) {
 
 // A --stack override replaces the resolved stack; an absent one keeps it.
 func TestCell_WithStack(t *testing.T) {
-	c := engine.Cell{Name: "dev", Stack: "base"}
+	c := engine.Cell{WorkspaceName: "dev", Stack: "base"}
 	assert.Equal(t, "go", c.WithStack("go").Stack)
 	assert.Equal(t, "base", c.WithStack("").Stack)
 	assert.Equal(t, "base", c.Stack, "WithStack modified the receiver")

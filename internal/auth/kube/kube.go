@@ -313,7 +313,7 @@ func printTOMLSnippet(out io.Writer, opts Options) {
 	// kubeconfig points at the same string a host-side `kubectl` would use.
 	// Mount the FILE only, not the parent dir, so the admin kubeconfig sitting
 	// next to it stays invisible to the cell.
-	fmt.Fprintf(out, "Add to your .devcell.toml:\n\n")
+	fmt.Fprintf(out, "Add to your devcell.toml:\n\n")
 	fmt.Fprintf(out, "    [cell]\n")
 	fmt.Fprintf(out, "    volumes = [\"%s:%s:ro\"]\n\n", opts.Output, opts.Output)
 	fmt.Fprintf(out, "    [env]\n")

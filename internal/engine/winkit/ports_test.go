@@ -11,8 +11,8 @@ import (
 // states that precondition instead of failing when a cell is running — the
 // contention behaviour it would otherwise trip over is pinned deterministically
 // by TestAllocatePorts_SkipsPortsAlreadyTaken.
-func TestAllocatePorts_DefaultBunk(t *testing.T) {
-	// bunk "0" → prefix "0" → ports 022/050/089, all below 1024 → hoisted +10000
+func TestAllocatePorts_DefaultCellID(t *testing.T) {
+	// cellID "0" → prefix "0" → ports 022/050/089, all below 1024 → hoisted +10000
 	for _, p := range []string{"10022", "10050", "10089"} {
 		ln, err := net.Listen("tcp", "127.0.0.1:"+p)
 		if err != nil {
@@ -60,8 +60,8 @@ func TestAllocatePorts_SkipsPortsTheKernelWillNotBind(t *testing.T) {
 	assert.Equal(t, "10023", ports.SSHPort, "the search must take the next free port, not skip ahead")
 }
 
-func TestAllocatePorts_BunkFive(t *testing.T) {
-	// bunk "5" → prefix "5" → ports 522/550/589, all below 1024 → hoisted +10000
+func TestAllocatePorts_CellIDFive(t *testing.T) {
+	// cellID "5" → prefix "5" → ports 522/550/589, all below 1024 → hoisted +10000
 	ports := AllocatePorts("5", nil)
 	assert.Equal(t, "10522", ports.SSHPort)
 	assert.Equal(t, "10550", ports.VNCPort)
@@ -89,7 +89,7 @@ func TestAllocatePorts_LargePrefix(t *testing.T) {
 
 // QEMU addresses VNC as a display number (port-5900), so a port below 5900
 // cannot be expressed and winkit's uint16 subtraction wraps into garbage.
-// Prefixes such as "12" (bunk 12) or "23" land there; they are hoisted by
+// Prefixes such as "12" (cellID 12) or "23" land there; they are hoisted by
 // +10000, which keeps the last-digits-by-pane pattern.
 func TestAllocatePorts_VNCStaysInQemuDisplayRange(t *testing.T) {
 	for prefix, hoisted := range map[string]uint16{"12": 11250, "23": 12350, "58": 15850} {

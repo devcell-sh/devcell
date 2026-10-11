@@ -97,7 +97,7 @@ func TestLoadLayered_ProjectQemuKeyOverridesGlobalWinkitKey(t *testing.T) {
 	dir := t.TempDir()
 	global := writeTOML(t, dir, "global.toml", "[cell]\nwinkit_ssh_port = 2200\nwinkit_memory_gb = 4\n")
 	project := writeTOML(t, dir, "project.toml", "[cell]\nqemu_ssh_port = 3333\n")
-	c, err := cfg.LoadLayered(global, project, func(string) string { return "" })
+	c, err := cfg.LoadLayered(global, func(string) string { return "" }, project)
 	if err != nil {
 		t.Fatal(err)
 	}

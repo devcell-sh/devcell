@@ -288,8 +288,8 @@ func TestCell_Shell(t *testing.T) {
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		t.Fatalf("mkdir projectDir: %v", err)
 	}
-	// Scaffold .devcell.toml in projectDir so cell shell skips the interactive
-	// first-run picker (IsInitialized checks cwd for .devcell.toml).
+	// Scaffold devcell.toml in projectDir so cell shell skips the interactive
+	// first-run picker (IsInitialized checks cwd for devcell.toml).
 	if err := scaffold.Scaffold(projectDir, "", repoNixhome, false, "ultimate"); err != nil {
 		t.Fatalf("scaffold projectDir: %v", err)
 	}
@@ -356,7 +356,7 @@ func TestCell_Shell(t *testing.T) {
 		}
 	})
 
-	// hostname_from_toml verifies that `[cell] hostname = "..."` in .devcell.toml
+	// hostname_from_toml verifies that `[cell] hostname = "..."` in devcell.toml
 	// propagates to the container so that both $HOSTNAME (set by bash from the
 	// hostname syscall at shell startup) and `hostname` (the binary, reads
 	// /etc/hostname / uname()) inside the cell match the configured value.
@@ -371,20 +371,20 @@ func TestCell_Shell(t *testing.T) {
 
 		// Append the hostname setting under [cell]. The scaffolded TOML already
 		// contains a [cell] section, so add the key inside it.
-		tomlPath := filepath.Join(hostProjectDir, ".devcell.toml")
+		tomlPath := filepath.Join(hostProjectDir, "devcell.toml")
 		raw, err := os.ReadFile(tomlPath)
 		if err != nil {
-			t.Fatalf("read .devcell.toml: %v", err)
+			t.Fatalf("read devcell.toml: %v", err)
 		}
 		const wantHostname = "test-cell-host"
 		updated := strings.Replace(string(raw),
 			"[cell]\n",
 			"[cell]\nhostname = \""+wantHostname+"\"\n", 1)
 		if updated == string(raw) {
-			t.Fatalf("scaffolded .devcell.toml missing [cell] header; cannot inject hostname:\n%s", raw)
+			t.Fatalf("scaffolded devcell.toml missing [cell] header; cannot inject hostname:\n%s", raw)
 		}
 		if err := os.WriteFile(tomlPath, []byte(updated), 0o644); err != nil {
-			t.Fatalf("write .devcell.toml: %v", err)
+			t.Fatalf("write devcell.toml: %v", err)
 		}
 
 		home := cellShellHome(t)
@@ -548,8 +548,8 @@ func TestClaude_CodeVersion(t *testing.T) {
 			}
 
 			toml := fmt.Sprintf("[cell]\nstack = %q\n", stack)
-			if err := os.WriteFile(filepath.Join(projectDir, ".devcell.toml"), []byte(toml), 0o644); err != nil {
-				t.Fatalf("write .devcell.toml: %v", err)
+			if err := os.WriteFile(filepath.Join(projectDir, "devcell.toml"), []byte(toml), 0o644); err != nil {
+				t.Fatalf("write devcell.toml: %v", err)
 			}
 			if err := os.WriteFile(filepath.Join(homeDir, ".config", "devcell", "devcell.toml"), []byte("[cell]\n"), 0o644); err != nil {
 				t.Fatalf("write global config: %v", err)

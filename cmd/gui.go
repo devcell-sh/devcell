@@ -1,6 +1,6 @@
 package main
 
-// Shared implementation of `cell rdp` and `cell vnc`. Both find a running
+// Shared implementation of `devcell rdp` and `devcell vnc`. Both find a running
 // cell (docker container or winkit VM) that publishes the protocol's port
 // and hand its host port to a protocol-specific viewer: openRDP in rdp.go,
 // openVNC in vnc.go.
@@ -22,7 +22,7 @@ import (
 	"github.com/DimmKirr/devcell/internal/ux"
 )
 
-// guiCommand holds what `cell rdp` and `cell vnc` differ in beyond what
+// guiCommand holds what `devcell rdp` and `devcell vnc` differ in beyond what
 // gui.Protocol carries.
 type guiCommand struct {
 	qemuPort  func(winkit.VMPorts) uint16
@@ -41,8 +41,8 @@ var guiCommands = map[gui.Protocol]guiCommand{
 }
 
 // configLoader returns the project config. The shared code calls it only
-// where it needs the config: `cell vnc` passes config.LoadFromOS so the
-// config is read lazily, `cell rdp` (whose viewer always needs it) passes
+// where it needs the config: `devcell vnc` passes config.LoadFromOS so the
+// config is read lazily, `devcell rdp` (whose viewer always needs it) passes
 // the one it already loaded via loadedConfig.
 type configLoader func() (config.Config, error)
 
@@ -63,7 +63,7 @@ func cellEndpoint(p gui.Protocol, args []string, global bool, load configLoader)
 // namedCellEndpoint returns the endpoint of the named docker cell, looked up
 // with docker inspect.
 func namedCellEndpoint(p gui.Protocol, name string) (gui.CellEndpoint, error) {
-	containerName := "cell-" + name + "-run"
+	containerName := "devcell-" + name
 	out, err := exec.Command("docker", "inspect", containerName).Output()
 	if err != nil {
 		return gui.CellEndpoint{}, fmt.Errorf("container %q not found: %w", containerName, err)
@@ -90,7 +90,7 @@ func defaultCellEndpoint(p gui.Protocol, global bool, load configLoader) (gui.Ce
 	if err != nil {
 		return gui.CellEndpoint{}, err
 	}
-	guiDebug(p, "basedir: %s  bunk: %s", c.BaseDir, c.Bunk)
+	guiDebug(p, "basedir: %s  cellID: %s", c.BaseDir, c.CellID)
 
 	cells := collectCells(p, c, global)
 	guiDebug(p, "found %d cells: %v", len(cells), cells)
@@ -151,10 +151,10 @@ func collectCells(p gui.Protocol, c config.Config, global bool) map[string]gui.C
 	guiDebug(p, "collect%sCells: global=%v baseDir=%s", p.Label(), global, c.BaseDir)
 
 	if global {
-		guiDebug(p, "docker: scanning all cell- containers")
-		collectDockerCells(p, "cell-", result)
+		guiDebug(p, "docker: scanning all devcell- containers")
+		collectDockerCells(p, "devcell-", result)
 	} else {
-		projectPrefix := "cell-" + filepath.Base(c.BaseDir) + "-"
+		projectPrefix := "devcell-" + filepath.Base(c.BaseDir) + "-"
 		guiDebug(p, "docker: scanning with filter name=%s", projectPrefix)
 		collectDockerCells(p, projectPrefix, result)
 	}
@@ -178,7 +178,7 @@ func collectCells(p gui.Protocol, c config.Config, global bool) map[string]gui.C
 
 // collectTartCells discovers running Tart macOS VMs and adds them to result.
 // Tart VMs only serve VNC (macOS Screen Sharing on port 5900). When the
-// requested protocol is RDP, Tart cells are still included so `cell rdp`
+// requested protocol is RDP, Tart cells are still included so `devcell rdp`
 // can fall back to VNC.
 func collectTartCells(p gui.Protocol, result map[string]gui.CellEndpoint) {
 	user := os.Getenv("USER")

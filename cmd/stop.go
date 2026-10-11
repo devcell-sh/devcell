@@ -37,7 +37,7 @@ Windows VMs are shut down gracefully via SSH, then SIGTERM.`,
 
 		switch engineName {
 		case engine.Winkit:
-			return winkit.StopVM(ctx, c.HostHome, c.CellName)
+			return winkit.StopVM(ctx, c.HostHome, c.WorkspaceName)
 		default:
 			if !docker.ContainerRunning(ctx, c.ContainerName) {
 				fmt.Printf("No running container %s found\n", c.ContainerName)
@@ -48,10 +48,10 @@ Windows VMs are shut down gracefully via SSH, then SIGTERM.`,
 			}
 			fmt.Printf("Container %s stopped\n", c.ContainerName)
 
-			gwName := docker.ProxySidecarName(c.AppName)
-			if docker.ContainerRunning(ctx, gwName) {
-				_ = docker.RemoveProxySidecar(ctx, gwName)
-				_ = docker.RemoveNetwork(ctx, docker.InternalNetworkName(c.AppName))
+			gwName := docker.ProxySidecarName(c.CellName)
+			_ = docker.RemoveProxySidecar(ctx, gwName)
+			internalNet := docker.InternalNetworkName(c.CellName)
+			if err := docker.RemoveNetwork(ctx, internalNet); err == nil {
 				fmt.Printf("Gateway %s stopped\n", gwName)
 			}
 			return nil

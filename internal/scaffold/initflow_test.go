@@ -9,7 +9,7 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// initFlowConfig is the TOML structure for reading back .devcell.toml.
+// initFlowConfig is the TOML structure for reading back devcell.toml.
 type initFlowConfig struct {
 	Cell struct {
 		Stack   string   `toml:"stack"`
@@ -48,8 +48,8 @@ func TestInitFlow_NonInteractive_DefaultsToBase(t *testing.T) {
 	if len(result.Modules) != 0 {
 		t.Errorf("expected no modules, got %v", result.Modules)
 	}
-	// .devcell.toml should exist with stack = "base"
-	c := readToml(t, filepath.Join(dir, ".devcell.toml"))
+	// devcell.toml should exist with stack = "base"
+	c := readToml(t, filepath.Join(dir, "devcell.toml"))
 	if c.Cell.Stack != "base" {
 		t.Errorf("toml stack: expected base, got %q", c.Cell.Stack)
 	}
@@ -84,7 +84,7 @@ func TestInitFlow_CreatesAllBuildArtifacts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunInitFlow: %v", err)
 	}
-	for _, f := range []string{".devcell.toml"} {
+	for _, f := range []string{"devcell.toml"} {
 		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
 			t.Errorf("missing %s: %v", f, err)
 		}
@@ -174,7 +174,7 @@ func TestInitFlow_ReturnsBuildDir(t *testing.T) {
 }
 
 // TestInitFlow_ModulesWrittenToToml verifies that when ScaffoldWithModules
-// is called with explicit modules, they appear in .devcell.toml.
+// is called with explicit modules, they appear in devcell.toml.
 func TestInitFlow_ModulesWrittenToToml(t *testing.T) {
 	dir := t.TempDir()
 
@@ -205,7 +205,7 @@ func TestInitFlow_ModulesWrittenToToml(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ScaffoldWithModules: %v", err)
 	}
-	c := readToml(t, filepath.Join(dir, ".devcell.toml"))
+	c := readToml(t, filepath.Join(dir, "devcell.toml"))
 	if c.Cell.Stack != "base" {
 		t.Errorf("expected stack=base, got %q", c.Cell.Stack)
 	}
@@ -217,7 +217,7 @@ func TestInitFlow_ModulesWrittenToToml(t *testing.T) {
 	}
 }
 
-// TestInitFlow_ExplicitModules verifies --modules flag writes to .devcell.toml.
+// TestInitFlow_ExplicitModules verifies --modules flag writes to devcell.toml.
 func TestInitFlow_ExplicitModules(t *testing.T) {
 	dir := t.TempDir()
 	result, err := RunInitFlow(InitFlowOptions{
@@ -237,7 +237,7 @@ func TestInitFlow_ExplicitModules(t *testing.T) {
 		t.Fatalf("expected 3 modules in result, got %v", result.Modules)
 	}
 
-	c := readToml(t, filepath.Join(dir, ".devcell.toml"))
+	c := readToml(t, filepath.Join(dir, "devcell.toml"))
 	if c.Cell.Stack != "base" {
 		t.Errorf("toml stack: expected base, got %q", c.Cell.Stack)
 	}
@@ -323,7 +323,7 @@ func TestInitScenario_NewDirectory(t *testing.T) {
 	if len(result.Modules) != 0 {
 		t.Errorf("new dir: expected no modules, got %v", result.Modules)
 	}
-	c := readToml(t, filepath.Join(dir, ".devcell.toml"))
+	c := readToml(t, filepath.Join(dir, "devcell.toml"))
 	if c.Cell.Stack != "base" {
 		t.Errorf("new dir toml: expected stack=base, got %q", c.Cell.Stack)
 	}
@@ -362,7 +362,7 @@ func TestInitScenario_ExistingToml_Ultimate(t *testing.T) {
 	if result.Stack != "ultimate" {
 		t.Errorf("re-init: expected stack=ultimate, got %q", result.Stack)
 	}
-	c := readToml(t, filepath.Join(dir, ".devcell.toml"))
+	c := readToml(t, filepath.Join(dir, "devcell.toml"))
 	if c.Cell.Stack != "ultimate" {
 		t.Errorf("re-init toml: expected stack=ultimate, got %q", c.Cell.Stack)
 	}
@@ -407,7 +407,7 @@ func TestInitScenario_ExistingToml_BaseWithDesktopModule(t *testing.T) {
 		t.Errorf("expected modules=[desktop], got %v", result.Modules)
 	}
 
-	c := readToml(t, filepath.Join(dir, ".devcell.toml"))
+	c := readToml(t, filepath.Join(dir, "devcell.toml"))
 	if c.Cell.Stack != "base" {
 		t.Errorf("toml: expected stack=base, got %q", c.Cell.Stack)
 	}
@@ -441,7 +441,7 @@ func TestInitScenario_NewDirectory_ExplicitBase(t *testing.T) {
 		t.Errorf("expected stack=base, got %q", result.Stack)
 	}
 
-	c := readToml(t, filepath.Join(dir, ".devcell.toml"))
+	c := readToml(t, filepath.Join(dir, "devcell.toml"))
 	if c.Cell.Stack != "base" {
 		t.Errorf("toml: expected stack=base, got %q", c.Cell.Stack)
 	}

@@ -13,7 +13,7 @@ func TestFlagUsageError_KnownFlagShowsItsHelp(t *testing.T) {
 		"flag needs an argument: --engine",
 		"--engine string",
 		"execution engine",
-		"cell --help",
+		"devcell --help",
 	} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("message must contain %q, got:\n%s", want, msg)
@@ -31,7 +31,7 @@ func TestFlagUsageError_UnknownFlagOnlyPointsAtHelp(t *testing.T) {
 	if !strings.HasPrefix(msg, "unknown flag: --bogus") {
 		t.Errorf("message must start with the original error, got:\n%s", msg)
 	}
-	if !strings.Contains(msg, "cell build --help") {
+	if !strings.Contains(msg, "devcell build --help") {
 		t.Errorf("message must point at the subcommand's help, got:\n%s", msg)
 	}
 	if strings.Contains(msg, " string ") {

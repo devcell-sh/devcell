@@ -62,8 +62,8 @@ func engineCell(c config.Config, cellCfg cfg.CellConfig) engine.Cell {
 		cellCfg.Cell.WinkitWindowsISO = v
 	}
 	return engine.Cell{
-		Name:          c.CellName,
-		Home:          c.CellHome,
+		WorkspaceName: c.WorkspaceName,
+		WorkspaceHome: c.WorkspaceHome,
 		HostHome:      c.HostHome,
 		HostUser:      c.HostUser,
 		BaseDir:       c.BaseDir,
@@ -74,8 +74,8 @@ func engineCell(c config.Config, cellCfg cfg.CellConfig) engine.Cell {
 		Modules:       cellCfg.Cell.Modules,
 		VNCPort:       c.VNCPort,
 		RDPPort:       c.RDPPort,
-		Bunk:          c.Bunk,
-		AppName:       c.AppName,
+		CellID:        c.CellID,
+		CellName:      c.CellName,
 		ContainerName: c.ContainerName,
 		Hostname:      c.Hostname,
 		Guest:         cellGuest(cellCfg),

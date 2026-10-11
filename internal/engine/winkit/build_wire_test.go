@@ -276,7 +276,7 @@ func TestBuild_DiskSanityCheck_FailsWhenTooSmall(t *testing.T) {
 	})
 
 	cell := engine.Cell{
-		Name: "test-cell", HostHome: home, Stack: "base",
+		WorkspaceName: "test-cell", HostHome: home, Stack: "base",
 		Guest: engine.WindowsFull,
 	}
 	err := Engine{}.Build(context.Background(), engine.BuildOpts{Cell: cell})

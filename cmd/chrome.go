@@ -100,18 +100,18 @@ func runChrome(cmd *cobra.Command, args []string) error {
 
 	appName, urls := parseChromArgs(args)
 	if appName == "" {
-		appName = c.CellName
+		appName = c.WorkspaceName
 	}
 
-	chromeProfile := filepath.Join(c.CellHome, ".chrome", appName)
-	storageStatePath := filepath.Join(c.CellHome, ".playwright", "storage-state.json")
+	chromeProfile := filepath.Join(c.WorkspaceHome, ".chrome", appName)
+	storageStatePath := filepath.Join(c.WorkspaceHome, ".playwright", "storage-state.json")
 	// Parent dir must exist before openExtractAndClose's first write attempt
 	// (extractCookiesViaCDP -> os.WriteFile). Idempotent.
 	if err := os.MkdirAll(filepath.Dir(storageStatePath), 0700); err != nil {
 		return fmt.Errorf("create playwright dir: %w", err)
 	}
 
-	ux.Debugf("cell: %s, bunk: %s, appName: %s", c.CellName, c.Bunk, c.AppName)
+	ux.Debugf("devcell: %s, cellID: %s, cellName: %s", c.WorkspaceName, c.CellID, c.CellName)
 	ux.Debugf("chrome profile: %s", chromeProfile)
 	ux.Debugf("storage-state: %s", storageStatePath)
 

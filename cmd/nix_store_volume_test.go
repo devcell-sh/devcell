@@ -16,7 +16,7 @@ func TestNixStoreVolume_Mounted(t *testing.T) {
 			home := scaffoldedHome(t)
 			cmd := exec.Command(binaryPath, args...)
 			cmd.Dir = home
-			cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+			cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 			out, err := cmd.CombinedOutput()
 			if err != nil {
 				t.Fatalf("%s failed: %v\noutput: %s", strings.Join(args, " "), err, out)

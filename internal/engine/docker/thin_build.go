@@ -715,8 +715,8 @@ func isFlakeRef(s string) bool {
 
 // ── Builder container identity + slot reclaim ────────────────────────────────
 
-// ThinBuilderContainerName names the thin builder for one app
-// (`<project>-<bunk>`, the same key as `cell-<app>-run`). One fixed name for
+// ThinBuilderContainerName names the thin builder for one cell
+// (`<project>-<cellID>`, the same key as `devcell-<cell>`). One fixed name for
 // every project meant a build starting in project B force-removed — SIGKILLed,
 // exit 137 with no OOM anywhere — the build project A had in flight.
 func ThinBuilderContainerName(appName string) string {

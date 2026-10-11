@@ -22,7 +22,7 @@ var modulesListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List available modules (name, size, description, MCP servers)",
 	Long: `Lists every module from the DevCell catalog: each can be added to
-your .devcell.toml as:
+your devcell.toml as:
 
   [cell]
   modules = ["electronics", "yahoo-finance"]

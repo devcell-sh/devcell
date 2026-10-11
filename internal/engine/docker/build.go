@@ -184,7 +184,7 @@ func build(ctx context.Context, c engine.Cell, p buildParams) error {
 	coreImage := cellCfg.Nix.ResolvedImage()
 	tag := ResolveBuildTag(p.image, UserImageTagThin())
 	volumeName := ThinStoreVolume()
-	containerName := ThinBuilderContainerName(c.AppName)
+	containerName := ThinBuilderContainerName(c.CellName)
 
 	// ── Ensure core image exists for target platform ───────────────────────
 	targetPlatform := DockerPlatform(DetectArch())

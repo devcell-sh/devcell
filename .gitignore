@@ -33,8 +33,11 @@ test/results
 test/test/results
 test/results_archive
 .devcell
+devcell
 .devcell.toml
+devcell.toml
 !examples/*/.devcell.toml
+!examples/*/devcell.toml
 .gocache
 .gomodcache
 api/swagger/

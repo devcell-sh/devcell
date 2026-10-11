@@ -6,7 +6,7 @@ import (
 	"github.com/DimmKirr/devcell/internal/config"
 )
 
-// AllocatedPorts holds the bunk-derived port strings for SSH, VNC, and RDP.
+// AllocatedPorts holds the cell-ID-derived port strings for SSH, VNC, and RDP.
 type AllocatedPorts struct {
 	SSHPort string
 	VNCPort string
@@ -17,8 +17,8 @@ type AllocatedPorts struct {
 // (port - 5900), so lower ports cannot be expressed.
 const vncBasePort = 5900
 
-// AllocatePorts computes SSH, VNC, and RDP ports using the same bunk-based
-// scheme as the Docker runner. portPrefix is SESSION_PORT_PREFIX + bunk.
+// AllocatePorts computes SSH, VNC, and RDP ports using the same cell-ID-based
+// scheme as the Docker runner. portPrefix is SESSION_PORT_PREFIX + cellID.
 // The taken map (may be nil) lists ports already in use by other processes.
 func AllocatePorts(portPrefix string, taken map[int]struct{}) AllocatedPorts {
 	if taken == nil {

@@ -1,5 +1,5 @@
 #:schema https://devcell.sh/schema/v0.0.0/devcell.json
-# .devcell.toml — AWS infrastructure (Terraform + diagrams)
+# devcell.toml — AWS infrastructure (Terraform + diagrams)
 # DevCell project configuration. Optional global defaults: ~/.config/devcell/devcell.toml
 # Every option is listed below with its default. Uncomment what you need.
 
@@ -8,11 +8,11 @@
 # Base stack: base (minimal, default), dev (~3 GB seed), ultimate (~15 GB, every module).
 stack = "base"
 #
-# Addon modules composed on top of the stack (run `cell modules list`).
+# Addon modules composed on top of the stack (run `devcell modules list`).
 modules = ["infra", "graphics"]
 #
 # Nix packages from the stable channel: the default place for tools
-# (pre-commit, ruff, httpie and most CLIs are in nixpkgs). Run `cell build` after editing.
+# (pre-commit, ruff, httpie and most CLIs are in nixpkgs). Run `devcell build` after editing.
 packages = ["jq"]
 #
 # Image tag and registry overrides. Env: IMAGE_TAG, DEVCELL_REGISTRY.
@@ -39,8 +39,8 @@ packages = ["jq"]
 # timezone = "America/New_York"
 # locale = "en_US.UTF-8"
 #
-# Container hostname. Default: "cell-<project>-<bunk>". Env: DEVCELL_HOSTNAME.
-# hostname = "cell-myproject-1"
+# Container hostname. Default: "devcell-<cellname>". Env: DEVCELL_HOSTNAME.
+# hostname = "devcell-myproject-1"
 #
 # Fixed MAC address for the container NIC (locally administered: 2/6/A/E first nibble).
 # mac_address = "e2:2d:42:13:81:d2"
@@ -178,7 +178,7 @@ read_only = true
 
 # --- More packages ---
 # Newer nix channels, only when stable is too old. A package listed in more
-# than one channel comes from the newest. Run `cell build` after editing.
+# than one channel comes from the newest. Run `devcell build` after editing.
 # [packages.nix]
 # unstable = ["uv"]                # nixpkgs-unstable: recent, cached
 # edge = ["claude-code"]           # master: newest, may build from source
@@ -194,7 +194,7 @@ read_only = true
 
 # --- Network egress proxy (deny-by-default outbound) ---
 # Lock down outbound traffic: only allow-listed destinations are reachable.
-# Use `cell claude --solitary` for full lockdown (auto-enables proxy + strips
+# Use `devcell claude --solitary` for full lockdown (auto-enables proxy + strips
 # privileged, dangerous caps, docker socket, ports).
 # [network.proxy]
 # enabled = true

@@ -1,13 +1,13 @@
-Environment: Docker container (cell-{{.AppName}})
-Project: {{.AppDir}} (alias for {{.HostDir}} on host)
+Environment: Docker container (cell-{{.CellName}})
+Project: {{.ProjectDir}} (alias for {{.HostDir}} on host)
 Both paths are bind-mounted from the same host directory and resolve to the same filesystem. Working directory is
-{{.AppDir}}. If the user mentions host paths like {{.HostDir}}/..., they map to {{.AppDir}}/...
+{{.ProjectDir}}. If the user mentions host paths like {{.HostDir}}/..., they map to {{.ProjectDir}}/...
 
 ## Bind mounts
 
 | Container path                | Host path      | Access                                       |
 |-------------------------------|----------------|----------------------------------------------|
-| {{.AppDir}}                   | {{.HostDir}}   | read-write, project source                   |
+| {{.ProjectDir}}                   | {{.HostDir}}   | read-write, project source                   |
 | {{.HomeDir}}                  | —              | persistent home, survives container restarts |
 | {{.HomeDir}}/.claude/skills   | —              | read-write                                   |
 | {{.HomeDir}}/.claude/commands | —              | read-only, from host                         |

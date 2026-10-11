@@ -54,7 +54,7 @@ type GitIdentity struct {
 //
 //  1. Host env: any of GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, GIT_COMMITTER_NAME,
 //     GIT_COMMITTER_EMAIL is set.
-//  2. [git] in .devcell.toml: any field set. Committer fields default to the
+//  2. [git] in devcell.toml: any field set. Committer fields default to the
 //     author fields (cfg.GitSection.ResolvedCommitter*).
 //  3. Host `git config user.name` / `user.email`, via gitConfig. Used for both
 //     author and committer. A nil gitConfig skips this tier.
@@ -137,9 +137,9 @@ func FillOpenRouterKey(env map[string]string) error {
 // EnvInput is everything GuestEnv needs. Runtimes fill it from the loaded
 // cfg.CellConfig plus what they know about the guest.
 type EnvInput struct {
-	CellName  string              // DEVCELL_CELL_NAME; omitted when empty
-	AppName   string              // APP_NAME; omitted when empty
-	Workspace string              // WORKSPACE, the project path inside the guest; omitted when empty
+	WorkspaceName string              // DEVCELL_WORKSPACE (and deprecated DEVCELL_CELL_NAME); omitted when empty
+	CellName      string              // CELL_NAME (and deprecated APP_NAME); omitted when empty
+	ProjectDir    string              // DEVCELL_PROJECT_DIR (and deprecated WORKSPACE); omitted when empty
 	Git       cfg.GitSection      // [git]
 	Timezone  string              // [cell].timezone
 	Locale    string              // [cell].locale
@@ -153,7 +153,7 @@ type EnvInput struct {
 // this fixed order (later pairs win for duplicate keys, matching both
 // `docker run -e` and `env`):
 //
-//	APP_NAME, DEVCELL_CELL_NAME, DEVCELL_CONTAINER=1, IS_SANDBOX=1, DEVCELL_PROJECT_DIR, WORKSPACE
+//	CELL_NAME, APP_NAME, DEVCELL_WORKSPACE, DEVCELL_CELL_NAME, DEVCELL_CONTAINER=1, IS_SANDBOX=1, DEVCELL_PROJECT_DIR, WORKSPACE
 //	GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, GIT_COMMITTER_NAME, GIT_COMMITTER_EMAIL (ResolveGitIdentity)
 //	TZ:          [cell].timezone > host $TZ > omitted
 //	LANG/LC_ALL: [cell].locale > host $LANG (unless C or POSIX) > DefaultLocale
@@ -176,12 +176,14 @@ func GuestEnv(in EnvInput) []string {
 		}
 	}
 
-	addIfSet("APP_NAME", in.AppName)
-	addIfSet("DEVCELL_CELL_NAME", in.CellName)
+	addIfSet("CELL_NAME", in.CellName)
+	addIfSet("APP_NAME", in.CellName) // deprecated: use CELL_NAME instead
+	addIfSet("DEVCELL_WORKSPACE", in.WorkspaceName)
+	addIfSet("DEVCELL_CELL_NAME", in.WorkspaceName) // deprecated: use DEVCELL_WORKSPACE instead
 	add("DEVCELL_CONTAINER", "1")
 	add("IS_SANDBOX", "1") // deprecated: use DEVCELL_CONTAINER instead
-	addIfSet("DEVCELL_PROJECT_DIR", in.Workspace)
-	addIfSet("WORKSPACE", in.Workspace) // deprecated: use DEVCELL_PROJECT_DIR instead
+	addIfSet("DEVCELL_PROJECT_DIR", in.ProjectDir)
+	addIfSet("WORKSPACE", in.ProjectDir) // deprecated: use DEVCELL_PROJECT_DIR instead
 
 	id := ResolveGitIdentity(getenv, in.Git, in.GitConfig)
 	add("GIT_AUTHOR_NAME", id.AuthorName)

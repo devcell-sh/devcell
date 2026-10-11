@@ -21,7 +21,7 @@ task test
 | `internal/serve/` | HTTP API server (OpenAI Responses API, SSE). |
 | `internal/ux/` | Terminal UI: boot panel, spinners, tables. |
 | `test/` | Integration tests (testcontainers-go). See `docs/testing.md`. |
-| `examples/` | Example projects with `.devcell.toml` (tested in CI). |
+| `examples/` | Example projects with `devcell.toml` (tested in CI). |
 
 Nix home-manager modules live in the separate [devcell-sh/community-home](https://github.com/devcell-sh/home) repo.
 

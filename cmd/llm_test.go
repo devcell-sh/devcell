@@ -10,7 +10,7 @@ import (
 )
 
 // dryRunWithLLMConfig writes toml as the global devcell.toml and returns the
-// dry-run argv of `cell <args> --dry-run`.
+// dry-run argv of `devcell <args> --dry-run`.
 func dryRunWithLLMConfig(t *testing.T, toml string, args ...string) string {
 	t.Helper()
 	home := scaffoldedHome(t)
@@ -19,7 +19,7 @@ func dryRunWithLLMConfig(t *testing.T, toml string, args ...string) string {
 	}
 	cmd := exec.Command(binaryPath, append(args, "--dry-run")...)
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home, "OPENROUTER_API_KEY=sk-or-test-key")
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home, "OPENROUTER_API_KEY=sk-or-test-key")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("%v --dry-run failed: %v\noutput: %s", args, err, out)

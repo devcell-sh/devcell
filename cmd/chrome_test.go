@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// TestAuthChrome_HelpShowsAppNameArg verifies "cell auth chrome" shows the app-name positional arg.
+// TestAuthChrome_HelpShowsAppNameArg verifies "devcell auth chrome" shows the app-name positional arg.
 func TestAuthChrome_HelpShowsAppNameArg(t *testing.T) {
 	out, err := exec.Command(binaryPath, "auth", "chrome", "--help").CombinedOutput()
 	if err != nil {
@@ -26,7 +26,7 @@ func TestAuthChrome_HelpShowsExamples(t *testing.T) {
 	}
 	s := string(out)
 	for _, want := range []string{
-		"cell auth chrome tripit",
+		"devcell auth chrome tripit",
 		"--sync",
 		"--no-sync",
 	} {
@@ -68,7 +68,7 @@ func TestAuthChrome_FlagsRegistered(t *testing.T) {
 	}
 }
 
-// TestAuthChrome_ListedUnderAuth verifies "cell auth --help" lists the chrome subcommand.
+// TestAuthChrome_ListedUnderAuth verifies "devcell auth --help" lists the chrome subcommand.
 func TestAuthChrome_ListedUnderAuth(t *testing.T) {
 	out, err := exec.Command(binaryPath, "auth", "--help").CombinedOutput()
 	if err != nil {
@@ -83,7 +83,7 @@ func TestAuthChrome_ListedUnderAuth(t *testing.T) {
 	}
 }
 
-// TestRootChrome_Removed verifies "cell chrome" no longer exists as a root subcommand.
+// TestRootChrome_Removed verifies "devcell chrome" no longer exists as a root subcommand.
 func TestRootChrome_Removed(t *testing.T) {
 	out, _ := exec.Command(binaryPath, "--help").CombinedOutput()
 	s := string(out)
@@ -93,7 +93,7 @@ func TestRootChrome_Removed(t *testing.T) {
 	}
 }
 
-// TestRootLogin_Removed verifies "cell login" no longer exists.
+// TestRootLogin_Removed verifies "devcell login" no longer exists.
 func TestRootLogin_Removed(t *testing.T) {
 	out, _ := exec.Command(binaryPath, "--help").CombinedOutput()
 	s := string(out)

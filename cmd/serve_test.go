@@ -7,12 +7,12 @@ import (
 	"testing"
 )
 
-// TestServe_DryRun verifies "cell serve --dry-run" prints config without starting.
+// TestServe_DryRun verifies "devcell serve --dry-run" prints config without starting.
 func TestServe_DryRun(t *testing.T) {
 	home := scaffoldedHome(t)
 
 	cmd := exec.Command(binaryPath, "serve", "--dry-run")
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("serve --dry-run failed: %v\noutput: %s", err, out)
@@ -24,12 +24,12 @@ func TestServe_DryRun(t *testing.T) {
 	}
 }
 
-// TestServe_PortFlag verifies "cell serve --port 9090 --dry-run" shows configured port.
+// TestServe_PortFlag verifies "devcell serve --port 9090 --dry-run" shows configured port.
 func TestServe_PortFlag(t *testing.T) {
 	home := scaffoldedHome(t)
 
 	cmd := exec.Command(binaryPath, "serve", "--port", "9090", "--dry-run")
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("serve --port 9090 --dry-run failed: %v\noutput: %s", err, out)
@@ -46,7 +46,7 @@ func TestServe_DryRun_ShowsAPIKey(t *testing.T) {
 	home := scaffoldedHome(t)
 
 	cmd := exec.Command(binaryPath, "serve", "--dry-run")
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home, "DEVCELL_API_KEY=test-secret-123")
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home, "DEVCELL_API_KEY=test-secret-123")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("serve --dry-run failed: %v\noutput: %s", err, out)
@@ -69,7 +69,7 @@ func TestServe_DryRun_GeneratesKeyWhenUnset(t *testing.T) {
 			env = append(env, e)
 		}
 	}
-	env = append(env, "DEVCELL_BUNK=1", "HOME="+home)
+	env = append(env, "DEVCELL_CELL_ID=1", "HOME="+home)
 
 	cmd := exec.Command(binaryPath, "serve", "--dry-run")
 	cmd.Env = env

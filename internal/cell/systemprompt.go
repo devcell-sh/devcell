@@ -34,8 +34,8 @@ type volumeMount struct {
 }
 
 type contextData struct {
-	AppName   string
-	AppDir    string
+	CellName  string
+	ProjectDir string
 	HostDir   string
 	HomeDir   string
 	HostHome  string
@@ -70,8 +70,8 @@ func ContainerContext(c config.Config, cellCfg cfg.CellConfig) string {
 	}
 
 	data := contextData{
-		AppName:   c.AppName,
-		AppDir:    "/" + c.AppName,
+		CellName:   c.CellName,
+		ProjectDir: "/" + c.CellName,
 		HostDir:   c.BaseDir,
 		HomeDir:   "/home/" + c.HostUser,
 		HostHome:  c.HostHome,

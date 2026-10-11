@@ -262,10 +262,12 @@ func TestGuestEnv_Locale(t *testing.T) {
 }
 
 func TestGuestEnv_CellIdentity(t *testing.T) {
-	env := cell.GuestEnv(cell.EnvInput{CellName: "bunkhouse", AppName: "proj-3", Workspace: "/proj-3"})
-	wantEnv(t, env, "DEVCELL_CELL_NAME", "bunkhouse")
-	wantEnv(t, env, "APP_NAME", "proj-3")
-	wantEnv(t, env, "WORKSPACE", "/proj-3")
+	env := cell.GuestEnv(cell.EnvInput{WorkspaceName: "bunkhouse", CellName: "proj-3", ProjectDir: "/proj-3"})
+	wantEnv(t, env, "CELL_NAME", "proj-3")
+	wantEnv(t, env, "APP_NAME", "proj-3") // deprecated alias
+	wantEnv(t, env, "DEVCELL_WORKSPACE", "bunkhouse")
+	wantEnv(t, env, "DEVCELL_CELL_NAME", "bunkhouse") // deprecated alias
+	wantEnv(t, env, "WORKSPACE", "/proj-3") // deprecated alias
 	wantEnv(t, env, "IS_SANDBOX", "1")
 	wantEnv(t, env, "DEVCELL_PROJECT_DIR", "/proj-3")
 	wantEnv(t, env, "DEVCELL_CONTAINER", "1")
@@ -273,8 +275,10 @@ func TestGuestEnv_CellIdentity(t *testing.T) {
 
 func TestGuestEnv_EmptyIdentityFieldsOmitted(t *testing.T) {
 	env := cell.GuestEnv(cell.EnvInput{})
-	wantNoEnv(t, env, "DEVCELL_CELL_NAME")
+	wantNoEnv(t, env, "CELL_NAME")
 	wantNoEnv(t, env, "APP_NAME")
+	wantNoEnv(t, env, "DEVCELL_WORKSPACE")
+	wantNoEnv(t, env, "DEVCELL_CELL_NAME")
 	wantNoEnv(t, env, "WORKSPACE")
 	wantEnv(t, env, "IS_SANDBOX", "1")
 	wantNoEnv(t, env, "DEVCELL_PROJECT_DIR")
@@ -303,9 +307,9 @@ func TestGuestEnv_MisePassthrough(t *testing.T) {
 
 func TestGuestEnv_DeterministicOrder(t *testing.T) {
 	in := cell.EnvInput{
-		CellName:  "main",
-		AppName:   "proj-1",
-		Workspace: "/proj-1",
+		WorkspaceName: "main",
+		CellName:      "proj-1",
+		ProjectDir:    "/proj-1",
 		Git:       cfg.GitSection{AuthorName: "Ada", AuthorEmail: "ada@example.com"},
 		Timezone:  "UTC",
 		Locale:    "en_GB.UTF-8",
@@ -314,7 +318,9 @@ func TestGuestEnv_DeterministicOrder(t *testing.T) {
 		Getenv:    envMap(nil),
 	}
 	want := []string{
+		"CELL_NAME=proj-1",
 		"APP_NAME=proj-1",
+		"DEVCELL_WORKSPACE=main",
 		"DEVCELL_CELL_NAME=main",
 		"DEVCELL_CONTAINER=1",
 		"IS_SANDBOX=1",

@@ -66,14 +66,14 @@ func scaffoldFiles(modelsSnippet string, withNixhome bool, stack string, modules
 // stack is a stack name (e.g. "go"), modules is a list of module names,
 // ver is the version tag, nixhomePath overrides the input URL to path:./nixhome.
 // nixPkgs adds arbitrary nixpkgs packages, prioritized per channel (user override semantics).
-// mcpEnabled lists MCP server names to enable (from [mcp] enabled in .devcell.toml);
+// mcpEnabled lists MCP server names to enable (from [mcp] enabled in devcell.toml);
 // each emits devcell.managedMcp.servers."<name>".enabled = true; in the flake.
 func GenerateFlakeNix(stack string, modules []string, ver string, withNixhome bool, nixPkgs ...cfg.NixPackages) string {
 	return generateFlakeNixFull(stack, modules, ver, withNixhome, nil, nixPkgs...)
 }
 
 // GenerateFlakeNixWithMcp is like GenerateFlakeNix but also emits MCP server
-// enablement lines from [mcp] enabled in .devcell.toml.
+// enablement lines from [mcp] enabled in devcell.toml.
 func GenerateFlakeNixWithMcp(stack string, modules []string, ver string, withNixhome bool, mcpEnabled []string, nixPkgs ...cfg.NixPackages) string {
 	return generateFlakeNixFull(stack, modules, ver, withNixhome, mcpEnabled, nixPkgs...)
 }
@@ -139,7 +139,7 @@ func generateFlakeNixFull(stack string, modules []string, ver string, withNixhom
 	// is kept for API compatibility but ignored.
 
 	return fmt.Sprintf(`{
-  description = "DevCell user stack — customise and run 'cell build'";
+  description = "DevCell user stack — customise and run 'devcell build'";
 
   # Follows main branch by default. To pin a specific release:
   #   inputs.devcell.url = "github:devcell-sh/home/v1.0.0";
@@ -500,7 +500,7 @@ func copyDirSkipping(src, dst string, skip ...string) error {
 	})
 }
 
-// Scaffold writes .devcell.toml to dir (project root) and build artifacts
+// Scaffold writes devcell.toml to dir (project root) and build artifacts
 // (flake.nix, starship.toml) to dir/.devcell/ (build context, gitignored).
 // ScaffoldWithModules is like Scaffold but also writes the selected modules list.
 func ScaffoldWithModules(dir string, modelsSnippet string, nixhomePath string, force bool, stack string, modules []string) error {
@@ -533,12 +533,12 @@ func doScaffold(dir string, modelsSnippet string, nixhomePath string, force bool
 	_, nixhomeStat := os.Stat(filepath.Join(buildDir, "nixhome"))
 	withNixhome := nixhomeStat == nil
 
-	// Write .devcell.toml to project root, build artifacts to .devcell/.
+	// Write devcell.toml to project root, build artifacts to .devcell/.
 	for _, f := range scaffoldFiles(modelsSnippet, withNixhome, stk, modules) {
 		var dest string
 		if f.name == "devcell.toml" {
-			// Config file → project root as .devcell.toml (dot-prefixed)
-			dest = filepath.Join(dir, ".devcell.toml")
+			// Config file → project root as devcell.toml (visible)
+			dest = filepath.Join(dir, "devcell.toml")
 		} else {
 			// Build artifacts → .devcell/ subdir
 			dest = filepath.Join(buildDir, f.name)
@@ -574,8 +574,11 @@ func statErr(path string) error {
 	return err
 }
 
-// IsInitialized returns true when .devcell.toml exists in dir.
+// IsInitialized returns true when devcell.toml or .devcell.toml exists in dir.
 func IsInitialized(dir string) bool {
+	if _, err := os.Stat(filepath.Join(dir, "devcell.toml")); err == nil {
+		return true
+	}
 	_, err := os.Stat(filepath.Join(dir, ".devcell.toml"))
 	return err == nil
 }

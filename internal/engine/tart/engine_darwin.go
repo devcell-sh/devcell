@@ -29,7 +29,7 @@ const (
 // the VM. opts.Stack overrides opts.Cell.Stack; opts.Force replaces an
 // existing keypair.
 func (Engine) Init(_ context.Context, opts engine.InitOpts) error {
-	return prepareHost(opts.Cell.Name, opts.Cell.HostHome, opts.Cell.WithStack(opts.Stack).Stack, opts.Force)
+	return prepareHost(opts.Cell.WorkspaceName, opts.Cell.HostHome, opts.Cell.WithStack(opts.Stack).Stack, opts.Force)
 }
 
 // build creates a fully provisioned macOS VM template from an OCI image.

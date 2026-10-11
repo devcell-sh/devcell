@@ -2,7 +2,7 @@
 
 package main
 
-// Integration diagnostics for the `cell <agent> --os macos` (tart) path.
+// Integration diagnostics for the `devcell <agent> --os macos` (tart) path.
 //
 // Run on a Mac (Apple Silicon):
 //
@@ -16,7 +16,7 @@ package main
 //
 // The expensive VM stages (tart clone / boot / provision) are NOT run here;
 // this covers the host-side stages that gate the auto-build, ending with the
-// platform preflight that `cell build --engine=tart` runs first.
+// platform preflight that `devcell build --engine=tart` runs first.
 
 import (
 	"bytes"
@@ -74,7 +74,7 @@ func TestTartDarwinIntegration(t *testing.T) {
 	// Reproduces the first phase of the tart auto-build
 	// (internal/engine/tart/engine_darwin.go "Platform compatibility check"), which fails
 	// when a nixhome module pulls in a Linux-only package (e.g. CELL: the
-	// vm module's virtiofsd broke `cell claude --os macos`).
+	// vm module's virtiofsd broke `devcell claude --os macos`).
 	t.Run("platform-preflight", func(t *testing.T) {
 		resultsDir := testutil.TestResultsDir(t, nil)
 		requireBinary(t, "nix")

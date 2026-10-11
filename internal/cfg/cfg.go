@@ -42,7 +42,7 @@ type CellSection struct {
 	VagrantBox       string            `toml:"vagrant_box"`             // retired vagrant engine; parsed only so the deprecation warning fires
 	KVM              *bool             `toml:"kvm"`                     // pass the daemon host's /dev/kvm into the container so QEMU gets hardware accel instead of TCG; default: false; env: DEVCELL_KVM
 	PerCellImage     *bool             `toml:"per_cell_image"`          // tag user image per cell instead of per stack; default: false
-	Hostname         string            `toml:"hostname"`                // override container hostname; default: computed "cell-<basename>-<bunk>"; env: DEVCELL_HOSTNAME
+	Hostname         string            `toml:"hostname"`                // override container hostname; default: computed "devcell-<cellname>"; env: DEVCELL_HOSTNAME
 	MacAddress       string            `toml:"mac_address"`             // MAC for the container's NIC (XX:XX:XX:XX:XX:XX); pinned across restarts for infra-side identity persistence. Honored on user-defined bridge networks (devcell uses --network devcell-network). Empty → docker auto-assigns a random MAC per launch.
 	Thin             *bool             `toml:"thin"`                    // thin image mode; default: true; disable with thin=false or DEVCELL_THIN=0
 	StaleWarning     *bool             `toml:"stale_warning"`           // CELL-391 "cell is behind — parallel reality" nudge at start; default: true; env: DEVCELL_STALE_WARN
@@ -52,7 +52,7 @@ type CellSection struct {
 	TartSSHUser      string            `toml:"tart_ssh_user"`           // SSH user for tart engine; default: "admin"; env: DEVCELL_TART_SSH_USER
 	TartSSHKey       string            `toml:"tart_ssh_key"`            // path to SSH private key for tart; env: DEVCELL_TART_SSH_KEY
 	TartOCIImage     string            `toml:"tart_oci_image"`          // OCI base image for tart VMs; default: DefaultTartOCIImage; env: DEVCELL_TART_OCI_IMAGE
-	WinkitSSHPort    int               `toml:"winkit_ssh_port"`         // SSH port for winkit engine; default: allocated per bunk; env: DEVCELL_WINKIT_SSH_PORT
+	WinkitSSHPort    int               `toml:"winkit_ssh_port"`         // SSH port for winkit engine; default: allocated per cell ID; env: DEVCELL_WINKIT_SSH_PORT
 	WinkitWindowsISO string            `toml:"winkit_windows_iso"`      // path to Windows ARM64 ISO for winkit engine; env: DEVCELL_WINKIT_WINDOWS_ISO
 	WinkitCPUs       int               `toml:"winkit_cpus"`             // winkit VM vCPUs; default: 4; env: DEVCELL_WINKIT_CPUS
 	WinkitMemoryGB   int               `toml:"winkit_memory_gb"`        // winkit VM RAM in GB; default: 4; env: DEVCELL_WINKIT_MEMORY_GB
@@ -196,7 +196,7 @@ func (c CellSection) ResolvedTartOCIImage() string {
 
 // ResolvedWinkitSSHPort returns the effective winkit SSH port:
 // DEVCELL_WINKIT_SSH_PORT > toml > default 2222. The winkit engine only
-// uses it when one of them is set; otherwise it allocates a port per bunk.
+// uses it when one of them is set; otherwise it allocates a port per cell ID.
 func (c CellSection) ResolvedWinkitSSHPort() int {
 	if p := atoiOr(Getenv("DEVCELL_WINKIT_SSH_PORT"), 0); p > 0 {
 		return p
@@ -338,7 +338,7 @@ func (c CellSection) DescribeModulesSource() string {
 
 // ResolvedHostname returns the effective container hostname.
 // Precedence: DEVCELL_HOSTNAME env > [cell] hostname in TOML > computed default
-// (typically "cell-<basename>-<bunk>" assembled by config.Load).
+// (typically "devcell-<cellname>" assembled by config.Load).
 func (c CellSection) ResolvedHostname(computed string) string {
 	if v := os.Getenv("DEVCELL_HOSTNAME"); v != "" {
 		return v
@@ -1605,17 +1605,20 @@ func ApplyEnv(c *CellConfig, getenv func(string) string) {
 }
 
 // LoadLayered loads global + project files, merges them, then applies env overrides.
-// Returns an error if either file exists but has a parse error (missing files are fine).
-func LoadLayered(globalPath, projectPath string, getenv func(string) string) (CellConfig, error) {
-	global, err := LoadFile(globalPath)
+// Multiple project paths are merged left-to-right: each successive layer wins.
+// Returns an error if any file exists but has a parse error (missing files are fine).
+func LoadLayered(globalPath string, getenv func(string) string, projectPaths ...string) (CellConfig, error) {
+	merged, err := LoadFile(globalPath)
 	if err != nil {
 		return CellConfig{}, fmt.Errorf("parsing %s: %w", globalPath, err)
 	}
-	project, err := LoadFile(projectPath)
-	if err != nil {
-		return CellConfig{}, fmt.Errorf("parsing %s: %w", projectPath, err)
+	for _, pp := range projectPaths {
+		layer, err := LoadFile(pp)
+		if err != nil {
+			return CellConfig{}, fmt.Errorf("parsing %s: %w", pp, err)
+		}
+		merged = Merge(merged, layer)
 	}
-	merged := Merge(global, project)
 	ApplyEnv(&merged, getenv)
 	// CELL-331: [a,b] and [b,a] must resolve to the same image tag and
 	// home-manager closure regardless of which layer contributed what.
@@ -1623,12 +1626,30 @@ func LoadLayered(globalPath, projectPath string, getenv func(string) string) (Ce
 	return merged, nil
 }
 
+// resolveProjectConfigs returns existing project config files in merge order.
+// devcell.toml is loaded first, .devcell.toml merges on top (wins on conflicts).
+// Both are valid; neither is deprecated.
+func resolveProjectConfigs(cwd string) []string {
+	var paths []string
+	p := filepath.Join(cwd, "devcell.toml")
+	if _, err := os.Stat(p); err == nil {
+		paths = append(paths, p)
+	}
+	p = filepath.Join(cwd, ".devcell.toml")
+	if _, err := os.Stat(p); err == nil {
+		paths = append(paths, p)
+	}
+	return paths
+}
+
 // LoadFromOSWithDirs loads the layered config using explicit directories and os.Getenv.
+// Both devcell.toml and .devcell.toml are valid project configs. When both
+// exist, devcell.toml loads first and .devcell.toml merges on top (wins).
 // Returns an error if a config file exists but has a parse error.
 func LoadFromOSWithDirs(configDir, cwd string) (CellConfig, error) {
 	globalPath := configDir + "/devcell.toml"
-	projectPath := cwd + "/.devcell.toml"
-	return LoadLayered(globalPath, projectPath, os.Getenv)
+	projectPaths := resolveProjectConfigs(cwd)
+	return LoadLayered(globalPath, os.Getenv, projectPaths...)
 }
 
 // LoadFromOS loads the layered config using real XDG paths and os.Getenv.
@@ -1868,6 +1889,11 @@ func SanitizeForSolitary(c *CellConfig) []string {
 
 	hostNet := false
 	c.Network.Proxy.AllowHostNetwork = &hostNet
+
+	if len(c.Network.Proxy.Presets) == 0 {
+		c.Network.Proxy.Presets = []string{"claude", "github", "npm", "pypi", "go", "cargo", "nix", "devcell"}
+		stripped = append(stripped, "[network.proxy] presets defaulted to claude+github+registries+devcell")
+	}
 
 	return stripped
 }

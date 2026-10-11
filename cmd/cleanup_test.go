@@ -2,7 +2,7 @@ package main
 
 import "testing"
 
-// CELL-334: `cell cleanup` — reap GC roots no RUNNING container references.
+// CELL-334: `devcell cleanup` — reap GC roots no RUNNING container references.
 
 func TestCleanupCmd_RegisteredOnRoot(t *testing.T) {
 	for _, c := range rootCmd.Commands() {
@@ -10,7 +10,7 @@ func TestCleanupCmd_RegisteredOnRoot(t *testing.T) {
 			return
 		}
 	}
-	t.Fatal("`cell cleanup` command not registered on root")
+	t.Fatal("`devcell cleanup` command not registered on root")
 }
 
 func TestCleanupCmd_YesFlagExists(t *testing.T) {
@@ -19,7 +19,7 @@ func TestCleanupCmd_YesFlagExists(t *testing.T) {
 	}
 }
 
-// CELL-390: `cell claude --auto-cleanup` (etc.) opts into running the
+// CELL-390: `devcell claude --auto-cleanup` (etc.) opts into running the
 // CELL-334 reaper at cell start. The flag is devcell's, not the agent's —
 // it must never be forwarded to the inner binary.
 func TestStripCellFlags_StripsAutoCleanup(t *testing.T) {

@@ -81,8 +81,8 @@ func TestPlainTextFlagInHelp(t *testing.T) {
 }
 
 // scaffoldedHome creates a temp HOME with global devcell.toml and a project-level
-// .devcell.toml so the CLI skips the first-run interactive prompt.
-// Returns home path. The home dir doubles as a project root (has .devcell.toml)
+// devcell.toml so the CLI skips the first-run interactive prompt.
+// Returns home path. The home dir doubles as a project root (has devcell.toml)
 // — callers that run agent subcommands must set cmd.Dir = home.
 func scaffoldedHome(t *testing.T) string {
 	t.Helper()
@@ -96,20 +96,20 @@ func scaffoldedHome(t *testing.T) string {
 		t.Fatal(err)
 	}
 	// Project-level config (checked by scaffold.IsInitialized via cwd)
-	if err := os.WriteFile(home+"/.devcell.toml", []byte("[cell]\n"), 0644); err != nil {
+	if err := os.WriteFile(home+"/devcell.toml", []byte("[cell]\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	return home
 }
 
-// hermeticDryRun runs `cell <args...> --dry-run` in a fresh project whose
-// .devcell.toml is projectTOML and whose only git config is gitconfig. The
+// hermeticDryRun runs `devcell <args...> --dry-run` in a fresh project whose
+// devcell.toml is projectTOML and whose only git config is gitconfig. The
 // developer's own GIT_*, locale, timezone, cell name and XDG config dir are
 // stripped from the environment so they cannot leak into the guest env.
 func hermeticDryRun(t *testing.T, projectTOML, gitconfig string, extraEnv []string, args ...string) string {
 	t.Helper()
 	home := scaffoldedHome(t)
-	if err := os.WriteFile(home+"/.devcell.toml", []byte(projectTOML), 0644); err != nil {
+	if err := os.WriteFile(home+"/devcell.toml", []byte(projectTOML), 0644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(home+"/.gitconfig", []byte(gitconfig), 0644); err != nil {
@@ -125,14 +125,14 @@ func hermeticDryRun(t *testing.T, projectTOML, gitconfig string, extraEnv []stri
 		}
 		env = append(env, kv)
 	}
-	env = append(env, "HOME="+home, "DEVCELL_BUNK=1",
+	env = append(env, "HOME="+home, "DEVCELL_CELL_ID=1",
 		"GIT_CONFIG_GLOBAL="+home+"/.gitconfig", "GIT_CONFIG_NOSYSTEM=1")
 	cmd := exec.Command(binaryPath, append(args, "--dry-run")...)
 	cmd.Dir = home
 	cmd.Env = append(env, extraEnv...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("cell %v --dry-run: %v\noutput: %s", args, err, out)
+		t.Fatalf("devcell %v --dry-run: %v\noutput: %s", args, err, out)
 	}
 	return string(out)
 }
@@ -221,7 +221,7 @@ func TestPlainTextNoSpinnerChars(t *testing.T) {
 	cmd := exec.Command(binaryPath, "--plain-text", "shell", "--dry-run")
 	cmd.Dir = home
 	cmd.Env = append(os.Environ(),
-		"DEVCELL_BUNK=1",
+		"DEVCELL_CELL_ID=1",
 		"HOME="+home,
 	)
 	out, _ := cmd.CombinedOutput()
@@ -241,7 +241,7 @@ func TestDebugNoSpinnerChars(t *testing.T) {
 	cmd := exec.Command(binaryPath, "--debug", "shell", "--dry-run")
 	cmd.Dir = home
 	cmd.Env = append(os.Environ(),
-		"DEVCELL_BUNK=1",
+		"DEVCELL_CELL_ID=1",
 		"HOME="+home,
 	)
 	out, _ := cmd.CombinedOutput()

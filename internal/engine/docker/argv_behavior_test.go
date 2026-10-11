@@ -32,8 +32,8 @@ func TestScenarioA_ContainerNameAndVNC(t *testing.T) {
 	argv := buildBehaviourArgv("/tmp/myproject", []string{"TMUX_PANE", "%3"},
 		"claude", []string{"--dangerously-skip-permissions"}, nil, guiCfg)
 
-	if !hasConsecutive(argv, "--name", "cell-myproject-3-run") {
-		t.Errorf("expected --name cell-myproject-3-run: %v", argv)
+	if !hasConsecutive(argv, "--name", "devcell-myproject-3") {
+		t.Errorf("expected --name devcell-myproject-3: %v", argv)
 	}
 	if !hasConsecutive(argv, "-p", "0.0.0.0:350:5900") {
 		t.Errorf("expected -p 0.0.0.0:350:5900: %v", argv)
@@ -61,23 +61,23 @@ func TestScenarioB_TwoPanesNamesAndPortsDiffer(t *testing.T) {
 	}
 }
 
-// Scenario C: no tmux env vars → AppName=myproject-0
+// Scenario C: no tmux env vars → CellName=myproject-0
 func TestScenarioC_NoTmux(t *testing.T) {
 	argv := buildBehaviourArgv("/tmp/myproject", nil,
 		"claude", nil, nil, cfg.CellConfig{})
 	name := findFlagVal(argv, "--name")
-	if name != "cell-myproject-0-run" {
-		t.Errorf("want cell-myproject-0-run, got %q", name)
+	if name != "devcell-myproject-0" {
+		t.Errorf("want devcell-myproject-0, got %q", name)
 	}
 }
 
-// Scenario D: DEVCELL_BUNK=99 overrides TMUX_PANE
+// Scenario D: DEVCELL_CELL_ID=99 overrides TMUX_PANE
 func TestScenarioD_ExplicitCellID(t *testing.T) {
-	argv := buildBehaviourArgv("/tmp/myproject", []string{"DEVCELL_BUNK", "99", "TMUX_PANE", "%3"},
+	argv := buildBehaviourArgv("/tmp/myproject", []string{"DEVCELL_CELL_ID", "99", "TMUX_PANE", "%3"},
 		"claude", nil, nil, cfg.CellConfig{})
 	name := findFlagVal(argv, "--name")
 	if !strings.Contains(name, "99") {
-		t.Errorf("expected Bunk=99 in container name, got %q", name)
+		t.Errorf("expected CellID=99 in container name, got %q", name)
 	}
 }
 

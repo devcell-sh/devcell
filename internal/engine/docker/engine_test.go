@@ -26,8 +26,8 @@ func TestEngine_RegisteredAsDocker(t *testing.T) {
 // BuildArgv, the prompt files and the boot checklist take.
 func TestHostConfig_MapsEveryCellField(t *testing.T) {
 	c := engine.Cell{
-		Name:          "dev",
-		Home:          "/home/u/.devcell/dev",
+		WorkspaceName: "dev",
+		WorkspaceHome: "/home/u/.devcell/dev",
 		HostHome:      "/home/u",
 		HostUser:      "u",
 		BaseDir:       "/home/u/proj",
@@ -35,20 +35,20 @@ func TestHostConfig_MapsEveryCellField(t *testing.T) {
 		BuildDir:      "/home/u/proj/.devcell",
 		VNCPort:       "35950",
 		RDPPort:       "35989",
-		Bunk:          "3",
-		AppName:       "proj-3",
-		ContainerName: "cell-proj-3-run",
-		Hostname:      "cell-proj-3",
+		CellID:        "3",
+		CellName:      "proj-3",
+		ContainerName: "devdevcell-proj-3",
+		Hostname:      "devcell-proj-3",
 	}
 	want := config.Config{
-		Bunk:          "3",
-		AppName:       "proj-3",
-		CellName:      "dev",
-		CellHome:      "/home/u/.devcell/dev",
+		CellID:        "3",
+		CellName:      "proj-3",
+		WorkspaceName: "dev",
+		WorkspaceHome: "/home/u/.devcell/dev",
 		ConfigDir:     "/home/u/.config/devcell",
 		BuildDir:      "/home/u/proj/.devcell",
-		ContainerName: "cell-proj-3-run",
-		Hostname:      "cell-proj-3",
+		ContainerName: "devdevcell-proj-3",
+		Hostname:      "devcell-proj-3",
 		VNCPort:       "35950",
 		RDPPort:       "35989",
 		BaseDir:       "/home/u/proj",
@@ -128,7 +128,7 @@ func TestAutoBuildParams(t *testing.T) {
 func TestNewRunSpec_MapsOpts(t *testing.T) {
 	cellCfg := cfg.CellConfig{Cell: cfg.CellSection{Stack: "go"}}
 	opts := engine.RunOpts{
-		Cell:         engine.Cell{Name: "dev", Config: cellCfg},
+		Cell:         engine.Cell{WorkspaceName: "dev", Config: cellCfg},
 		Binary:       "claude",
 		DefaultFlags: []string{"--yolo"},
 		Args:         []string{"-c"},
@@ -139,7 +139,7 @@ func TestNewRunSpec_MapsOpts(t *testing.T) {
 		NixDaemon:    true,
 		NoPorts:      true,
 	}
-	c := config.Config{CellName: "dev", AppName: "proj-0"}
+	c := config.Config{WorkspaceName: "dev", CellName: "proj-0"}
 
 	got := newRunSpec(opts, c)
 

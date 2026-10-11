@@ -246,7 +246,7 @@ func TestModules2_FreshVolumeStartsCleanly(t *testing.T) {
 // TestModules2_GlobalTOMLOverrideViaHOME — verifies the layered-merge flow
 // for the Modules 2.0 union semantics (T6 / CELL-67): a user can set a
 // global `~/.config/devcell/devcell.toml` by overriding HOME, and a project
-// `.devcell.toml` then unions on top.
+// `devcell.toml` then unions on top.
 //
 // Why integration: cfg.LoadLayered is unit-tested in isolation, but this
 // asserts the *file-discovery convention* (global lives at
@@ -272,12 +272,12 @@ modules = ["kicad", "plex"]
 		t.Fatalf("write global: %v", err)
 	}
 
-	// Project dir with its own .devcell.toml.
+	// Project dir with its own devcell.toml.
 	projectDir := filepath.Join(outDir, "project")
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		t.Fatalf("mkdir project: %v", err)
 	}
-	projectPath := filepath.Join(projectDir, ".devcell.toml")
+	projectPath := filepath.Join(projectDir, "devcell.toml")
 	projectContent := `[cell]
 modules = ["yahoo-finance"]
 `
@@ -287,7 +287,7 @@ modules = ["yahoo-finance"]
 
 	// Drive LoadLayered with no env overrides — the only state that matters
 	// is the two TOMLs on disk.
-	merged, err := cfg.LoadLayered(globalPath, projectPath, func(string) string { return "" })
+	merged, err := cfg.LoadLayered(globalPath, func(string) string { return "" }, projectPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -378,7 +378,7 @@ modules = ["`+outerModule+`"]
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		t.Fatalf("mkdir project: %v", err)
 	}
-	projectPath := filepath.Join(projectDir, ".devcell.toml")
+	projectPath := filepath.Join(projectDir, "devcell.toml")
 	if err := os.WriteFile(projectPath, []byte(`[cell]
 modules = ["`+innerModule+`"]
 `), 0o644); err != nil {
@@ -386,7 +386,7 @@ modules = ["`+innerModule+`"]
 	}
 
 	// ── Step 2: merge ────────────────────────────────────────────────────
-	merged, err := cfg.LoadLayered(globalPath, projectPath, func(string) string { return "" })
+	merged, err := cfg.LoadLayered(globalPath, func(string) string { return "" }, projectPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -481,7 +481,7 @@ func TestModules2_CellModulesListEndToEnd(t *testing.T) {
 //
 //  1. Empty /nix volume (fresh, never-populated docker volume).
 //  2. Global ~/.config/devcell/devcell.toml sets stack=base + one module ("news").
-//  3. Project .devcell.toml adds a second module ("qa-tools").
+//  3. Project devcell.toml adds a second module ("qa-tools").
 //  4. `cell build` runs from the project dir with HOME overridden.
 //     Auto-build path of `cell shell` is the same code; gating semantics
 //     (image-missing, volume-unhydrated) are unit-tested separately.
@@ -540,7 +540,7 @@ modules = ["`+outerModule+`"]
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		t.Fatalf("mkdir project: %v", err)
 	}
-	projectToml := filepath.Join(projectDir, ".devcell.toml")
+	projectToml := filepath.Join(projectDir, "devcell.toml")
 	if err := os.WriteFile(projectToml, []byte(`[cell]
 modules = ["`+innerModule+`"]
 `), 0o644); err != nil {
@@ -667,7 +667,7 @@ modules = ["`+outerModule+`"]
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		t.Fatalf("mkdir project: %v", err)
 	}
-	projectToml := filepath.Join(projectDir, ".devcell.toml")
+	projectToml := filepath.Join(projectDir, "devcell.toml")
 	if err := os.WriteFile(projectToml, []byte(`[cell]
 modules = ["`+innerModule+`"]
 `), 0o644); err != nil {

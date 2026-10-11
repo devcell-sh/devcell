@@ -61,7 +61,7 @@ nixhome = %q
 [packages.node]
 "semver" = "7"
 `, nixhome)
-	if err := os.WriteFile(filepath.Join(projectDir, ".devcell.toml"), []byte(toml), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(projectDir, "devcell.toml"), []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("DEVCELL_CELL_NAME", "pkgtest")

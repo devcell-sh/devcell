@@ -189,7 +189,7 @@ func resolveOllamaModel(configModel string, dbg bool) string {
 	}
 
 	// Rank local models with real system RAM so the composite score
-	// penalises models that won't fit (same algo as `cell models`).
+	// penalises models that won't fit (same algo as `devcell models`).
 	systemRAM := ollama.GetSystemRAMGB()
 	if dbg {
 		fmt.Fprintf(os.Stderr, " claude: system RAM %.0f GB — ranking by composite score (swe×0.6 + speed×0.25) × ram_fit\n", systemRAM)

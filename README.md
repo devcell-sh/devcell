@@ -11,10 +11,10 @@ DevCell is a containerized sandbox for AI coding agents. Run Claude Code, Codex,
 ```bash
 brew install devcell-sh/tap/devcell
 cd your-project
-cell claude
+devcell claude
 ```
 
-On first run, `cell` creates `.devcell.toml` and `.devcell/` in your project directory, then builds the image (~5 min). Works with `cell codex` and `cell opencode` too.
+On first run, `devcell` creates `devcell.toml` and `.devcell/` in your project directory, then builds the image (~5 min). Works with `devcell codex` and `devcell opencode` too.
 
 ## What you get
 
@@ -22,12 +22,12 @@ On first run, `cell` creates `.devcell.toml` and `.devcell/` in your project dir
 - **12+ MCP servers** - Yahoo Finance, Google Maps, Linear, KiCad, Inkscape, and more. Backing tools ship in the image alongside their servers
 - **Claude Max/Pro support** - runs Claude Code directly, no API key or proxy needed
 - **Solitary Mode** - `--solitary` locks down outbound traffic to allow-listed domains only, strips privileged mode, dangerous capabilities, docker socket, and published ports. A squid gateway sidecar proxies all egress; everything else is denied
-- **Stealth Chromium + zero-password login** - `cell login <url>` opens a clean browser on your host, you log in, press Enter; cookies and localStorage sync to the container. The agent never sees your password. Anti-fingerprint Playwright replays sessions that pass Cloudflare and Kasada
+- **Stealth Chromium + zero-password login** - `devcell login <url>` opens a clean browser on your host, you log in, press Enter; cookies and localStorage sync to the container. The agent never sees your password. Anti-fingerprint Playwright replays sessions that pass Cloudflare and Kasada
 - **Remote desktop** - VNC and RDP into the container to watch or interact with GUI apps
-- **1Password secrets** - list document names in `.devcell.toml`; fields are injected as env vars into the container at runtime, written to a RAM-only tmpfs, gone when the container stops
+- **1Password secrets** - list document names in `devcell.toml`; fields are injected as env vars into the container at runtime, written to a RAM-only tmpfs, gone when the container stops
 - **Docker or VM engine** - default: a Linux Docker container. `--os macos` runs a macOS VM on Tart, `--os windows` a Windows VM via winkit; same commands
 - **4 primary stacks**: `base` (minimal), `dev` (seed: stealth browser + IaC MCPs), `ultimate` (general development), `bbb` (ultimate plus specialist tools). Legacy: go/node/python/fullstack/electronics. See [MIGRATION.md](./MIGRATION.md).
-- **Model ranking** - `cell models` shows cloud models (Anthropic, OpenAI, Google via OpenRouter) and local ollama models ranked by SWE-Bench score and speed, side by side
+- **Model ranking** - `devcell models` shows cloud models (Anthropic, OpenAI, Google via OpenRouter) and local ollama models ranked by SWE-Bench score and speed, side by side
 
 ## Comparison
 
@@ -56,7 +56,7 @@ Published to `ghcr.io/devcell-sh/devcell`. Multi-arch: linux/amd64, linux/arm64.
 | **ultimate** | General development, cloud tools, browser automation, desktop and Draw.io |
 | **bbb** | ultimate + KiCad, Wine, QEMU, Swift, publishing, security/RE, Inkscape/GIMP, FFmpeg/yt-dlp, Kitty, wxWidgets, FreeRDP, native UI development and personal-service MCPs |
 
-Add-on modules (set `modules = ["android"]` in `.devcell.toml`):
+Add-on modules (set `modules = ["android"]` in `devcell.toml`):
 
 | Module | What's inside |
 |---|---|
@@ -76,11 +76,11 @@ The guest is the OS inside the cell (`--os`); the engine is how the cell runs (`
 | `windows` or `winpe` | `winkit` | Windows PE + WSL1 VM (vz on macOS, qemu on Linux) | macOS, Linux |
 
 ```bash
-cell claude --os macos       # open Claude Code in a macOS VM
-cell build --os windows      # build the Windows VM image
+devcell claude --os macos       # open Claude Code in a macOS VM
+devcell build --os windows      # build the Windows VM image
 ```
 
-Set permanently in `.devcell.toml`:
+Set permanently in `devcell.toml`:
 
 ```toml
 [cell]
@@ -108,13 +108,13 @@ Baked into the image and auto-merged into each agent's config at container start
 
 ## Browser login & anti-bot protection
 
-`cell login` lets the agent use authenticated sessions without ever seeing passwords:
+`devcell login` lets the agent use authenticated sessions without ever seeing passwords:
 
 ```bash
-cell login https://example.com   # opens a real browser on your host
-                                  # you log in normally, press Enter
-                                  # cookies + localStorage sync to the container
-cell login --force https://...   # wipe saved session and start fresh
+devcell login https://example.com   # opens a real browser on your host
+                                     # you log in normally, press Enter
+                                     # cookies + localStorage sync to the container
+devcell login --force https://...   # wipe saved session and start fresh
 ```
 
 **How it avoids bot detection:** the login browser opens with no CDP debugging port — no `--remote-debugging-port`, no special flags. Cloudflare, Kasada, and similar systems cannot detect it as automated. After you close the browser, a separate headless CDP instance reads the cookies from the same profile and writes `storage-state.json` for Playwright. The agent replays the session; your password is never exposed.
@@ -132,7 +132,7 @@ The fingerprint (`User-Agent`, platform, browser brands) is read from your real 
 
 ## Configuration
 
-Project config at `.devcell.toml` (created by `cell init` or first run). Optional global defaults at `~/.config/devcell/devcell.toml`. See `cell --help` and the [CLI docs](https://devcell.sh/docs/cell) for the full reference.
+Project config at `devcell.toml` (created by `devcell init` or first run). Optional global defaults at `~/.config/devcell/devcell.toml`. See `devcell --help` and the [CLI docs](https://devcell.sh/docs/cell) for the full reference.
 
 A JSON Schema for the config is published at `https://devcell.sh/schema/<version>/devcell.json`. Today `<version>` is always `v0.0.0`, tracking `main`; per-release directories can be added later without changing URLs. Add this line to the top of the file for editor validation and completion (taplo, Even Better TOML for VS Code, Zed, Neovim):
 
@@ -150,12 +150,12 @@ Only `v0.0.0` is published for now. It is regenerated by the `schema-generate` p
 
 ## WireGuard tunnels
 
-Add one `[[wireguard]]` block per tunnel to `.devcell.toml` with a standard wg-quick config. The container gets `NET_ADMIN`, `/dev/net/tun`, and brings the tunnel up at start. Secrets never land in the config file on disk:
+Add one `[[wireguard]]` block per tunnel to `devcell.toml` with a standard wg-quick config. The container gets `NET_ADMIN`, `/dev/net/tun`, and brings the tunnel up at start. Secrets never land in the config file on disk:
 
 - `WG_PRIVATE_KEY` (required): the `[Interface]` private key. Any inline `PrivateKey` is stripped and loaded from this variable at runtime.
 - `WG_PRESHARED_KEY` (optional): applied to every `[Peer]` in the tunnel. Any inline `PresharedKey` is stripped the same way. Peers with different PSKs are rejected at validation time, so use one tunnel per PSK.
 
-Set both in the host environment where you run `cell`. When a tunnel is enabled they are forwarded into the container by name (values never appear in the `docker run` command line), written to a `/run/secrets` tmpfs, and applied with `wg set` after the interface is up. No manual `PostUp` is needed.
+Set both in the host environment where you run `devcell`. When a tunnel is enabled they are forwarded into the container by name (values never appear in the `docker run` command line), written to a `/run/secrets` tmpfs, and applied with `wg set` after the interface is up. No manual `PostUp` is needed.
 
 ## Customization
 
@@ -163,9 +163,9 @@ Start simple, go deeper when you need to.
 
 **Runtime versions** - drop a `.tool-versions` or `mise.toml` in your project. Runtimes install automatically at startup. No rebuild needed.
 
-**Add packages** - add npm or Python packages in `devcell.toml`, then `cell build`.
+**Add packages** - add npm or Python packages in `devcell.toml`, then `devcell build`.
 
-**Extend a stack** - edit `.devcell/flake.nix` to add nix packages. Run `cell build` to apply.
+**Extend a stack** - edit `.devcell/flake.nix` to add nix packages. Run `devcell build` to apply.
 
 **Fork nixhome** - fork the [nixhome](https://github.com/devcell-sh/home) repo, point your flake to your fork. Upstream updates still merge cleanly.
 
@@ -174,12 +174,12 @@ Start simple, go deeper when you need to.
 
 ### Building images
 
-Local development uses `cell build` — `task image:*` is for CI/release only.
+Local development uses `devcell build` — `task image:*` is for CI/release only.
 
 ```bash
-cell build                    # Rebuild the local cell image from this checkout
-cell build --update           # Bump nix flake inputs + rebuild
-cell build --thin             # Incremental, mounts nix store on a Docker volume
+devcell build                    # Rebuild the local cell image from this checkout
+devcell build --update           # Bump nix flake inputs + rebuild
+devcell build --thin             # Incremental, mounts nix store on a Docker volume
 task image:pure:build         # CI/release: build pure base + ultimate
 task image:impure:build       # [DEPRECATED] legacy Dockerfile path, kept one release
 ```
@@ -212,13 +212,13 @@ task nix:validate    # Syntax check + attribute resolution across all stacks
 
 | Term | What it means |
 |---|---|
-| **cell** | A named, persistent identity. A boundary. One shared `$HOME` (`~/.devcell/<cellName>/`), one network, one secrets scope. Examples: `DIMM`, `work`, `personal`, `main` (default). May host many projects. May be running or stopped. |
+| **workspace** | A persistent grouping and boundary. One shared `$HOME` (`~/.devcell/<workspaceName>/`), one network, one secrets scope. Examples: `DIMM`, `work`, `personal`, `main` (default). May host many projects. |
 | **project** | A host directory with code. Mounted into a container. |
-| **container** | The running docker instance for one (cell, project) pair. Ephemeral. The cell is the boundary; the container is the runtime. |
+| **cell** | The engine-agnostic runtime unit for one (workspace, project) pair. Named `<project>-<cellID>`. |
 | **stack** | The image variant a container is built from (`base`, `dev`, `ultimate`, `bbb`). |
 | **module** | A toggleable Nix capability composed into a stack (see [MIGRATION.md](./MIGRATION.md)). |
 
-**One-line model:** *a cell is the boundary; many projects live inside it; each project at a time spawns one container.*
+**One-line model:** *a workspace is the boundary; many projects live inside it; each project spawns one cell.*
 
 ## Not yet
 
@@ -226,7 +226,7 @@ task nix:validate    # Syntax check + attribute resolution across all stacks
 |---|---|---|
 | `windows-full` guest | internal only | `internal/engine` capability table |
 | Snapshot/restore cells | planned | `internal/engine/docker` |
-| Pre-built registry images (`cell pull`) | planned | image build pipeline |
+| Pre-built registry images (`devcell pull`) | planned | image build pipeline |
 
 ## License
 

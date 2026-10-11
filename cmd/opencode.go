@@ -147,7 +147,7 @@ func opencodeEnv() map[string]string {
 		}
 	}
 
-	configPath := opencodeConfigPath(c.CellHome)
+	configPath := opencodeConfigPath(c.WorkspaceHome)
 
 	// Build the model/provider portion of the config.
 	modelData := buildOpencodeJSON(models)

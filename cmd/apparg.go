@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// resolveAppArg resolves a positional app argument to a full AppName.
+// resolveAppArg resolves a positional app argument to a full cell name.
 // Accepts either a full name ("devcell-271") or a numeric suffix ("271").
 // A bare suffix is expanded by scanning running cell-* containers.
 func resolveAppArg(arg string) string {
@@ -31,8 +31,8 @@ func resolveAppArg(arg string) string {
 	return arg
 }
 
-// runningAppNames returns AppNames of running cell containers by parsing
-// container names of the form "cell-<appname>-run".
+// runningAppNames returns cell names of running cell containers by parsing
+// container names of the form "devcell-<cellname>".
 func runningAppNames() []string {
 	out, err := exec.Command("docker", "ps",
 		"--filter", "name=cell-",
@@ -43,15 +43,16 @@ func runningAppNames() []string {
 	return parseContainerNames(string(out))
 }
 
-// parseContainerNames extracts AppNames from docker ps output lines.
-// Each line should be a container name like "cell-devcell-271-run".
+// parseContainerNames extracts cell names from docker ps output lines.
+// Each line should be a container name like "devcell-myproject-271".
+// Skips sidecar containers (devcell-*-gw).
 func parseContainerNames(output string) []string {
 	var names []string
 	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "cell-") && strings.HasSuffix(line, "-run") {
-			appName := line[len("cell-") : len(line)-len("-run")]
-			names = append(names, appName)
+		if strings.HasPrefix(line, "devcell-") && !strings.HasSuffix(line, "-gw") {
+			cellName := line[len("devcell-"):]
+			names = append(names, cellName)
 		}
 	}
 	return names

@@ -8,13 +8,13 @@ import (
 )
 
 // TestClaude_SessionID_Injected verifies that CLAUDE_CODE_SESSION_ID is
-// injected into the docker argv as a deterministic UUID derived from APP_NAME.
+// injected into the docker argv as a deterministic UUID derived from CELL_NAME.
 func TestClaude_SessionID_Injected(t *testing.T) {
 	home := scaffoldedHome(t)
 
 	cmd := exec.Command(binaryPath, "claude", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("claude --dry-run failed: %v\noutput: %s", err, out)
@@ -26,7 +26,7 @@ func TestClaude_SessionID_Injected(t *testing.T) {
 	}
 }
 
-// TestClaude_SessionID_Deterministic verifies that the same bunk + project
+// TestClaude_SessionID_Deterministic verifies that the same cell ID + project
 // always produces the same session ID.
 func TestClaude_SessionID_Deterministic(t *testing.T) {
 	home := scaffoldedHome(t)
@@ -34,7 +34,7 @@ func TestClaude_SessionID_Deterministic(t *testing.T) {
 	run := func() string {
 		cmd := exec.Command(binaryPath, "claude", "--dry-run")
 		cmd.Dir = home
-		cmd.Env = append(os.Environ(), "DEVCELL_BUNK=42", "HOME="+home)
+		cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=42", "HOME="+home)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("claude --dry-run failed: %v\noutput: %s", err, out)
@@ -52,15 +52,15 @@ func TestClaude_SessionID_Deterministic(t *testing.T) {
 	}
 }
 
-// TestClaude_SessionID_DiffersByBunk verifies that different bunks produce
+// TestClaude_SessionID_DiffersByCellID verifies that different cell IDs produce
 // different session IDs for the same project.
-func TestClaude_SessionID_DiffersByBunk(t *testing.T) {
+func TestClaude_SessionID_DiffersByCellID(t *testing.T) {
 	home := scaffoldedHome(t)
 
-	runWithBunk := func(bunk string) string {
+	runWithCellID := func(cellID string) string {
 		cmd := exec.Command(binaryPath, "claude", "--dry-run")
 		cmd.Dir = home
-		cmd.Env = append(os.Environ(), "DEVCELL_BUNK="+bunk, "HOME="+home)
+		cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID="+cellID, "HOME="+home)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("claude --dry-run failed: %v\noutput: %s", err, out)
@@ -68,10 +68,10 @@ func TestClaude_SessionID_DiffersByBunk(t *testing.T) {
 		return extractEnvFromArgv(string(out), "CLAUDE_CODE_SESSION_ID")
 	}
 
-	id1 := runWithBunk("1")
-	id2 := runWithBunk("2")
+	id1 := runWithCellID("1")
+	id2 := runWithCellID("2")
 	if id1 == id2 {
-		t.Errorf("same session ID for different bunks: %q", id1)
+		t.Errorf("same session ID for different cell IDs: %q", id1)
 	}
 }
 
@@ -83,7 +83,7 @@ func TestOpencode_NoSessionFlag(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "opencode", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_BUNK=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opencode --dry-run failed: %v\noutput: %s", err, out)

@@ -41,11 +41,11 @@ func (Engine) Init(ctx context.Context, opts engine.InitOpts) error {
 	}
 	c := opts.Cell.WithStack(opts.Stack)
 	force := opts.Force
-	sshDir := keyDir(c.HostHome, c.Name)
+	sshDir := keyDir(c.HostHome, c.WorkspaceName)
 	tmplDir := templateDir(c.HostHome, g, c.Stack, c.Modules)
-	instanceDir := InstanceDir(c.HostHome, c.Name)
+	instanceDir := InstanceDir(c.HostHome, c.WorkspaceName)
 
-	ux.Debugf("init winkit: cell=%s stack=%s guest=%s", c.Name, c.Stack, g.label())
+	ux.Debugf("init winkit: cell=%s stack=%s guest=%s", c.WorkspaceName, c.Stack, g.label())
 	ux.Debugf("ssh dir: %s", sshDir)
 
 	pr := &ux.PhaseRunner{}

@@ -102,7 +102,7 @@ func renderInit(t *testing.T, snippet string) string {
 	if err := scaffold.Scaffold(dir, snippet, "", false); err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile(filepath.Join(dir, ".devcell.toml"))
+	data, err := os.ReadFile(filepath.Join(dir, "devcell.toml"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// MissingEnvError reports host env vars referenced from .devcell.toml [env]
+// MissingEnvError reports host env vars referenced from devcell.toml [env]
 // values that are unset (or empty) on the host. Aggregates all misses so the
 // user fixes them in one pass rather than one boot per typo.
 type MissingEnvError struct {
@@ -18,7 +18,7 @@ type MissingEnvError struct {
 
 func (e *MissingEnvError) Error() string {
 	var b strings.Builder
-	b.WriteString("missing references in .devcell.toml [env]:\n")
+	b.WriteString("missing references in devcell.toml [env]:\n")
 	names := make([]string, 0, len(e.Refs))
 	for k := range e.Refs {
 		names = append(names, k)

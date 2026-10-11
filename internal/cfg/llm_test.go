@@ -152,7 +152,7 @@ provider = "openrouter"
 [llm.providers.openrouter]
 models = ["moonshotai/kimi-k3"]
 `)
-	c, err := cfg.LoadLayered(global, project, func(string) string { return "" })
+	c, err := cfg.LoadLayered(global, func(string) string { return "" }, project)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,7 +240,7 @@ func TestLoadLayered_LLMProviderSwitchDropsGlobalModel(t *testing.T) {
 		{"[llm]\nprovider = \"openrouter\"\nmodel = \"x-ai/grok-4.6\"\n", "x-ai/grok-4.6"},
 	} {
 		project := writeTOML(t, dir, "project.toml", tc.project)
-		c, err := cfg.LoadLayered(global, project, func(string) string { return "" })
+		c, err := cfg.LoadLayered(global, func(string) string { return "" }, project)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -303,7 +303,7 @@ func TestLoadLayered_LLMProjectDefaultOverridesGlobalProvider(t *testing.T) {
 	dir := t.TempDir()
 	global := writeTOML(t, dir, "global.toml", "[llm]\nprovider = \"openrouter\"\nmodel = \"deepseek/deepseek-v4-pro\"\n")
 	project := writeTOML(t, dir, "project.toml", "[llm]\nprovider = \"default\"\n")
-	c, err := cfg.LoadLayered(global, project, func(string) string { return "" })
+	c, err := cfg.LoadLayered(global, func(string) string { return "" }, project)
 	if err != nil {
 		t.Fatal(err)
 	}

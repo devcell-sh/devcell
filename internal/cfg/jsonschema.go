@@ -122,7 +122,7 @@ func JSONSchema(opts SchemaOptions) ([]byte, error) {
 	root["$id"] = SchemaURLFor(version)
 	root["version"] = version
 	root["title"] = "devcell.toml"
-	root["description"] = "devcell project configuration (.devcell.toml) and global defaults (~/.config/devcell/devcell.toml). Generated from internal/cfg.CellConfig; do not edit."
+	root["description"] = "devcell project configuration (devcell.toml) and global defaults (~/.config/devcell/devcell.toml). Generated from internal/cfg.CellConfig; do not edit."
 
 	out, err := json.MarshalIndent(root, "", "  ")
 	if err != nil {
