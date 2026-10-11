@@ -51,7 +51,7 @@
       # Update vendorHash whenever go.sum changes — nix-build will
       # error with the new hash to substitute.
       cell = pkgs.buildGo126Module {
-        pname = "cell";
+        pname = "devcell";
         version = nixpkgs.lib.removePrefix "v" cellVersion;
         src = cellSrc;
 
@@ -86,16 +86,17 @@
           EOF
         '';
 
-        # Rename the binary from "cmd" to "cell".
+        # Rename the binary from "cmd" to "devcell" and create cell symlink.
         postInstall = ''
-          mv $out/bin/cmd $out/bin/cell
+          mv $out/bin/cmd $out/bin/devcell
+          ln -s devcell $out/bin/cell
         '';
 
         meta = with pkgs.lib; {
           description = "devcell CLI — container-native dev environments";
           homepage = "https://github.com/devcell-sh/devcell";
           license = licenses.mit;
-          mainProgram = "cell";
+          mainProgram = "devcell";
         };
       };
       default = cell;

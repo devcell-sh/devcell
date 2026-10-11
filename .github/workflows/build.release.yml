@@ -82,7 +82,7 @@ jobs:
 
       # task cell:build = swagger:generate → CGO_ENABLED=0 go build with ldflags
       # for GitCommit + BuildDate. Single source of truth shared with local dev.
-      - name: Build cell binary
+      - name: Build devcell binary
         run: task cell:build
 
       # Hydrate /nix volume from the GHCR cache image populated by
@@ -93,7 +93,7 @@ jobs:
         if: inputs.skip_nix_cache != true
         run: |
           HASH=${{ github.sha }}
-          ./bin/cell nix-store pull \
+          ./bin/devcell nix-store pull \
             --image "${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}" \
             --fallback "${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest" \
             --volume "devcell-nix-store-${{ matrix.arch }}" \
@@ -105,7 +105,7 @@ jobs:
           DEVCELL_NIX_VOLUME: devcell-nix-store-${{ matrix.arch }}
         run: |
           TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:${{ env.VERSION }}-${{ matrix.arch }}"
-          ./bin/cell build --image "$TAG" --debug
+          ./bin/devcell build --image "$TAG" --debug
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Push to GHCR
@@ -212,20 +212,21 @@ jobs:
       - name: Set version
         run: echo "VERSION=${GITHUB_REF_NAME}" >> $GITHUB_ENV
 
-      - name: Download cell binary
+      - name: Download devcell binary
         run: |
-          TARBALL="cell-linux-${{ matrix.arch }}.tar.gz"
+          TARBALL="devcell-linux-${{ matrix.arch }}.tar.gz"
           URL="https://github.com/DimmKirr/devcell/releases/download/${VERSION}/${TARBALL}"
           echo "Downloading: ${URL}"
           curl -fsSL -o "${TARBALL}" "${URL}"
           tar xzf "${TARBALL}"
-          chmod +x cell
-          sudo mv cell /usr/local/bin/cell
+          chmod +x devcell
+          sudo mv devcell /usr/local/bin/devcell
+          sudo ln -sf devcell /usr/local/bin/cell
 
-      - name: Verify cell binary
+      - name: Verify devcell binary
         run: |
-          cell --help
-          echo "--- cell binary OK ---"
+          devcell --help
+          echo "--- devcell binary OK ---"
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -234,19 +235,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run cell claude --version (full pipeline)
+      - name: Run devcell claude --version (full pipeline)
         run: |
           # Simulate a new user in a fresh project dir
           mkdir -p /tmp/e2e-project && cd /tmp/e2e-project
 
           # Flow: scaffold devcell.toml → pull base image → build user image → start container → print claude version
-          OUTPUT=$(cell --plain-text claude --version 2>&1) || true
+          OUTPUT=$(devcell --plain-text claude --version 2>&1) || true
           echo "$OUTPUT"
 
-          # Assert cell version string is present
-          if echo "$OUTPUT" | grep -qE "cell\s+v?[0-9]+\.[0-9]+\.[0-9]+"; then
-            echo "--- PASS: cell version found ---"
+          # Assert devcell version string is present
+          if echo "$OUTPUT" | grep -qE "devcell\s+v?[0-9]+\.[0-9]+\.[0-9]+"; then
+            echo "--- PASS: devcell version found ---"
           else
-            echo "--- FAIL: cell version string not found in output ---"
+            echo "--- FAIL: devcell version string not found in output ---"
             exit 1
           fi

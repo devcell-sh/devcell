@@ -1,13 +1,13 @@
 version: 2
 
-project_name: cell
+project_name: devcell
 
 before:
   hooks:
     - go run github.com/swaggo/swag/cmd/swag@latest init -g cmd/serve.go -o docs --parseDependency --parseInternal
 
 builds:
-  - id: cell
+  - id: devcell
     main: ./cmd
     env:
       - CGO_ENABLED=0
@@ -80,7 +80,7 @@ homebrew_casks:
     description: "Run AI coding agents in a consistent Docker dev environment"
     conflicts:
       - cask: devcell-dev
-    binaries: ["cell"]
+    binaries: ["devcell"]
 
   - name: "devcell@{{ .Version }}"
     repository:
@@ -97,4 +97,4 @@ homebrew_casks:
     description: "Run AI coding agents in a consistent Docker dev environment"
     conflicts:
       - cask: devcell-dev
-    binaries: ["cell"]
+    binaries: ["devcell"]

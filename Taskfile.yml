@@ -195,7 +195,7 @@ tasks:
       - |
         set -e
         OUT=$(nix build .#cell --no-link --print-out-paths)
-        "$OUT/bin/cell" --version
+        "$OUT/bin/devcell" --version
 
   test:powershell:lint:
     desc: Lint the guest PowerShell scripts (.ps1, .psm1) with PSScriptAnalyzer — template lint lives in go-winkit (task test:powershell:lint there)
@@ -271,31 +271,32 @@ tasks:
   # binary's current state. No-op on Linux (uname guard) where neither
   # `xattr` nor `codesign` exists.
   cell:build:
-    desc: Build cell CLI binary → ./bin/cell
+    desc: Build devcell CLI binary → ./bin/devcell
     dir: "{{.TASKFILE_DIR}}"
     deps: [swagger:generate, hm:generate, schema:generate, cell:deps]
     silent: true
     cmds:
       - mkdir -p bin
-      - CGO_ENABLED={{if eq OS "darwin"}}1{{else}}0{{end}} go build {{if .CELL_BUILD_TAGS}}-tags "{{.CELL_BUILD_TAGS}}" {{end}}-ldflags "{{.CELL_LDFLAGS}}" -o ./bin/cell ./cmd/
-      - '[ "$(uname -s)" != "Darwin" ] || xattr -c ./bin/cell'
-      - '[ "$(uname -s)" != "Darwin" ] || codesign --force --sign - --entitlements entitlements.plist ./bin/cell'
+      - CGO_ENABLED={{if eq OS "darwin"}}1{{else}}0{{end}} go build {{if .CELL_BUILD_TAGS}}-tags "{{.CELL_BUILD_TAGS}}" {{end}}-ldflags "{{.CELL_LDFLAGS}}" -o ./bin/devcell ./cmd/
+      - '[ "$(uname -s)" != "Darwin" ] || xattr -c ./bin/devcell'
+      - '[ "$(uname -s)" != "Darwin" ] || codesign --force --sign - --entitlements entitlements.plist ./bin/devcell'
 
   cell:install:
     aliases: [install]
-    desc: Build + copy ./bin/cell → ~/.local/bin/cell
+    desc: Build + copy ./bin/devcell → ~/.local/bin/devcell (+ cell symlink)
     dir: "{{.TASKFILE_DIR}}"
     deps: [cell:build]
     silent: true
     cmds:
       - mkdir -p ~/.local/bin
-      - cp ./bin/cell ~/.local/bin/cell
+      - cp ./bin/devcell ~/.local/bin/devcell
+      - ln -sf devcell ~/.local/bin/cell
       # Re-apply xattr/codesign at the destination — OS provenance is path-
       # keyed, so the just-copied file needs its own re-registration even
       # though the source was already cleaned.
-      - '[ "$(uname -s)" != "Darwin" ] || xattr -c ~/.local/bin/cell'
-      - '[ "$(uname -s)" != "Darwin" ] || codesign --force --sign - --entitlements entitlements.plist ~/.local/bin/cell'
-      - echo "Installed to ~/.local/bin/cell"
+      - '[ "$(uname -s)" != "Darwin" ] || xattr -c ~/.local/bin/devcell'
+      - '[ "$(uname -s)" != "Darwin" ] || codesign --force --sign - --entitlements entitlements.plist ~/.local/bin/devcell'
+      - echo "Installed to ~/.local/bin/devcell (cell → devcell symlink created)"
 
   # ── image (CI/release aggregates) ──────────────────────────────────────
   # For LOCAL development, use `cell build` — these tasks are for CI/release.
@@ -547,7 +548,7 @@ tasks:
       BASE: 'gcr.io/distroless/static-debian12:latest'
     cmds:
       - |
-        ./bin/cell nix-store push \
+        ./bin/devcell nix-store push \
           --volume "{{.VOL}}" \
           --base "{{.BASE}}" \
           --image "{{.LATEST}}" \
