@@ -119,9 +119,25 @@ func TestStripCellFlags_FormatEqualsFormStripped(t *testing.T) {
 	}
 }
 
+func TestStripCellFlags_SolitaryStripped(t *testing.T) {
+	got := stripCellFlags([]string{"--solitary", "--resume", "-c"})
+	want := []string{"--resume", "-c"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("--solitary should be stripped: want %v, got %v", want, got)
+	}
+}
+
+func TestStripCellFlags_ForceInsecureNetworkStripped(t *testing.T) {
+	got := stripCellFlags([]string{"--force-insecure-network", "--resume"})
+	want := []string{"--resume"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("--force-insecure-network should be stripped: want %v, got %v", want, got)
+	}
+}
+
 func TestApplyOutputFlags_FormatJSON(t *testing.T) {
 	old := osArgs
-	osArgs = []string{"cell", "rdp", "--list", "--format", "json"}
+	osArgs = []string{"devcell", "rdp", "--list", "--format", "json"}
 	defer func() { osArgs = old; ux.OutputFormat = "text" }()
 
 	applyOutputFlags()
@@ -133,7 +149,7 @@ func TestApplyOutputFlags_FormatJSON(t *testing.T) {
 
 func TestApplyOutputFlags_FormatEqualsForm(t *testing.T) {
 	old := osArgs
-	osArgs = []string{"cell", "--format=yaml", "rdp", "--list"}
+	osArgs = []string{"devcell", "--format=yaml", "rdp", "--list"}
 	defer func() { osArgs = old; ux.OutputFormat = "text" }()
 
 	applyOutputFlags()
@@ -145,7 +161,7 @@ func TestApplyOutputFlags_FormatEqualsForm(t *testing.T) {
 
 func TestApplyOutputFlags_NoFormatLeavesDefault(t *testing.T) {
 	old := osArgs
-	osArgs = []string{"cell", "rdp", "--list"}
+	osArgs = []string{"devcell", "rdp", "--list"}
 	defer func() { osArgs = old; ux.OutputFormat = "text" }()
 
 	ux.OutputFormat = "text"
@@ -158,7 +174,7 @@ func TestApplyOutputFlags_NoFormatLeavesDefault(t *testing.T) {
 
 func TestScanStringFlag_SpaceForm(t *testing.T) {
 	old := osArgs
-	osArgs = []string{"cell", "--engine", "tart", "claude"}
+	osArgs = []string{"devcell", "--engine", "tart", "claude"}
 	defer func() { osArgs = old }()
 
 	got := scanStringFlag("--engine")
@@ -169,7 +185,7 @@ func TestScanStringFlag_SpaceForm(t *testing.T) {
 
 func TestScanStringFlag_EqualsForm(t *testing.T) {
 	old := osArgs
-	osArgs = []string{"cell", "--engine=docker", "claude"}
+	osArgs = []string{"devcell", "--engine=docker", "claude"}
 	defer func() { osArgs = old }()
 
 	got := scanStringFlag("--engine")
@@ -180,7 +196,7 @@ func TestScanStringFlag_EqualsForm(t *testing.T) {
 
 func TestScanStringFlag_Missing(t *testing.T) {
 	old := osArgs
-	osArgs = []string{"cell", "claude"}
+	osArgs = []string{"devcell", "claude"}
 	defer func() { osArgs = old }()
 
 	got := scanStringFlag("--engine")

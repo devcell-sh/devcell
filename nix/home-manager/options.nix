@@ -119,6 +119,18 @@ in
     resolution = opt types.str;
     scale = opt types.int;
   };
+  network = {
+    proxy = {
+      enabled = opt types.bool;
+      mode = opt types.str;
+      presets = opt (types.listOf types.str);
+      allow = opt (types.listOf types.str);
+      block = opt (types.listOf types.str);
+      allow_host_network = opt types.bool;
+      log = opt types.bool;
+      image = opt types.str;
+    };
+  };
   env = opt (types.attrsOf types.str);
   mise = opt (types.attrsOf types.str);
   volumes = opt (types.listOf (types.submodule {
