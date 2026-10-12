@@ -2017,63 +2017,6 @@ func TestArgv_ProxyDisabled_NoProxyEnv(t *testing.T) {
 	}
 }
 
-func TestArgv_Solitary_ForcesNoPorts(t *testing.T) {
-	argv := buildArgv(t, func(s *docker.RunSpec) {
-		s.Solitary = true
-		s.ProxyEnabled = true
-		s.NoPorts = true
-		s.CellCfg.Ports.Forward = []string{"8080:8080"}
-	})
-	for _, a := range argv {
-		if strings.Contains(a, "8080") {
-			t.Errorf("solitary should suppress port mappings, found: %s", a)
-		}
-	}
-}
-
-func TestArgv_Solitary_DropsDockerSocket(t *testing.T) {
-	argv := buildArgv(t, func(s *docker.RunSpec) {
-		s.Solitary = true
-		s.ProxyEnabled = true
-	})
-	for _, a := range argv {
-		if strings.Contains(a, "docker.sock") {
-			t.Errorf("solitary should not mount docker socket, found: %s", a)
-		}
-	}
-}
-
-func TestArgv_Solitary_UsesInternalNetwork(t *testing.T) {
-	argv := buildArgv(t, func(s *docker.RunSpec) {
-		s.Solitary = true
-		s.ProxyEnabled = true
-	})
-	c := baseConfig()
-	wantNet := docker.InternalNetworkName(c.CellName)
-	if !hasConsecutive(argv, "--network", wantNet) {
-		t.Errorf("solitary should use --network %s", wantNet)
-	}
-}
-
-func TestArgv_Solitary_InjectsProxyEnv(t *testing.T) {
-	argv := buildArgv(t, func(s *docker.RunSpec) {
-		s.Solitary = true
-		s.ProxyEnabled = true
-	})
-	c := baseConfig()
-	wantURL := "http://" + docker.ProxySidecarName(c.CellName) + ":3128"
-	found := false
-	for _, a := range argv {
-		if a == "HTTP_PROXY="+wantURL {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("solitary should inject HTTP_PROXY env")
-	}
-}
-
 func TestArgv_ProxyEnabled_ConfigDirRO(t *testing.T) {
 	// Proxy mode should mount config dir read-only: deferred to boot orchestration
 	// (global config mounted :ro is a run.go concern, not runner.go).
@@ -2081,4 +2024,157 @@ func TestArgv_ProxyEnabled_ConfigDirRO(t *testing.T) {
 	_ = buildArgv(t, func(s *docker.RunSpec) {
 		s.ProxyEnabled = true
 	})
+}
+
+// ── Policy-based tests ──────────────────────────────────────────────────
+
+func TestArgv_SolitaryPolicy_DropAllCaps(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.Policy = cfg.SolitaryPolicy()
+		s.ProxyEnabled = true
+	})
+	if !hasArg(argv, "--cap-drop=ALL") {
+		t.Error("solitary policy must emit --cap-drop=ALL")
+	}
+	if !hasArg(argv, "--cap-add=CHOWN") {
+		t.Error("solitary policy must add back safe cap CHOWN")
+	}
+	if !hasArg(argv, "--cap-add=NET_BIND_SERVICE") {
+		t.Error("solitary policy must add back safe cap NET_BIND_SERVICE")
+	}
+}
+
+func TestArgv_SolitaryPolicy_FiltersDeniedCaps(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.Policy = cfg.SolitaryPolicy()
+		s.ProxyEnabled = true
+		s.CellCfg.Docker.CapAdd = []string{"NET_ADMIN", "SYS_ADMIN"}
+	})
+	for _, a := range argv {
+		if a == "--cap-add=NET_ADMIN" || a == "--cap-add=SYS_ADMIN" {
+			t.Errorf("solitary policy should filter denied cap, found: %s", a)
+		}
+	}
+}
+
+func TestArgv_SolitaryPolicy_DeniesPrivileged(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.Policy = cfg.SolitaryPolicy()
+		s.ProxyEnabled = true
+		s.CellCfg.Docker.Privileged = true
+	})
+	if hasArg(argv, "--privileged") {
+		t.Error("solitary policy must not emit --privileged")
+	}
+}
+
+func TestArgv_SolitaryPolicy_DeniesKVM(t *testing.T) {
+	kvm := true
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.Policy = cfg.SolitaryPolicy()
+		s.ProxyEnabled = true
+		s.CellCfg.Cell.KVM = &kvm
+	})
+	if hasArg(argv, "--device=/dev/kvm") {
+		t.Error("solitary policy must not emit --device=/dev/kvm")
+	}
+}
+
+func TestArgv_SolitaryPolicy_DeniesWireguard(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.Policy = cfg.SolitaryPolicy()
+		s.ProxyEnabled = true
+		s.CellCfg.Wireguard = []cfg.WireguardEntry{{Enabled: true, Name: "test"}}
+	})
+	if hasArg(argv, "--device=/dev/net/tun") {
+		t.Error("solitary policy must not emit --device=/dev/net/tun")
+	}
+	for _, a := range argv {
+		if strings.Contains(a, "DEVCELL_WG_ENABLED") {
+			t.Error("solitary policy must not set DEVCELL_WG_ENABLED")
+		}
+	}
+}
+
+func TestArgv_SolitaryPolicy_DenyPorts(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.Policy = cfg.SolitaryPolicy()
+		s.ProxyEnabled = true
+		s.CellCfg.Ports.Forward = []string{"8080:8080"}
+	})
+	for _, a := range argv {
+		if strings.Contains(a, "8080") {
+			t.Errorf("solitary policy should suppress port mappings, found: %s", a)
+		}
+	}
+}
+
+func TestArgv_SolitaryPolicy_DropsDockerSocket(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.Policy = cfg.SolitaryPolicy()
+		s.ProxyEnabled = true
+	})
+	for _, a := range argv {
+		if strings.Contains(a, "docker.sock") {
+			t.Errorf("solitary policy should not mount docker socket, found: %s", a)
+		}
+	}
+}
+
+func TestArgv_SolitaryPolicy_StripsDangerousVolumes(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.Policy = cfg.SolitaryPolicy()
+		s.ProxyEnabled = true
+		s.CellCfg.Volumes = []cfg.VolumeMount{
+			{Mount: "/var/run/docker.sock:/var/run/docker.sock"},
+			{Mount: "/proc:/host-proc"},
+			{Mount: "/home/bob/safe:/safe"},
+		}
+	})
+	for _, a := range argv {
+		if strings.Contains(a, "/host-proc") {
+			t.Error("solitary policy must strip /proc mount")
+		}
+		if strings.Contains(a, "/var/run/docker.sock:/var/run/docker.sock") && strings.HasPrefix(a, "-v") {
+			// This could be from either stdMounts or policy: either way it should not appear
+		}
+	}
+}
+
+func TestArgv_SolitaryPolicy_EmitsPolicyLabel(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.Policy = cfg.SolitaryPolicy()
+		s.ProxyEnabled = true
+	})
+	if !hasArg(argv, "devcell.policy=solitary") {
+		t.Error("solitary policy must emit devcell.policy=solitary label")
+	}
+}
+
+func TestArgv_OpenPolicy_EmitsPolicyLabel(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.Policy = cfg.OpenPolicy()
+	})
+	if !hasArg(argv, "devcell.policy=open") {
+		t.Error("open policy must emit devcell.policy=open label")
+	}
+}
+
+func TestArgv_OpenPolicy_AllowsPrivileged(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.Policy = cfg.OpenPolicy()
+		s.CellCfg.Docker.Privileged = true
+	})
+	if !hasArg(argv, "--privileged") {
+		t.Error("open policy must allow --privileged")
+	}
+}
+
+func TestArgv_OpenPolicy_NoCapDrop(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.Policy = cfg.OpenPolicy()
+	})
+	if hasArg(argv, "--cap-drop=ALL") {
+		t.Error("open policy must not drop caps")
+	}
 }

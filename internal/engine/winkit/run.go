@@ -67,6 +67,10 @@ func (ch sshChannel) addr() string {
 // Off macOS with opts.Debug, every step is simulated and logged with a
 // [MOCK] prefix; on macOS, opts.Debug logs the real steps via ux.Debugf.
 func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
+	if opts.Solitary {
+		return fmt.Errorf("--solitary is not yet supported for the winkit engine (CELL-649)")
+	}
+
 	args, force, stack := takeRunArgs(opts.Args)
 	opts.Args, opts.Force, opts.Cell = args, opts.Force || force, opts.Cell.WithStack(stack)
 

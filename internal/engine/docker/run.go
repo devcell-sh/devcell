@@ -50,19 +50,27 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	useCell(opts.Cell)
 
 	if opts.Solitary {
-		ux.Debugf("solitary: sanitizing config for full network lockdown")
-		stripped := cfg.SanitizeForSolitary(&cellCfg)
-		opts.Cell.Config = cellCfg
-		for _, s := range stripped {
+		ux.Debugf("solitary: policy-driven full network lockdown")
+		overrides := policySummary(cellCfg)
+		for _, s := range overrides {
 			ux.Debugf("solitary: %s", s)
 		}
 		ux.Debugf("solitary: proxy force-enabled, host network blocked, ports suppressed")
-		if len(stripped) > 0 {
-			fmt.Println(ux.StyleMuted.Render("  solitary: " + strings.Join(stripped, "; ")))
+		if len(overrides) > 0 {
+			fmt.Println(ux.StyleMuted.Render("  solitary: " + strings.Join(overrides, "; ")))
 		}
 		if opts.ForceInsecureNetwork {
 			ux.Debugf("solitary: --force-insecure-network ignored (solitary wins)")
 		}
+		// Force-enable proxy in the config so the sidecar setup reads it.
+		enabled := true
+		cellCfg.Network.Proxy.Enabled = &enabled
+		hostNet := false
+		cellCfg.Network.Proxy.AllowHostNetwork = &hostNet
+		if len(cellCfg.Network.Proxy.Presets) == 0 {
+			cellCfg.Network.Proxy.Presets = cfg.SolitaryPolicy().DefaultPresets()
+		}
+		opts.Cell.Config = cellCfg
 	}
 	forceInsecure := opts.ForceInsecureNetwork && !opts.Solitary
 
@@ -678,6 +686,14 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 // its boot checklist resolves: the pinned image, prompt flags, agent env,
 // secrets, git identity, boot dir, flake trust and TTY.
 func newRunSpec(opts engine.RunOpts, c config.Config) RunSpec {
+	var policy cfg.Policy
+	if opts.Solitary {
+		policy = cfg.SolitaryPolicy()
+	} else {
+		policy = cfg.OpenPolicy()
+	}
+	forceInsecure := opts.ForceInsecureNetwork && !opts.Solitary
+	proxyEnabled := (cfg.NetworkProxyEnabled(opts.Cell.Config) || policy.ForceProxy()) && !forceInsecure
 	return RunSpec{
 		Config:       c,
 		CellCfg:      opts.Cell.Config,
@@ -686,14 +702,63 @@ func newRunSpec(opts engine.RunOpts, c config.Config) RunSpec {
 		UserArgs:     opts.Args,
 		Debug:        opts.Debug,
 		NixDaemon:    opts.NixDaemon,
-		NoPorts:      opts.NoPorts || opts.Solitary,
+		NoPorts:      opts.NoPorts,
 		ExtraEnv:     opts.Env,
 		ThinImage:    true,
 		Detach:       opts.Detach,
 		NoSecrets:    opts.NoSecrets,
-		ProxyEnabled: cfg.NetworkProxyEnabled(opts.Cell.Config) && !(opts.ForceInsecureNetwork && !opts.Solitary),
-		Solitary:     opts.Solitary,
+		ProxyEnabled: proxyEnabled,
+		Policy:       policy,
 	}
+}
+
+// policySummary returns human-readable descriptions of what the solitary
+// policy will override in the given config, without mutating it.
+func policySummary(c cfg.CellConfig) []string {
+	dp := cfg.SolitaryPolicy().(cfg.DockerPolicy)
+	var overrides []string
+	if c.Docker.Privileged {
+		overrides = append(overrides, "[docker] privileged will be ignored")
+	}
+	denied := dp.DeniedCaps()
+	for _, raw := range c.Docker.CapAdd {
+		name := strings.ToUpper(strings.TrimPrefix(strings.ToUpper(raw), "CAP_"))
+		if denied[name] {
+			overrides = append(overrides, fmt.Sprintf("[docker] cap_add %s will be ignored", name))
+		}
+	}
+	for _, wg := range c.Wireguard {
+		if wg.Enabled {
+			name := wg.Name
+			if name == "" {
+				name = "(unnamed)"
+			}
+			overrides = append(overrides, fmt.Sprintf("[[wireguard]] %s will be disabled", name))
+		}
+	}
+	if c.Cell.ResolvedKVM() {
+		overrides = append(overrides, "[cell] kvm will be ignored")
+	}
+	for _, vol := range c.Volumes {
+		if isDeniedByPolicyMount(vol.Mount, dp.DeniedMountPaths()) {
+			overrides = append(overrides, fmt.Sprintf("[[volumes]] %s will be stripped", vol.Mount))
+		}
+	}
+	return overrides
+}
+
+func isDeniedByPolicyMount(mount string, deniedPrefixes []string) bool {
+	parts := strings.SplitN(mount, ":", 3)
+	if len(parts) == 0 {
+		return false
+	}
+	src := filepath.Clean(parts[0])
+	for _, prefix := range deniedPrefixes {
+		if src == prefix || strings.HasPrefix(src, prefix+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // agentExit is what Run returns once the agent's container exits: nil on

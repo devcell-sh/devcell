@@ -198,7 +198,7 @@ type RunSpec struct {
 	Lifecycle    string              // "persistent" (cell start) or "oneshot" (cell claude); empty defaults to "oneshot"
 	NoSecrets    bool                // skip `op run --` prefix and all secrets injection
 	ProxyEnabled bool                // when true, use internal network and inject proxy env vars
-	Solitary     bool                // when true, full lockdown (proxy + no ports + no docker socket)
+	Policy       cfg.Policy          // isolation policy; nil defaults to OpenPolicy
 }
 
 func (s RunSpec) getenv(key string) string {
@@ -208,6 +208,20 @@ func (s RunSpec) getenv(key string) string {
 	return os.Getenv(key)
 }
 
+func (s RunSpec) effectivePolicy() cfg.Policy {
+	if s.Policy != nil {
+		return s.Policy
+	}
+	return cfg.OpenPolicy()
+}
+
+func (s RunSpec) dockerPolicy() cfg.DockerPolicy {
+	if dp, ok := s.effectivePolicy().(cfg.DockerPolicy); ok {
+		return dp
+	}
+	return cfg.OpenPolicy().(cfg.DockerPolicy)
+}
+
 // BuildArgv constructs the full docker run argv for the given spec.
 // It is pure given injectable FS and LookPath.
 func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []string {
@@ -215,8 +229,11 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 
 	var argv []string
 
-	// 1Password passthrough (suppressed by --no-secrets)
-	if !spec.NoSecrets {
+	dp := spec.dockerPolicy()
+	policy := spec.effectivePolicy()
+
+	// 1Password passthrough (suppressed by --no-secrets or policy)
+	if !spec.NoSecrets && !dp.DenyOpRun() {
 		if opPath, err := lookPath("op"); err == nil && opPath != "" {
 			argv = append(argv, "op", "run", "--")
 		}
@@ -234,18 +251,33 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	if cpu := spec.CellCfg.Docker.ResolvedCPULimit(); cpu != "0" {
 		dockerRunFlags = append(dockerRunFlags, "--cpus="+cpu)
 	}
-	// KVM passthrough for QEMU guests (Windows cells). Must be --device, not
-	// a -v bind-mount: the mount creates the node but the cgroup device
-	// controller still denies open(2) (EPERM). Requires nested virtualization
-	// on the daemon host — on Colima that is `vmType: vz` +
-	// `nestedVirtualization: true`; without it docker run fails loudly.
-	if spec.CellCfg.Cell.ResolvedKVM() {
+
+	// Policy: cap-drop=ALL + safe cap add-back
+	if dp.DropAllCaps() {
+		dockerRunFlags = append(dockerRunFlags, "--cap-drop=ALL")
+		for _, cap := range dp.SafeCaps() {
+			dockerRunFlags = append(dockerRunFlags, "--cap-add="+cap)
+		}
+	}
+
+	// KVM passthrough for QEMU guests (Windows cells).
+	if spec.CellCfg.Cell.ResolvedKVM() && !dp.DenyKVM() {
 		dockerRunFlags = append(dockerRunFlags, "--device=/dev/kvm")
 	}
-	for _, cap := range spec.CellCfg.Docker.CapAdd {
-		dockerRunFlags = append(dockerRunFlags, "--cap-add="+cap)
+
+	// User-requested caps (filtered by policy)
+	denied := dp.DeniedCaps()
+	if !dp.DropAllCaps() {
+		for _, cap := range spec.CellCfg.Docker.CapAdd {
+			name := strings.ToUpper(strings.TrimPrefix(strings.ToUpper(cap), "CAP_"))
+			if denied[name] {
+				continue
+			}
+			dockerRunFlags = append(dockerRunFlags, "--cap-add="+cap)
+		}
 	}
-	wgEnabled := cfg.WireguardEnabled(spec.CellCfg)
+
+	wgEnabled := cfg.WireguardEnabled(spec.CellCfg) && !dp.DenyWireguard()
 	if wgEnabled && !spec.CellCfg.Docker.Privileged {
 		hasNetAdmin := false
 		for _, cap := range spec.CellCfg.Docker.CapAdd {
@@ -258,11 +290,11 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 			dockerRunFlags = append(dockerRunFlags, "--cap-add=NET_ADMIN")
 		}
 	}
-	if wgEnabled {
+	if wgEnabled && !dp.DenyTUN() {
 		dockerRunFlags = append(dockerRunFlags, "--device=/dev/net/tun")
 		dockerRunFlags = append(dockerRunFlags, "--sysctl", "net.ipv4.conf.all.src_valid_mark=1")
 	}
-	if spec.CellCfg.Docker.Privileged {
+	if spec.CellCfg.Docker.Privileged && !dp.DenyPrivileged() {
 		dockerRunFlags = append(dockerRunFlags, "--privileged")
 	}
 	argv = append(argv, "docker", "run")
@@ -284,6 +316,7 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 		lifecycle = "oneshot"
 	}
 	argv = append(argv, "--label", "devcell.lifecycle="+lifecycle)
+	argv = append(argv, "--label", "devcell.policy="+policy.Label())
 
 	// Container-layout env vars. The cell-level ones (APP_NAME,
 	// DEVCELL_CELL_NAME, IS_SANDBOX, WORKSPACE, git identity, TZ, locale,
@@ -421,12 +454,14 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	}
 
 	// Inherit env vars from host (secrets resolved by caller, set via os.Setenv)
-	for _, k := range spec.InheritEnv {
-		argv = append(argv, "-e", k)
+	if !dp.DenyInheritEnv() {
+		for _, k := range spec.InheritEnv {
+			argv = append(argv, "-e", k)
+		}
 	}
 
 	// Tell the entrypoint which env vars are op-resolved secrets (for Playwright MCP)
-	if len(spec.InheritEnv) > 0 {
+	if len(spec.InheritEnv) > 0 && !dp.DenyInheritEnv() {
 		argv = append(argv, "-e", "DEVCELL_SECRET_KEYS="+strings.Join(spec.InheritEnv, ","))
 	}
 
@@ -434,7 +469,7 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	v(c.BaseDir + ":" + c.BaseDir)
 	v(c.BaseDir + ":/" + c.CellName)
 	v(c.WorkspaceHome + ":/home/" + c.HostUser)
-	if !spec.ProxyEnabled {
+	if !spec.ProxyEnabled && !dp.DenyDockerSock() {
 		v("/var/run/docker.sock:/var/run/docker.sock")
 	}
 	v(c.HostHome + "/.claude/commands:/home/" + c.HostUser + "/.claude/commands")
@@ -473,16 +508,23 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 		"/etc/devcell/config":                              true,
 		"/home/" + c.HostUser + "/.config/devcell":         true,
 	}
+	deniedPaths := dp.DeniedMountPaths()
 	for _, vol := range spec.CellCfg.Volumes {
 		cp := vol.ContainerPath()
 		if stdMounts[cp] {
 			continue
 		}
+		if dp.DenyUserVolumes() {
+			continue
+		}
+		if isDeniedByPolicy(vol.Mount, deniedPaths) {
+			continue
+		}
 		argv = append(argv, "-v", vol.Resolved())
 	}
 
-	// --no-ports: skip all -p mappings (user ports and GUI).
-	if !spec.NoPorts {
+	// --no-ports or policy: skip all -p mappings (user ports and GUI).
+	if !spec.NoPorts && !policy.DenyPorts() {
 		// [ports].publish_ip — host interface prefix for `docker run -p`.
 		// Defaults to "0.0.0.0" (set by ResolvedPublishIP) so cells are reachable
 		// from other hosts on the LAN regardless of dockerd bind defaults.
@@ -558,6 +600,20 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	}
 
 	return argv
+}
+
+func isDeniedByPolicy(mount string, deniedPrefixes []string) bool {
+	parts := strings.SplitN(mount, ":", 3)
+	if len(parts) == 0 {
+		return false
+	}
+	src := filepath.Clean(parts[0])
+	for _, prefix := range deniedPrefixes {
+		if src == prefix || strings.HasPrefix(src, prefix+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // RemoveOrphanedContainer removes a stopped container with the given name if it exists.

@@ -167,6 +167,10 @@ func prepareHost(cellName, hostHome, stack string, force bool) error {
 // opts.Update and opts.Background are not honored yet; the VM this call
 // started is shut down when the agent exits.
 func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
+	if opts.Solitary {
+		return fmt.Errorf("--solitary is not yet supported for the tart engine (CELL-649)")
+	}
+
 	binary, defaultFlags, userArgs := opts.Binary, opts.DefaultFlags, opts.Args
 	cellCfg := opts.Cell.Config
 	baseDir, hostHome, cellName := opts.Cell.BaseDir, opts.Cell.HostHome, opts.Cell.WorkspaceName

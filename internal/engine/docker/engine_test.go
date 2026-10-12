@@ -156,6 +156,7 @@ func TestNewRunSpec_MapsOpts(t *testing.T) {
 		ThinImage:    true,
 		Detach:       true,
 		NoSecrets:    true,
+		Policy:       cfg.OpenPolicy(),
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("newRunSpec =\n  %+v\nwant\n  %+v", got, want)
