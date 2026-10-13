@@ -20,12 +20,12 @@ const { stackColumns, stackFeatures } = Astro.props;
       in <code>devcell.toml</code>, and the agent can install whatever else the project needs.
     </p>
     <p class="stacks-more" style="margin-bottom: 1.5rem;">
-      Everything in the image is defined in <a href="https://github.com/DimmKirr/devcell/tree/main/nixhome">nixhome</a> —
+      Everything in the image is defined in <a href="https://github.com/devcell-sh/home">devcell-sh/home</a> —
       read it, fork it, or reuse the modules standalone. Drop a <code>.tool-versions</code> for runtime
       versions, extend a stack with nix overlays. Upstream updates still merge cleanly.
     </p>
     <details class="stacks-details" id="stacks">
-      <summary class="stacks-more">Compare the six stacks →</summary>
+      <summary class="stacks-more">Compare the stacks →</summary>
       <div class="plan-grid" style="margin-top: 1.25rem;">
         <table>
           <thead>
@@ -55,7 +55,7 @@ const { stackColumns, stackFeatures } = Astro.props;
         </table>
       </div>
       <p class="stacks-more"><sup>*</sup> Headless only. GUI desktop (VNC/RDP) ships in the ultimate stack; other stacks add it via modules.</p>
-      <p class="stacks-more">Need a different mix? Set <code>stack</code> and <code>modules</code> in <code>devcell.toml</code>. Multi-arch (amd64/arm64), published to <code>public.ecr.aws/w1l3v2k8/devcell</code>.</p>
+      <p class="stacks-more">Need a different mix? Set <code>stack</code> and <code>modules</code> in <code>devcell.toml</code>. Multi-arch (amd64/arm64), published to <code>ghcr.io/devcell-sh/devcell</code>.</p>
     </details>
   </section>
 </div>

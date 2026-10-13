@@ -1,59 +1,45 @@
 ---
 ---
 
-<section id="gains">
-  <p class="section-label">The payoff</p>
-  <h2>What the agent gains inside.</h2>
-  <blockquote class="hero-quote" style="margin-bottom: 2rem;">
-    <p>Built-in sandboxes subtract tools to make agents safe. devcell adds tools and stays safe.</p>
-  </blockquote>
+<section id="features">
+  <p class="section-label">Features</p>
+  <h2>What you get.</h2>
   <div class="does-grid">
     <div class="does-card">
+      <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      <h3>Container sandbox</h3>
+      <p>Every <code>devcell &lt;agent&gt;</code> runs inside an isolated cell. SSH keys, other repos, and host credentials are unreachable. The container is the guardrail, not the approval loop.</p>
+    </div>
+    <div class="does-card">
+      <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+      <h3>Egress lockdown</h3>
+      <p><code>devcell claude --solitary</code> denies all outbound traffic except allow-listed domains. The agent cannot phone home, push to the wrong remote, or exfiltrate tokens.</p>
+    </div>
+    <div class="does-card">
+      <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <h3>No account, no login</h3>
+      <p><code>brew install devcell-sh/tap/devcell</code>, <code>cd your-project</code>, <code>devcell claude</code>. No Docker Hub login, no cloud dashboard, no API key required with Claude Max/Pro.</p>
+    </div>
+    <div class="does-card">
       <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      <h3>Tools behind the MCP servers</h3>
-      <p>Marketplaces install the config. devcell installs the app underneath. OpenTofu actually runs <code>tofu plan</code>, Inkscape actually edits the SVG — display server included. 12 servers today, each with its backing software in the image.</p>
+      <h3>MCP servers with backing tools</h3>
+      <p>You don't install MCP servers; they come ready. The backing tools ship too: the agent can run <code>tofu plan</code> or edit PCBs because OpenTofu and KiCad are installed, not just their MCP servers. 11 servers, each pinned to a commit hash.</p>
     </div>
     <div class="does-card">
       <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-      <h3>A desktop it can see</h3>
-      <p>VNC and RDP built in. The agent opens GUI apps, clicks through what it built, and you watch live — or take over at a login screen. Linux by default; VM engines for macOS.</p>
+      <h3>Three OS engines</h3>
+      <p>Linux container (Docker), macOS VM (Tart), Windows VM (winkit). Same commands, same config. Pick the guest with <code>--os</code> and the engine follows.</p>
     </div>
     <div class="does-card">
-      <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-      <h3>Your sessions, not your browser</h3>
-      <p>Run <code>cell login &lt;site&gt;</code> on your host: a real browser opens, you log in, it closes. Only that site's session crosses into the cell. The agent never sees your password — and never touches your real browser's history, cache, or other logins.</p>
+      <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      <h3>Your config carries over</h3>
+      <p>CLAUDE.md, hooks, skills, and MCP config mount into the cell. Your project-level setup works unchanged. 1Password secrets inject at runtime on a RAM-only tmpfs, gone when the cell stops.</p>
     </div>
   </div>
-</section>
-
-<section id="why">
-  <p class="section-label">The boundary</p>
-  <h2>What it can't touch.</h2>
-  <blockquote class="hero-quote" style="margin-bottom: 2rem;">
-    <p>"Run this in a container, not your actual machine."</p>
-    <cite>— Anthropic, Claude Code documentation</cite>
-  </blockquote>
-  <div class="does-grid" style="margin-bottom: 2rem;">
-    <div class="does-card">
-      <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      <h3>Absent, not hidden</h3>
-      <p>SSH keys, other repos, host credentials — the agent can't reach them because they aren't there. It can trash its whole machine and lose nothing but the cell: rebuild in minutes. Your project is the one live mount, same as any agent setup.</p>
-    </div>
-    <div class="does-card">
-      <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-      <h3>Secrets in RAM only</h3>
-      <p>1Password secrets resolve on the host and land on a RAM-only tmpfs at <code>/run/secrets/</code>. Container stops, they're gone. The LLM never sees credential values — MCP tools resolve placeholder names server-side.</p>
-    </div>
-    <div class="does-card">
-      <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-      <h3>One cell per client</h3>
-      <p>Named cells keep engagements apart: Acme's cell has Acme's keys, shell history, and agent memory; BigCorp's has BigCorp's. Same toolchain everywhere — add a project, inherit the setup, duplicate nothing.</p>
-    </div>
-  </div>
-  <div class="stacks-grid" style="margin-bottom: 1rem;">
+  <div class="stacks-grid" style="margin-top: 2rem; margin-bottom: 1rem;">
     <div class="stack-row">
       <span class="stack-cat">Project</span>
-      <span class="stack-tools">The agent sees the project dir it was launched in — the sole mount. Other repos aren't hidden, they're absent.</span>
+      <span class="stack-tools">The agent sees the project dir it was launched in. Other repos aren't hidden, they're absent.</span>
     </div>
     <div class="stack-row">
       <span class="stack-cat">Cell</span>

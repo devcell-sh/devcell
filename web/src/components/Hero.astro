@@ -9,17 +9,20 @@ const { stableVersion, logoGrid } = Astro.props;
 <div class="hero-wrap">
   <div class="hero">
     <div>
-      <p class="hero-eyebrow">Agent Workspace · Open Source · Apache&nbsp;2.0 · <a href="https://github.com/DimmKirr/devcell" class="eyebrow-stars" style="white-space: nowrap;">★ Star on GitHub</a> <a href="https://github.com/DimmKirr/devcell"><img src="https://img.shields.io/github/stars/DimmKirr/devcell?style=flat&label=&color=C8FF00" alt="GitHub stars" class="star-badge" /></a>{stableVersion ? <Fragment> · <a href="https://github.com/DimmKirr/devcell/releases" class="eyebrow-stars">{stableVersion}</a></Fragment> : <Fragment> · <a href="https://github.com/DimmKirr/devcell/releases" class="eyebrow-stars">Releases</a></Fragment>}</p>
-      <h1>Your Agent<br/>Gets <span class="hl">Its&nbsp;Own</span><br/>Computer.</h1>
+      <p class="hero-eyebrow">Open Source · Apache&nbsp;2.0 · <a href="https://github.com/devcell-sh/devcell" class="eyebrow-stars" style="white-space: nowrap;">★ GitHub</a>{stableVersion ? <Fragment> · <a href="https://github.com/devcell-sh/devcell/releases" class="eyebrow-stars">{stableVersion}</a></Fragment> : <Fragment> · <a href="https://github.com/devcell-sh/devcell/releases" class="eyebrow-stars">Releases</a></Fragment>} · <a href="https://github.com/devcell-sh/devcell/commits/main"><img src="https://img.shields.io/github/last-commit/devcell-sh/devcell?style=flat&label=last%20commit&color=C8FF00" alt="Last commit" class="star-badge" /></a></p>
+      <h1>Claude Code,<br/>Without The<br/><span class="hl">Blast&nbsp;Radius.</span></h1>
       <p class="hero-desc">
-        Auto-approve everything. The agent works inside a cell — a container or VM
-        with its own home, tools, and desktop. Your SSH keys, other repos, and
-        credentials aren't hidden from it; they're absent.<br/><br/>
-        And inside, it has more than your machine ever gave it: real tools behind
-        its MCP servers, a browser with your sessions, a screen it can see.
+        DevCell is a local-first sandbox for AI coding agents. Run Claude Code,
+        Codex, OpenCode, or Gemini inside an isolated cell. Agents write, delete,
+        and install freely. Your host is untouched.<br/><br/>
+        No account. No API key with Max/Pro. <code>brew install</code> and go.
       </p>
+      <blockquote class="hero-quote">
+        <p>"Run this in a container, not your actual machine."</p>
+        <cite>— Anthropic, Claude Code documentation</cite>
+      </blockquote>
       <div class="hero-actions">
-        <a href="https://github.com/DimmKirr/devcell" class="btn btn-primary">View on GitHub →</a>
+        <a href="https://github.com/devcell-sh/devcell" class="btn btn-primary">View on GitHub →</a>
         <a href="#quickstart" class="btn btn-secondary">Quickstart</a>
       </div>
     </div>
@@ -30,8 +33,8 @@ const { stableVersion, logoGrid } = Astro.props;
         <span class="dot dot-y"></span>
         <span class="dot dot-g"></span>
       </div>
-      <div><span class="t-path">~/myproject</span> <span class="t-dim">$</span> <span class="t-cmd"> cell claude</span></div>
-      <div class="t-dim">Opening Cell myproject …</div>
+      <div><span class="t-path">~/myproject</span> <span class="t-dim">$</span> <span class="t-cmd"> devcell claude</span></div>
+      <div class="t-dim">Opening cell myproject …</div>
       <div><span class="t-ok">✔</span><span class="t-dim"> mounted /home/alex/myproject</span></div>
       <div><span class="t-ok">✔</span><span class="t-dim"> ~/.ssh, ~/.aws: not mounted</span></div>
       <div class="t-hr">───────────────────────────────────────</div>
@@ -44,7 +47,7 @@ const { stableVersion, logoGrid } = Astro.props;
           )}
         </div>
         <pre class="t-splash-info">  <span class="t-title">Claude Code</span>
-<span class="t-dot">·</span> <span class="t-dim">Sonnet 4.6 · Claude Max</span>
+<span class="t-dot">·</span> <span class="t-dim">Opus 4.6 · Claude Max</span>
   <span class="t-path">/myproject</span>
   <span class="t-path">&nbsp;</span></pre>
       </div>

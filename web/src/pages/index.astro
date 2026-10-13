@@ -4,20 +4,21 @@ import Hero from '../components/Hero.astro';
 import FeatureCards from '../components/FeatureCards.astro';
 import Quickstart from '../components/Quickstart.astro';
 import WhatsInside from '../components/WhatsInside.astro';
+import CompareSection from '../components/CompareSection.astro';
 import FAQ from '../components/FAQ.astro';
 
 const stableVersion = process.env.STABLE_VERSION || '';
 
-const stackColumns = ["base", "go", "node", "python", "fullstack", "ultimate"];
+const stackColumns = ["base", "ultimate", "bbb", "electronics"];
 const stackFeatures = [
-  { name: "Dev essentials",  note: "zsh, git, tmux, ripgrep, jq, sqlite, mise, nix", in: ["base","go","node","python","fullstack","ultimate"] },
-  { name: "Go environment",      note: "Go toolchain",                                 in: ["go","fullstack","ultimate"] },
-  { name: "Node.js environment", note: "Node.js 22, npm",                             in: ["node","fullstack","ultimate"] },
-  { name: "Python environment",  note: "Python 3.13, uv",                             in: ["python","fullstack","ultimate"] },
-  { name: "Infra tools",     note: "Terraform, OpenTofu, Packer, Helm",               in: ["go","fullstack","ultimate"] },
-  { name: "Browser + sessions", note: "Chromium + Playwright, cookie sync via cell login", in: ["node","python","fullstack","ultimate"], partial: ["node","python","fullstack"] },
-  { name: "GUI desktop",     note: "VNC + RDP + Fluxbox + PulseAudio",                in: ["ultimate"] },
-  { name: "12+ MCP servers with backing tools",  note: "Inkscape, OpenTofu, maps, finance, productivity — growing",   in: ["ultimate"] },
+  { name: "Dev essentials",  note: "zsh, git, tmux, ripgrep, jq, sqlite, mise, nix", in: ["base","ultimate","bbb","electronics"] },
+  { name: "Go + Node + Python", note: "Go toolchain, Node.js 22, Python 3.13",       in: ["ultimate","bbb"] },
+  { name: "Infra tools",     note: "OpenTofu, Packer, Helm",                          in: ["ultimate","bbb"] },
+  { name: "Browser + sessions", note: "Chromium + Playwright, session handoff via devcell auth chrome", in: ["ultimate","bbb"], partial: ["ultimate","bbb"] },
+  { name: "GUI desktop",     note: "VNC + RDP + IceWM + PulseAudio",                  in: ["ultimate","bbb","electronics"] },
+  { name: "Security / RE",   note: "Ghidra-ready, Wine, QEMU, Swift, FreeRDP",        in: ["bbb"] },
+  { name: "Electronics",     note: "KiCad, ngspice, ESPHome, PlatformIO, wokwi-cli",  in: ["electronics"] },
+  { name: "11 MCP servers with backing tools",  note: "OpenTofu, KiCad, Inkscape, Yahoo Finance, EdgarTools, FRED, Google Maps, Linear, Notion", in: ["ultimate","bbb","electronics"] },
 ];
 
 const logoGrid = [
@@ -30,19 +31,30 @@ const logoGrid = [
   "___#___",
 ];
 
+const compareRows = [
+  { feature: "Host isolation",             devcell: "container, VM",       dockerSbx: "microVM",            e2b: "Firecracker",   microsandbox: "libkrun",  rawDocker: "manual" },
+  { feature: "Account / login required",   devcell: "no",                  dockerSbx: "yes",                e2b: "API key",       microsandbox: "no",       rawDocker: "no" },
+  { feature: "Claude Max/Pro (no API key)",devcell: "yes",                 dockerSbx: "documented, broken", e2b: "no",            microsandbox: "no",       rawDocker: "manual" },
+  { feature: "CLAUDE.md + hooks preserved",devcell: "yes",                 dockerSbx: "no",                 e2b: "no",            microsandbox: "no",       rawDocker: "manual" },
+  { feature: "MCP servers + backing tools",devcell: "yes, auto-config",    dockerSbx: "catalog (manual)",   e2b: "no",            microsandbox: "own MCP",  rawDocker: "manual" },
+  { feature: "macOS + Windows VMs",        devcell: "yes",                 dockerSbx: "no",                 e2b: "no",            microsandbox: "no",       rawDocker: "no" },
+  { feature: "Egress lockdown",            devcell: "yes",                 dockerSbx: "yes",                e2b: "yes",           microsandbox: "yes",      rawDocker: "manual" },
+  { feature: "Local-first",                devcell: "yes",                 dockerSbx: "yes",                e2b: "cloud only",    microsandbox: "yes",      rawDocker: "yes" },
+  { feature: "Credential brokering",       devcell: "not yet",             dockerSbx: "yes (proxy)",        e2b: "yes (proxy)",   microsandbox: "yes",      rawDocker: "manual" },
+  { feature: "Snapshot / restore",         devcell: "not yet",             dockerSbx: "not yet",            e2b: "yes",           microsandbox: "yes",      rawDocker: "no" },
+];
+
 const faqItems = [
   { q: "Do I need an API key or Claude subscription?",
-    a: "Bring your own license or model. Claude Max, Pro, and API keys all work — devcell starts the same client you already use, just inside a container. Same goes for Codex and OpenCode." },
+    a: "Bring your own license or model. Claude Max, Pro, and API keys all work — devcell starts the same client you already use, just inside a container. Same goes for Codex, OpenCode, and Gemini." },
   { q: "Why not just write my own Dockerfile?",
-    a: "You can — the afternoon is the demo; the maintenance is the product. A hand-rolled container needs MCP wiring, backing apps, a display server, secrets handling, UID mapping, and per-agent flags — and needs them again after every client update. Everything devcell ships is defined in the open nixhome modules: read them, fork them, or reuse them standalone if you'd rather keep your own setup." },
-  { q: "How is DevCell different from Dev Containers?",
-    a: "Dev Containers are editor-first — a Dockerfile + devcontainer.json per project for VS Code or Codespaces. DevCell is agent-first: one command, pre-built Nix-pinned stacks shared across projects, MCP servers with their backing tools in the image, VNC/RDP built in, secrets on tmpfs. No per-project Dockerfile drifting apart." },
-  { q: "How is DevCell different from OpenClaw?",
-    a: "Different layers. OpenClaw is an assistant framework; devcell is the contained machine an agent runs on. They compose: run OpenClaw inside a cell and its skills keep working while your SSH keys and credentials stay out of reach." },
+    a: "You can — the afternoon is the demo; the maintenance is the product. A hand-rolled container needs MCP wiring, backing apps, a display server, secrets handling, UID mapping, and per-agent flags — and needs them again after every client update. Everything devcell ships is defined in the open devcell-sh/home modules: read them, fork them, or reuse them standalone if you'd rather keep your own setup." },
+  { q: "How is DevCell different from Docker Sandboxes?",
+    a: "Docker Sandboxes use microVMs for stronger isolation and integrate with the Docker ecosystem. DevCell is local-first with no account required, preserves your CLAUDE.md and hooks, ships MCP servers with their backing tools pre-installed, and supports macOS and Windows VMs. Docker Sandboxes require a Docker account and drop your Claude config." },
   { q: "Can the agent install packages inside the container?",
-    a: "Yes. The agent can run apt, npm install, pip install, nix — whatever the project needs. Network access is unrestricted. Port forwarding and extra volume mounts are configurable in devcell.toml." },
+    a: "Yes. The agent can run apt, npm install, pip install, nix — whatever the project needs. Network access is unrestricted by default. devcell claude --solitary locks down egress to allow-listed domains only. Port forwarding and extra volume mounts are configurable in devcell.toml." },
   { q: "Does my existing Claude Code config carry over?",
-    a: "Your project-level config (CLAUDE.md, .claude/) is mounted with your project. Host ~/.claude/skills is mounted read-write, the rest of ~/.claude is read-only. Your host-machine config stays safe. (Subject to change.)" },
+    a: "Your project-level config (CLAUDE.md, .claude/) is mounted with your project. Host ~/.claude/skills is mounted read-write, the rest of ~/.claude is read-only. Your host-machine config stays safe." },
   { q: "How big are the images? Can I skip Docker?",
     a: "Base is ~1.3 GB and builds in under 2 minutes; ultimate is ~20 GB. First run lets you pick a stack. No Docker? --os macos provisions the same cell as a VM (tart, Apple Silicon) — same toolchain, same commands." },
 ];
@@ -668,24 +680,114 @@ const faqItems = [
       line-height: 1.65;
       padding: 0 1.25rem 1rem 3rem;
     }
+
+    /* COMPARE SECTION */
+    .compare-table {
+      border: var(--border);
+      box-shadow: var(--shadow);
+      overflow-x: auto;
+      margin-bottom: 1.5rem;
+    }
+
+    .compare-table table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 780px;
+    }
+
+    .compare-table th {
+      font-size: 0.7rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 0.7rem 0.6rem;
+      text-align: center;
+      border-bottom: var(--border);
+      border-right: 1px solid #CCC;
+      background: var(--white);
+    }
+
+    .compare-table th:first-child {
+      text-align: left;
+      padding-left: 1rem;
+      width: 13rem;
+    }
+
+    .compare-table th:nth-child(2) {
+      background: var(--accent);
+    }
+
+    .compare-table th:last-child { border-right: none; }
+
+    .compare-table td {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      padding: 0.5rem 0.6rem;
+      text-align: center;
+      border-bottom: 1px solid #CCC;
+      border-right: 1px solid #CCC;
+      color: #888;
+    }
+
+    .compare-table td:first-child {
+      text-align: left;
+      padding-left: 1rem;
+      font-family: var(--font-sans);
+      font-weight: 700;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--black);
+    }
+
+    .compare-table td:nth-child(2) {
+      background: color-mix(in srgb, var(--accent) 12%, white);
+      color: var(--black);
+      font-weight: 700;
+    }
+
+    .compare-table td:last-child { border-right: none; }
+    .compare-table tr:last-child td { border-bottom: none; }
+    .compare-table tbody tr:hover td { background: color-mix(in srgb, var(--accent) 25%, white); }
 </style>
 
-<Base title="devcell — your agent's own computer" description="Run Claude Code, Codex, or OpenCode with full auto-approve in an isolated agent workspace — equipped with real tools, a desktop, and your browser sessions. SSH keys and host credentials stay absent.">
+<Base title="devcell — Claude Code, without the blast radius" description="Local-first sandbox for AI coding agents. Run Claude Code, Codex, OpenCode, or Gemini inside an isolated cell. No account, no API key with Max/Pro.">
   <Hero stableVersion={stableVersion} logoGrid={logoGrid} />
-  <FeatureCards />
   <Quickstart />
+  <FeatureCards />
+
+  <section id="compare">
+    <p class="section-label">Comparison</p>
+    <h2>How it compares.</h2>
+    <div class="compare-table">
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th>DevCell</th>
+            <th>Docker Sandboxes</th>
+            <th>E2B</th>
+            <th>Microsandbox</th>
+            <th>Raw docker run</th>
+          </tr>
+        </thead>
+        <tbody>
+          {compareRows.map(r => (
+            <tr>
+              <td>{r.feature}</td>
+              <td>{r.devcell}</td>
+              <td>{r.dockerSbx}</td>
+              <td>{r.e2b}</td>
+              <td>{r.microsandbox}</td>
+              <td>{r.rawDocker}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    <p class="stacks-more">Use Docker Sandboxes for microVM isolation or cloud-hosted sandboxes. Use E2B for ephemeral cloud sandboxes with an SDK. Use Microsandbox for libkrun microVMs. Use DevCell when the agent needs full auto-approve with your toolchain and Claude setup intact, and no account or cloud dependency.</p>
+  </section>
+
   <WhatsInside stackColumns={stackColumns} stackFeatures={stackFeatures} />
   <FAQ faqItems={faqItems} />
-
-  <div class="qs-wrap">
-  <section id="get-started">
-    <p class="section-label">Get started</p>
-    <h2>Ready to try it?</h2>
-    <p class="stacks-more" style="margin-bottom: 1.25rem;">One command. One question on first run. Enter takes the default.</p>
-    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
-      <a href="#quickstart" class="btn">Install now ↑</a>
-      <a href="/docs/quickstart" class="btn btn-secondary">Read the docs</a>
-    </div>
-  </section>
-  </div>
 </Base>

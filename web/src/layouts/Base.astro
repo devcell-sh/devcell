@@ -7,7 +7,7 @@ interface Props {
 
 const {
   title,
-  description = 'DevCell — Run AI coding agents in an isolated container.',
+  description = 'Local-first sandbox for AI coding agents. Run Claude Code, Codex, OpenCode, or Gemini inside an isolated cell. No account required.',
   activeNav,
 } = Astro.props;
 ---
@@ -22,6 +22,7 @@ const {
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
+    <link rel="canonical" href={`https://devcell.sh${Astro.url.pathname === '/' ? '' : Astro.url.pathname}`} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:image" content="https://devcell.sh/og-image.png" />
@@ -52,12 +53,12 @@ const {
       </a>
       <button class="nav-toggle" aria-label="Menu" onclick="this.nextElementSibling.classList.toggle('open')">☰</button>
       <nav>
-        <a href="/#gains">What it gains</a>
-        <a href="/#why">The boundary</a>
-        <a href="/#inside">What's inside</a>
         <a href="/#quickstart">Quickstart</a>
+        <a href="/#features">Features</a>
+        <a href="/#compare">Compare</a>
+        <a href="/#inside">Stacks</a>
         <a href="/docs/quickstart" class:list={[{ active: activeNav === 'docs' }]}>Docs</a>
-        <a href="https://github.com/DimmKirr/devcell">GitHub</a>
+        <a href="https://github.com/devcell-sh/devcell">GitHub</a>
       </nav>
     </header>
 
@@ -67,11 +68,13 @@ const {
       <div class="footer-inner">
         <span>devcell — Apache 2.0 License</span>
         <span>
-          <a href="https://github.com/DimmKirr/devcell">GitHub</a>
+          <a href="https://github.com/devcell-sh/devcell">GitHub</a>
           &nbsp;·&nbsp;
-          <a href="https://github.com/DimmKirr/devcell/issues">Issues</a>
+          <a href="https://github.com/devcell-sh/devcell/issues">Issues</a>
           &nbsp;·&nbsp;
-          <a href="https://github.com/DimmKirr/devcell/releases">Releases</a>
+          <a href="https://github.com/devcell-sh/devcell/releases">Releases</a>
+          &nbsp;·&nbsp;
+          <a href="https://github.com/devcell-sh/devcell/blob/main/CONTRIBUTING.md">Contributing</a>
         </span>
       </div>
     </footer>
