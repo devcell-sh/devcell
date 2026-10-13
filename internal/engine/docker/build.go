@@ -206,6 +206,20 @@ func build(ctx context.Context, c engine.Cell, p buildParams) error {
 		_ = exec.CommandContext(ctx, "docker", "volume", "rm", "-f", volumeName).Run()
 	}
 
+	// ── Nix cache hydration ───────────────────────────────────────────────
+	// On first build (volume empty), pull the pre-built /nix store from GHCR
+	// so home-manager switch is incremental instead of from-scratch (~5 min → ~1 min).
+	// Non-fatal: if the cache is unavailable, the build proceeds normally.
+	if !p.recreateVolume {
+		hydrated := VolumeHydrated(volumeName, ThinEntrypointSentinel,
+			func(v string) bool { return VolumeExists(ctx, v) },
+			func(v, p string) bool { return VolumeContains(ctx, v, p) },
+		)
+		if ShouldHydrateFromCache(hydrated, os.Getenv) {
+			HydrateNixCache(ctx, volumeName, Registry, DetectArch())
+		}
+	}
+
 	// ── Build thin image ────────────────────────────────────────────────────
 	buildLabel := BuildLabel("Building thin image", stack, p.explicitStack)
 	sp := ux.NewProgressSpinner(buildLabel)
