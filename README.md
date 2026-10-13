@@ -1,12 +1,17 @@
 # DevCell
 
-Your AI agent can `rm -rf /` and you're fine.
+Claude Code, without the blast radius.
 
-DevCell is a containerized sandbox for AI coding agents. Run Claude Code, Codex, or OpenCode with full auto-approve. Your SSH keys, other repos, and host credentials stay out of reach.
+DevCell is a local-first sandbox for AI coding agents. Run Claude Code, Codex, OpenCode, or Gemini inside an isolated cell with network egress locked down by default. Agents write, delete, and install freely. Your host is untouched.
+
+No account. No API key with Max/Pro. `brew install` and go.
+
+> "Run this in a container, not your actual machine."
+> — Anthropic, Claude Code docs
 
 ## Quickstart
 
-**Prerequisites:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) or Docker Engine.
+**Prerequisites:** Docker Desktop, [OrbStack](https://orbstack.dev/), [Colima](https://github.com/abiosoft/colima), Rancher Desktop, or Docker Engine.
 
 ```bash
 brew install devcell-sh/tap/devcell
@@ -14,56 +19,59 @@ cd your-project
 devcell claude
 ```
 
-On first run, `devcell` creates `devcell.toml` and `.devcell/` in your project directory, then builds the image (~5 min). Works with `devcell codex` and `devcell opencode` too.
+On first run, `devcell` creates `devcell.toml` and `.devcell/` in your project directory, then builds the image (~5 min). Also: `devcell codex`, `devcell opencode`, `devcell gemini`.
 
 ## What you get
 
-- **Isolated sandbox** - agents edit freely inside your project; your host system is untouched
-- **12+ MCP servers** - Yahoo Finance, Google Maps, Linear, KiCad, Inkscape, and more. Backing tools ship in the image alongside their servers
-- **Claude Max/Pro support** - runs Claude Code directly, no API key or proxy needed
-- **Solitary Mode** - `--solitary` locks down outbound traffic to allow-listed domains only, strips privileged mode, dangerous capabilities, docker socket, and published ports. A squid gateway sidecar proxies all egress; everything else is denied
-- **Stealth Chromium + zero-password login** - `devcell login <url>` opens a clean browser on your host, you log in, press Enter; cookies and localStorage sync to the container. The agent never sees your password. Anti-fingerprint Playwright replays sessions that pass Cloudflare and Kasada
-- **Remote desktop** - VNC and RDP into the container to watch or interact with GUI apps
-- **1Password secrets** - list document names in `devcell.toml`; fields are injected as env vars into the container at runtime, written to a RAM-only tmpfs, gone when the container stops
-- **Docker or VM engine** - default: a Linux Docker container. `--os macos` runs a macOS VM on Tart, `--os windows` a Windows VM via winkit; same commands
-- **4 primary stacks**: `base` (minimal), `dev` (seed: stealth browser + IaC MCPs), `ultimate` (general development), `bbb` (ultimate plus specialist tools). Legacy: go/node/python/fullstack/electronics. See [MIGRATION.md](./MIGRATION.md).
-- **Model ranking** - `devcell models` shows cloud models (Anthropic, OpenAI, Google via OpenRouter) and local ollama models ranked by SWE-Bench score and speed, side by side
+- **Egress locked down** - `--solitary` denies all outbound traffic except allow-listed domains. The agent cannot phone home, push to the wrong remote, or exfiltrate tokens
+- **Full auto-approve in isolation** - agents run with no permission prompts. The sandbox makes it safe; the speed makes it worth it. SSH keys, other repos, and host credentials are unreachable unless explicitly configured
+- **No account, no login** - `brew install devcell-sh/tap/devcell`, `cd your-project`, `devcell claude`. No Docker Hub login, no cloud dashboard
+- **Claude Max/Pro works out of the box** - no API key, no proxy, no workarounds
+- **Your Claude setup carries over** - CLAUDE.md, hooks, skills, and MCP config mount into the cell
+- **MCP servers with backing tools** - you don't install MCP servers; they come ready. 86% of MCP servers need local binaries that break on PATH mismatches and missing system libs. Here, the backing tools ship too: the agent can run `tofu plan` or edit PCBs because OpenTofu and KiCad are installed, not just their MCP servers
+- **Three OS engines** - Linux container (Docker), macOS VM (Tart), Windows VM (winkit). Same commands, same config
+- **1Password secrets** - fields injected as env vars at runtime on a RAM-only tmpfs, gone when the cell stops
 
 ## Comparison
 
-| | DevCell | VS Code Dev Containers | E2B | Daytona | Raw `docker run` |
+| | DevCell | Docker Sandboxes | E2B | Microsandbox | Raw `docker run` |
 |---|---|---|---|---|---|
-| Host filesystem isolated | yes | no (mounts workspace) | yes | partial | manual |
-| Claude Max/Pro (no API key) | yes | no | no | no | manual |
-| VM-backed macOS/Windows | yes (tart, winkit) | no | no | no | no |
-| MCP servers bundled | yes | manual | no | no | manual |
-| IDE integration | CLI + any editor | VS Code only | SDK | IDE plugins | manual |
+| Host isolation | container, VM | microVM | Firecracker | libkrun | manual |
+| Account / login required | no | yes | API key | no | no |
+| Claude Max/Pro (no API key) | yes | documented but broken | no | no | manual |
+| CLAUDE.md + hooks preserved | yes | no | no | no | manual |
+| MCP servers + backing tools | yes, auto-config | catalog (manual) | no | own MCP | manual |
+| macOS + Windows VMs | yes | no | no | no | no |
+| Egress lockdown | yes | yes | yes | yes | manual |
+| Local-first | yes | yes | cloud only | yes | yes |
+| Credential brokering | not yet | yes (proxy) | yes (proxy) | yes | manual |
+| Snapshot / restore | not yet | not yet | yes | yes | no |
 
-Use Dev Containers when you want IDE-integrated rebuild-on-save. Use E2B when you need ephemeral cloud sandboxes with an SDK. Use Daytona for team-managed remote environments. Use raw Docker when you already have a hardened seccomp/AppArmor profile. Use DevCell when the agent needs full auto-approve in a cell that can't touch your host.
+Use Docker Sandboxes for microVM isolation or cloud-hosted sandboxes. Use E2B for ephemeral cloud sandboxes with an SDK. Use Microsandbox for libkrun microVMs. Use DevCell when the agent needs full auto-approve with your toolchain and Claude setup intact, and no account or cloud dependency.
 
 ## Stacks
 
-Published to `ghcr.io/devcell-sh/devcell`. Multi-arch: linux/amd64, linux/arm64. The `dev` seed and `ultimate` general development stack support extra capability modules; `bbb` retains the specialist tools previously bundled with ultimate (see [MIGRATION.md](./MIGRATION.md)). Legacy stacks (go, node, python, fullstack, electronics) still build.
+Batteries included, everything swappable. Stacks and modules are defined in [community-home](https://github.com/devcell-sh/home). Use them as-is, extend with modules, or fork and build your own. Base images and nix cache published to `ghcr.io/devcell-sh/devcell` (linux/amd64 + linux/arm64); `devcell build` layers your project config on top.
 
-| Stack | What's inside |
+| Stack | Highlights |
 |---|---|
-| **base** | zsh + starship, git, tmux, ripgrep, jq, sqlite, gnupg, hurl, go-task, gitleaks, mise, nix |
-| **go** | base + Go, Terraform, OpenTofu, Packer, Helm |
-| **node** | base + Node.js 22, npm, stealth Chromium |
-| **python** | base + Python 3.13, uv, stealth Chromium |
-| **fullstack** | go + node + python |
-| **electronics** | base + GUI desktop + KiCad, ngspice, ESPHome, PlatformIO, wokwi-cli |
-| **ultimate** | General development, cloud tools, browser automation, desktop and Draw.io |
-| **bbb** | ultimate + KiCad, Wine, QEMU, Swift, publishing, security/RE, Inkscape/GIMP, FFmpeg/yt-dlp, Kitty, wxWidgets, FreeRDP, native UI development and personal-service MCPs |
+| **base** (default) | zsh + starship, git, tmux, ripgrep, jq, sqlite, mise, nix |
+| **ultimate** | Go, Node.js, Python, OpenTofu, Playwright, stealth Chromium, IceWM desktop, Draw.io, Inkscape |
+| **bbb** (beyond bloated baseline) | ultimate + security/RE (Ghidra-ready), Wine, QEMU, Swift, KiCad, FFmpeg, FreeRDP |
+| **electronics** | KiCad, ngspice, ESPHome, PlatformIO, wokwi-cli, GUI desktop |
+
+Set `stack = "ultimate"` in `devcell.toml` or run `devcell build --stack ultimate`.
 
 Add-on modules (set `modules = ["android"]` in `devcell.toml`):
 
-| Module | What's inside |
+| Module | Highlights |
 |---|---|
-| **android** | ADB + fastboot and the full app RE toolkit — decompilers (jadx, apktool, cfr, dex2jar, enjarify, procyon, androguard), APK acquisition/signing (apkeep, bundletool, apksigner), static triage (apkleaks, apkid, quark-engine), dynamic analysis (mitmproxy, mitmproxy2swagger, frida-tools, jnitrace, scrcpy), OTA/boot-image tools — all platforms; Android SDK + build-tools + emulator (x86_64 only) |
-| **desktop** | GUI desktop: VNC, RDP, Fluxbox, PulseAudio |
+| **android** | Full app RE toolkit: jadx, apktool, frida-tools, mitmproxy, scrcpy, Android SDK |
+| **desktop** | GUI desktop: VNC, RDP, IceWM, PulseAudio |
 | **scraping** | Playwright stealth scripts, anti-fingerprint Chromium config |
-| **infra** | Cloud CLI tools: AWS, GCP, Azure |
+| **infra** | Cloud CLIs: AWS, GCP, Azure |
+
+Full package list and more stacks in [community-home](https://github.com/devcell-sh/home). Fork it, edit one Nix file, run `devcell build`.
 
 ## Engines and guests
 
@@ -89,42 +97,26 @@ os = "macos"
 
 ## MCP servers
 
-Baked into the image and auto-merged into each agent's config at container startup. User-defined servers are preserved. Where applicable, the backing tools ship too: KiCad, Inkscape, and OpenTofu are installed alongside their MCP servers, so the agent can run `tofu plan`, analyze PCBs, or edit SVGs. New servers ship with image updates.
+Two layers, both work:
 
-| Server | Domain | Auth |
-|---|---|---|
-| OpenTofu | IaC provider/module docs | None |
-| Yahoo Finance | Stock data, financials, options | None |
-| EdgarTools | SEC filings: 10-K, 10-Q, 8-K, XBRL | None |
-| FRED API | 800K+ US economic time series | Free key |
-| Google Maps | Geocoding, routing, places, elevation, weather | API key |
-| TripIt | Trip itinerary management | Credentials |
-| Inoreader | RSS feeds, articles, search, tagging | OAuth 2.0 |
-| KiCad | PCB analysis, netlist extraction, DRC, BOM | None |
-| Inkscape | SVG vector graphics and DOM operations | None |
-| Linear | Project and issue management | OAuth 2.1 |
-| Notion | Database and page management | OAuth 2.1 |
-| MCP-NixOS | Nix package search and docs | None |
+- **Your servers** - anything you add with `claude mcp add` or put in `.mcp.json` carries over into the cell. Your config is preserved.
+- **Nix-baked servers** - auto-merged into the agent's config at container startup. The backing tools ship alongside: the agent can run `tofu plan`, analyze PCBs, or edit SVGs because OpenTofu, KiCad, and Inkscape are installed, not just their MCP servers. Pinned to commit hashes in the nix flake, so rebuilds get the same versions.
 
-## Browser login & anti-bot protection
+Headline servers: OpenTofu (IaC), KiCad (PCB analysis), Inkscape (SVG), Yahoo Finance, EdgarTools (SEC filings), FRED API, Google Maps, Linear, Notion. 11 servers total. Full list and auth requirements in [community-home](https://github.com/devcell-sh/home).
 
-`devcell login` lets the agent use authenticated sessions without ever seeing passwords:
+## Session handoff
+
+`devcell auth chrome` lets the agent browse authenticated pages without ever seeing your password. You log in on your host, cookies sync to the cell, the agent replays the session via Playwright.
 
 ```bash
-devcell login https://example.com   # opens a real browser on your host
-                                     # you log in normally, press Enter
-                                     # cookies + localStorage sync to the container
-devcell login --force https://...   # wipe saved session and start fresh
+devcell auth chrome https://example.com   # log in on your host, press Enter
+devcell auth chrome --force https://...   # wipe saved session and start fresh
 ```
-
-**How it avoids bot detection:** the login browser opens with no CDP debugging port — no `--remote-debugging-port`, no special flags. Cloudflare, Kasada, and similar systems cannot detect it as automated. After you close the browser, a separate headless CDP instance reads the cookies from the same profile and writes `storage-state.json` for Playwright. The agent replays the session; your password is never exposed.
-
-The fingerprint (`User-Agent`, platform, browser brands) is read from your real installed Chrome binary and saved alongside the session so Patchright uses an identical identity.
 
 ## Security
 
-- Project directory mounted at `/workspace`, exposed inside the container as `$DEVCELL_PROJECT_DIR` (`$WORKSPACE` still set for compatibility). Host filesystem is unreachable
-- SSH keys, `.env` files outside the project, and host credentials are not mounted
+- Project directory mounted at `/<cellName>` and at its original host path (e.g. `/Users/alex/dev/api-backend`). `$DEVCELL_PROJECT_DIR` points to `/<cellName>`. Host filesystem outside the project is unreachable
+- SSH keys, `.env` files outside the project, and host credentials are not mounted unless explicitly configured via `[[volumes]]`
 - Session user runs without root privileges
 - 1Password secrets injected at runtime, never persisted
 - GPG isolation per container (prevents SQLite lock contention)
@@ -132,21 +124,7 @@ The fingerprint (`User-Agent`, platform, browser brands) is read from your real 
 
 ## Configuration
 
-Project config at `devcell.toml` (created by `devcell init` or first run). Optional global defaults at `~/.config/devcell/devcell.toml`. See `devcell --help` and the [CLI docs](https://devcell.sh/docs/cell) for the full reference.
-
-A JSON Schema for the config is published at `https://devcell.sh/schema/<version>/devcell.json`. Today `<version>` is always `v0.0.0`, tracking `main`; per-release directories can be added later without changing URLs. Add this line to the top of the file for editor validation and completion (taplo, Even Better TOML for VS Code, Zed, Neovim):
-
-```toml
-#:schema https://devcell.sh/schema/v0.0.0/devcell.json
-```
-
-The schema carries a top-level `version` field so you can tell which one you are looking at. The module, stack, and package catalog of the matching home flake is published next to it, so editors offer `modules` and `stack` completions and you can check what a stack already ships before adding a package:
-
-- `https://devcell.sh/schema/<version>/devcell-sh/home/modules.json`: module name, description, MCP servers, size
-- `https://devcell.sh/schema/<version>/devcell-sh/home/stacks.json`: modules enabled and packages installed per stack
-- `https://devcell.sh/schema/<version>/devcell-sh/home/packages.json`: package version and which stacks ship it
-
-Only `v0.0.0` is published for now. It is regenerated by the `schema-generate` pre-commit hook (and on every `task cell:build`) whenever the config struct or the catalog changes; a drift test in `internal/cfg` backs that up in CI. Refresh the catalog with `task schema:catalog` (needs nix) after the home flake changes.
+Project config at `devcell.toml` (created by `devcell init` or first run) with [JSON Schema](https://devcell.sh/schema/v0.0.0/devcell.json) for editor validation and completion. Optional global defaults at `~/.config/devcell/devcell.toml`. See `devcell --help` for the full reference.
 
 ## WireGuard tunnels
 
@@ -157,17 +135,12 @@ Add one `[[wireguard]]` block per tunnel to `devcell.toml` with a standard wg-qu
 
 Set both in the host environment where you run `devcell`. When a tunnel is enabled they are forwarded into the container by name (values never appear in the `docker run` command line), written to a `/run/secrets` tmpfs, and applied with `wg set` after the interface is up. No manual `PostUp` is needed.
 
-## Customization
+## When you need more
 
-Start simple, go deeper when you need to.
-
-**Runtime versions** - drop a `.tool-versions` or `mise.toml` in your project. Runtimes install automatically at startup. No rebuild needed.
-
-**Add packages** - add npm or Python packages in `devcell.toml`, then `devcell build`.
-
-**Extend a stack** - edit `.devcell/flake.nix` to add nix packages. Run `devcell build` to apply.
-
-**Fork nixhome** - fork the [nixhome](https://github.com/devcell-sh/home) repo, point your flake to your fork. Upstream updates still merge cleanly.
+- **Runtime versions** - `.tool-versions` or `mise.toml`, no rebuild
+- **Extra packages** - `devcell.toml` then `devcell build`
+- **Full control** - `.devcell/flake.nix` for nix packages
+- **Org-wide stacks** - fork [community-home](https://github.com/devcell-sh/home), point your flake to your fork
 
 <details>
 <summary><strong>Development</strong></summary>
@@ -200,7 +173,7 @@ go test -v -timeout 600s ./test/...   # Long mode - rebuilds image first
 
 ### Nix modules
 
-The image is built from composable Nix home-manager modules (`nixhome/modules/`), assembled into stacks (`nixhome/profiles/`). Validate after edits:
+The image is built from composable Nix home-manager modules in the [community-home](https://github.com/devcell-sh/home) repo, assembled into stacks. Validate after edits:
 
 ```bash
 task nix:validate    # Syntax check + attribute resolution across all stacks
@@ -216,17 +189,19 @@ task nix:validate    # Syntax check + attribute resolution across all stacks
 | **project** | A host directory with code. Mounted into a container. |
 | **cell** | The engine-agnostic runtime unit for one (workspace, project) pair. Named `<project>-<cellID>`. |
 | **stack** | The image variant a container is built from (`base`, `dev`, `ultimate`, `bbb`). |
-| **module** | A toggleable Nix capability composed into a stack (see [MIGRATION.md](./MIGRATION.md)). |
+| **module** | A toggleable Nix capability composed into a stack (`modules = ["android"]` in `devcell.toml`). |
 
-**One-line model:** *a workspace is the boundary; many projects live inside it; each project spawns one cell.*
+**One-line model:** *a workspace is the boundary; many projects live inside it; each project spawns one or more cells.*
 
 ## Not yet
 
 | Gap | Status | Where to look |
 |---|---|---|
-| `windows-full` guest | internal only | `internal/engine` capability table |
+| Credential brokering proxy (secrets never enter the sandbox) | planned | `internal/engine/docker` |
 | Snapshot/restore cells | planned | `internal/engine/docker` |
-| Pre-built registry images (`devcell pull`) | planned | image build pipeline |
+| Nix cache auto-hydration (faster first build) | planned | `cmd/nix_store.go`, `internal/engine/docker/build.go` |
+| `devcell pull` (skip build entirely for default stacks) | planned | image build pipeline |
+| `windows-full` guest | internal only | `internal/engine` capability table |
 
 ## License
 
