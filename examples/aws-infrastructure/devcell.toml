@@ -54,7 +54,7 @@ packages = ["jq"]
 # Warn at start when the cell is behind its image. Default: true. Env: DEVCELL_STALE_WARN.
 # stale_warning = true
 #
-# Subcommand to run when `cell` is invoked with no arguments. Env: DEVCELL_DEFAULT_COMMAND.
+# Subcommand to run when `devcell` is invoked with no arguments. Env: DEVCELL_DEFAULT_COMMAND.
 # default_command = "claude"
 #
 # --- Engine ---
