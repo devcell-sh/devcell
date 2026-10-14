@@ -17,7 +17,7 @@
           pkgs = import nixpkgs {inherit system;};
         });
 
-    # Tight source filter — only the Go files needed to compile cell.
+    # Tight source filter — only the Go files needed to compile devcell.
     # Excludes test/results/, web/, docs/, etc. so each
     # nix-build doesn't copy the entire repo into the store.
     cellSrc = nixpkgs.lib.fileset.toSource {
@@ -60,7 +60,7 @@
         subPackages = ["cmd"];
 
         # Stamp version.Version / GitCommit / BuildDate into the binary
-        # so `cell --version` reports the flake's tag/commit instead of
+        # so `devcell --version` reports the flake's tag/commit instead of
         # the hardcoded "v0.0.0" defaults in internal/version/version.go.
         # Mirrors Taskfile.yml CELL_LDFLAGS and .goreleaser.yaml.
         ldflags = [
@@ -95,7 +95,7 @@
         meta = with pkgs.lib; {
           description = "devcell CLI — container-native dev environments";
           homepage = "https://github.com/devcell-sh/devcell";
-          license = licenses.mit;
+          license = licenses.asl20;
           mainProgram = "devcell";
         };
       };
@@ -105,7 +105,7 @@
     # Home-manager module: configure the GLOBAL devcell config declaratively.
     #   imports = [ devcell.homeManagerModules.default ];
     #   devcell = { enable = true; prompt = "..."; op.documents = [ ... ]; };
-    # Renders ~/.config/devcell/devcell.toml and installs the cell CLI from
+    # Renders ~/.config/devcell/devcell.toml and installs the devcell CLI from
     # this flake (override with devcell.package). Option tree is generated
     # from internal/cfg.CellConfig by `task hm:generate` — see
     # nix/home-manager/options.nix.
@@ -113,7 +113,7 @@
       devcell = { config, lib, pkgs, ... }: {
         imports = [ ./nix/home-manager/module.nix ];
         config.devcell.package =
-          lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.cell;
+          lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.default;
       };
       default = devcell;
     };

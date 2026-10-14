@@ -35,8 +35,8 @@ more than one layer. All remaining layers are extracted in order. This
 handles both single-layer (legacy) and multi-layer (chunked) cache images.
 
 Examples:
-  cell nix-store pull --image ghcr.io/org/repo:nix-cache-amd64-latest --volume devcell-nix-store
-  cell nix-store pull --image ghcr.io/org/repo:nix-cache-amd64-latest --dir /tmp/cache-extract`,
+  devcell nix-store pull --image ghcr.io/org/repo:nix-cache-amd64-latest --volume devcell-nix-store
+  devcell nix-store pull --image ghcr.io/org/repo:nix-cache-amd64-latest --dir /tmp/cache-extract`,
 	RunE: runNixStorePull,
 }
 
@@ -57,14 +57,14 @@ streams, 1 manifest write). Set DEVCELL_NIX_CHUNK_SIZE=0 to disable
 chunking.
 
 Examples:
-  cell nix-store push --volume devcell-nix-store-arm64 \
+  devcell nix-store push --volume devcell-nix-store-arm64 \
     --base gcr.io/distroless/static-debian12:latest \
     --image ghcr.io/org/repo:nix-cache-arm64-latest \
     --tag-alias ghcr.io/org/repo:nix-cache-arm64-abc123 \
     --retries 3 --min-size 1GB
 
   docker run --rm -v devcell-nix-store:/nix:ro alpine tar -cf - -C / nix \
-  | cell nix-store push \
+  | devcell nix-store push \
       --base gcr.io/distroless/static-debian12:latest \
       --image ghcr.io/org/repo:nix-cache-amd64-latest`,
 	RunE: runNixStorePush,

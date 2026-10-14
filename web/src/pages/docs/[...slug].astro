@@ -15,9 +15,9 @@ const { Content } = await render(entry);
 
 const allDocs = await getCollection('cell');
 
-// Top-level subcommands only (one underscore, e.g. cell_claude not cell_codex_resume)
+// Top-level subcommands only (one underscore, e.g. devcell_claude not devcell_codex_resume)
 const topCommands = allDocs
-  .filter((d) => d.id.startsWith('cell_') && d.id.split('_').length === 2)
+  .filter((d) => d.id.startsWith('devcell_') && d.id.split('_').length === 2)
   .sort((a, b) => a.id.localeCompare(b.id));
 
 // Guide pages grouped by prefix
@@ -40,7 +40,7 @@ const mcpDocs = allDocs
 const currentId = entry.id;
 
 // Build flat ordered list for prev/next navigation
-const cliRoot = allDocs.filter((d) => d.id === 'cell');
+const cliRoot = allDocs.filter((d) => d.id === 'devcell');
 const allOrdered = [...guides, ...configDocs, ...howtos, ...mcpDocs, ...cliRoot, ...topCommands];
 const currentIndex = allOrdered.findIndex((d) => d.id === currentId);
 const prevDoc = currentIndex > 0 ? allOrdered[currentIndex - 1] : null;
@@ -316,14 +316,14 @@ const nextDoc = currentIndex < allOrdered.length - 1 ? allOrdered[currentIndex +
         </>
       )}
       <p class="sidebar-label" style="margin-top:1rem">CLI reference</p>
-      <a href="/docs/cell" class:list={[{ active: currentId === 'cell' }]}>cell (root)</a>
+      <a href="/docs/devcell" class:list={[{ active: currentId === 'devcell' }]}>devcell (root)</a>
       <p class="sidebar-label" style="margin-top:1rem">Commands</p>
       {topCommands.map((doc) => (
         <a
           href={`/docs/${doc.id}`}
           class:list={[{ active: doc.id === currentId }]}
         >
-          {doc.id.replace('cell_', '')}
+          {doc.id.replace('devcell_', '')}
         </a>
       ))}
     </aside>

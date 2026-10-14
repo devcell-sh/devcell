@@ -16,8 +16,8 @@ var startDetach bool
 
 var startCmd = &cobra.Command{
 	Use:   "start",
-	Short: "Start a devcell container or VM in the background",
-	Long: `Starts a devcell container or Windows VM running in the background.
+	Short: "Start a DevCell container or VM in the background",
+	Long: `Starts a DevCell container or Windows VM running in the background.
 Use 'cell shell' to attach, 'cell stop' to shut it down.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		applyOutputFlags()

@@ -14,7 +14,7 @@ import (
 
 var buildCmd = &cobra.Command{
 	Use:   "build",
-	Short: "Build (or rebuild) the local devcell image",
+	Short: "Build (or rebuild) the local DevCell image",
 	RunE:  runBuild,
 }
 

@@ -14,8 +14,8 @@ import (
 
 var claudeCmd = &cobra.Command{
 	Use:   "claude [args...]",
-	Short: "Run Claude Code in a devcell container",
-	Long: `Starts a Claude Code session inside an isolated devcell container.
+	Short: "Run Claude Code in a DevCell container",
+	Long: `Starts a Claude Code session inside an isolated DevCell container.
 
 The current working directory is mounted as /workspace. All additional
 args are forwarded to the claude binary unchanged.
@@ -39,10 +39,10 @@ The model is resolved in order:
 
 Examples:
 
-    cell claude
-    cell claude --resume
-    cell claude --ollama
-    cell claude --openrouter`,
+    devcell claude
+    devcell claude --resume
+    devcell claude --ollama
+    devcell claude --openrouter`,
 	DisableFlagParsing: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if wantsHelp(args) {

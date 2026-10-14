@@ -17,18 +17,18 @@ import (
 
 var shellCmd = &cobra.Command{
 	Use:   "shell [-- command [args...]]",
-	Short: "Open an interactive shell in a devcell container",
-	Long: `Opens an interactive zsh shell inside a devcell container.
+	Short: "Open an interactive shell in a DevCell container",
+	Long: `Opens an interactive zsh shell inside a DevCell container.
 
-If a container is already running (from 'cell start'), attaches to it.
+If a container is already running (from 'devcell start'), attaches to it.
 Otherwise starts a new container. The current working directory is mounted
 as /workspace. Optionally pass a command after -- to run it
 non-interactively instead of starting a shell.
 
 Examples:
 
-    cell shell
-    cell shell -- ls /workspace`,
+    devcell shell
+    devcell shell -- ls /workspace`,
 	DisableFlagParsing: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if wantsHelp(args) {

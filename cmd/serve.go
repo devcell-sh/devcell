@@ -135,7 +135,7 @@ they do NOT survive a serve restart. Terminal jobs are evicted after
 1h. Combining stream=true with background=true returns 400.
 
 The claude binary is invoked with --dangerously-skip-permissions (same
-default cell claude uses) — without it any tool call would block on the
+default devcell claude uses) — without it any tool call would block on the
 permission gate, since the served claude has no TTY for stdin. The
 operator's auth boundary is the bearer API key (DEVCELL_API_KEY).
 
@@ -176,11 +176,11 @@ the API body still merge into the user prompt independently.
 
 Examples:
 
-    cell serve
-    cell serve --port 9090
-    cell serve --system-prompt-file ./SYSTEM.md
-    cell serve --system-prompt "You are a backend code assistant for project X."
-    DEVCELL_LOG_PROMPTS=1 LOG_LEVEL=info cell serve  # debug a client integration`,
+    devcell serve
+    devcell serve --port 9090
+    devcell serve --system-prompt-file ./SYSTEM.md
+    devcell serve --system-prompt "You are a backend code assistant for project X."
+    DEVCELL_LOG_PROMPTS=1 LOG_LEVEL=info devcell serve  # debug a client integration`,
 	RunE: runServe,
 }
 
@@ -227,7 +227,7 @@ func init() {
 	serveCmd.Flags().StringVar(&serveWorkspaceHost, "workspace-host", "",
 		"public hostname for .rdp files (fallback: Host header from request)")
 	serveCmd.Flags().BoolVar(&serveDocker, "docker", false,
-		"run cell serve in a Docker container (detached, with Docker socket)")
+		"run devcell serve in a Docker container (detached, with Docker socket)")
 	serveCmd.Flags().BoolVar(&serveStop, "stop", false,
 		"stop a running daemon")
 	serveCmd.Flags().BoolVar(&servePTY, "pty", false,
@@ -426,7 +426,7 @@ func startServeDaemon() error {
 
 	fmt.Fprintf(os.Stderr, "serve container started (container %s)\n", serveContainerName)
 	fmt.Fprintf(os.Stderr, "  logs: docker logs -f %s\n", serveContainerName)
-	fmt.Fprintf(os.Stderr, "  stop: cell serve --stop\n")
+	fmt.Fprintf(os.Stderr, "  stop: devcell serve --stop\n")
 	return nil
 }
 

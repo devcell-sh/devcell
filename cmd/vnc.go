@@ -14,14 +14,14 @@ import (
 
 var vncCmd = &cobra.Command{
 	Use:   "vnc [app-name or suffix]",
-	Short: "Open VNC connection to the running devcell container",
-	Long: `Open a VNC connection to a running devcell container.
+	Short: "Open VNC connection to the running DevCell container",
+	Long: `Open a VNC connection to a running DevCell container.
 
 When multiple containers are running, specify which one by app name or
 just the numeric suffix:
 
-    cell vnc devcell-271
-    cell vnc 271`,
+    devcell vnc devcell-271
+    devcell vnc 271`,
 	Args:              cobra.MaximumNArgs(1),
 	RunE:              runVNC,
 	ValidArgsFunction: completeRunningApps,

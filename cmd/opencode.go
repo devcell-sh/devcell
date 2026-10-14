@@ -16,8 +16,8 @@ import (
 
 var opencodeCmd = &cobra.Command{
 	Use:   "opencode [args...]",
-	Short: "Run OpenCode in a devcell container",
-	Long: `Starts an OpenCode session inside an isolated devcell container.
+	Short: "Run OpenCode in a DevCell container",
+	Long: `Starts an OpenCode session inside an isolated DevCell container.
 
 The current working directory is mounted as /workspace.
 All additional args are forwarded to the opencode binary unchanged.
@@ -28,8 +28,8 @@ When [llm.providers] is configured in devcell.toml, those models are used instea
 
 Examples:
 
-    cell opencode
-    cell opencode --model anthropic/claude-sonnet-4-5`,
+    devcell opencode
+    devcell opencode --model anthropic/claude-sonnet-4-5`,
 	DisableFlagParsing: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if wantsHelp(args) {
@@ -53,13 +53,13 @@ Examples:
 var opencodeResumeCmd = &cobra.Command{
 	Use:   "resume [args...]",
 	Short: "Resume an OpenCode session",
-	Long: `Resumes a previous OpenCode session inside a devcell container.
+	Long: `Resumes a previous OpenCode session inside a DevCell container.
 
 All additional args are forwarded to 'opencode resume' unchanged.
 
 Examples:
 
-    cell opencode resume`,
+    devcell opencode resume`,
 	DisableFlagParsing: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if wantsHelp(args) {

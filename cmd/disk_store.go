@@ -22,8 +22,8 @@ artifact to a registry. The disk is chunked, compressed with zstd, and
 stored under custom devcell media types.
 
 Examples:
-  cell disk-store push --image ghcr.io/devcell-sh/winkit/base:v1 --disk /path/to/template.qcow2
-  cell disk-store push --image ghcr.io/devcell-sh/winkit/base:v1 --disk /path/to/template.qcow2 --chunk-size 256`,
+  devcell disk-store push --image ghcr.io/devcell-sh/winkit/base:v1 --disk /path/to/template.qcow2
+  devcell disk-store push --image ghcr.io/devcell-sh/winkit/base:v1 --disk /path/to/template.qcow2 --chunk-size 256`,
 	RunE: runDiskStorePush,
 }
 
@@ -35,8 +35,8 @@ The download is atomic (temp file + rename) and returns an error on
 cache miss.
 
 Examples:
-  cell disk-store pull --image ghcr.io/devcell-sh/winkit/base:v1 --disk /path/to/dest.qcow2
-  cell disk-store pull --image ghcr.io/devcell-sh/winkit/base:v1 --disk /path/to/dest.raw --output-format raw`,
+  devcell disk-store pull --image ghcr.io/devcell-sh/winkit/base:v1 --disk /path/to/dest.qcow2
+  devcell disk-store pull --image ghcr.io/devcell-sh/winkit/base:v1 --disk /path/to/dest.raw --output-format raw`,
 	RunE: runDiskStorePull,
 }
 
@@ -47,7 +47,7 @@ var diskStoreResolveCmd = &cobra.Command{
 without downloading it. Prints the digest and size on hit, exits 1 on miss.
 
 Examples:
-  cell disk-store resolve --image ghcr.io/devcell-sh/winkit/base:v1`,
+  devcell disk-store resolve --image ghcr.io/devcell-sh/winkit/base:v1`,
 	RunE: runDiskStoreResolve,
 }
 

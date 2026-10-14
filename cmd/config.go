@@ -15,12 +15,12 @@ import (
 
 var configCmd = &cobra.Command{
 	Use:   "config",
-	Short: "Inspect and migrate devcell config files",
+	Short: "Inspect and migrate DevCell config files",
 }
 
 var configMigrateCmd = &cobra.Command{
 	Use:   "migrate",
-	Short: "Rewrite deprecated keys in devcell config files",
+	Short: "Rewrite deprecated keys in DevCell config files",
 	Long: `Rewrites every deprecated key in the global config (~/.config/devcell/devcell.toml)
 and the project configs (devcell.toml and .devcell.toml) to their current spelling, in place.
 Comments, ordering and unrelated lines are kept. A changed file is first

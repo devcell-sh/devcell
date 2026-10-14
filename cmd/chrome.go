@@ -50,10 +50,10 @@ login page.
 
 Examples:
 
-    cell auth chrome tripit                    # open, log in, Enter → sync
-    cell auth chrome tripit -- https://tripit.com
-    cell auth chrome --sync tripit             # re-sync without opening browser
-    cell auth chrome --no-sync tripit          # browse without syncing`,
+    devcell auth chrome tripit                    # open, log in, Enter → sync
+    devcell auth chrome tripit -- https://tripit.com
+    devcell auth chrome --sync tripit             # re-sync without opening browser
+    devcell auth chrome --no-sync tripit          # browse without syncing`,
 	Args:              cobra.ArbitraryArgs,
 	RunE:              runChrome,
 	ValidArgsFunction: completeRunningApps,
@@ -116,7 +116,7 @@ func runChrome(cmd *cobra.Command, args []string) error {
 	ux.Debugf("storage-state: %s", storageStatePath)
 
 	if chromeSyncOnly {
-		return fmt.Errorf("--sync requires a running browser; use 'cell auth chrome' instead")
+		return fmt.Errorf("--sync requires a running browser; use 'devcell auth chrome' instead")
 	}
 
 	if chromeForce {

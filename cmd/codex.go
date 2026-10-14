@@ -11,8 +11,8 @@ import (
 
 var codexCmd = &cobra.Command{
 	Use:   "codex [args...]",
-	Short: "Run Codex in a devcell container",
-	Long: `Starts an OpenAI Codex session inside an isolated devcell container.
+	Short: "Run Codex in a DevCell container",
+	Long: `Starts an OpenAI Codex session inside an isolated DevCell container.
 
 The current working directory is mounted as /workspace. All additional
 args are forwarded to the codex binary unchanged.
@@ -28,9 +28,9 @@ Without ollama configured, Codex runs normally against the cloud provider
 
 Examples:
 
-    cell codex
-    cell codex --ollama
-    cell codex --model o3`,
+    devcell codex
+    devcell codex --ollama
+    devcell codex --model o3`,
 	DisableFlagParsing: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if wantsHelp(args) {
@@ -46,13 +46,13 @@ Examples:
 var codexResumeCmd = &cobra.Command{
 	Use:   "resume [args...]",
 	Short: "Resume a Codex session",
-	Long: `Resumes a previous Codex session inside a devcell container.
+	Long: `Resumes a previous Codex session inside a DevCell container.
 
 All additional args are forwarded to 'codex resume' unchanged.
 
 Examples:
 
-    cell codex resume`,
+    devcell codex resume`,
 	DisableFlagParsing: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if wantsHelp(args) {

@@ -15,14 +15,14 @@ import (
 
 var rdpCmd = &cobra.Command{
 	Use:   "rdp [app-name or suffix]",
-	Short: "Open RDP connection to the running devcell container",
-	Long: `Open an RDP connection to a running devcell container.
+	Short: "Open RDP connection to the running DevCell container",
+	Long: `Open an RDP connection to a running DevCell container.
 
 When multiple containers are running, specify which one by app name or
 just the numeric suffix:
 
-    cell rdp devcell-271
-    cell rdp 271`,
+    devcell rdp devcell-271
+    devcell rdp 271`,
 	Args:              cobra.MaximumNArgs(1),
 	RunE:              runRDP,
 	ValidArgsFunction: completeRunningApps,

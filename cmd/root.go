@@ -23,8 +23,8 @@ import (
 var rootCmd = &cobra.Command{
 	Use:          "devcell",
 	SilenceUsage: true, // don't dump usage after handled errors
-	Short:        "Run AI coding agents in a devcell container",
-	Long: `devcell launches AI coding agents (claude, codex, opencode) and utility
+	Short:        "Run AI coding agents in a DevCell container",
+	Long: `DevCell launches AI coding agents (claude, codex, opencode) and utility
 tools inside a consistent Docker dev environment.`,
 	Args: cobra.ArbitraryArgs,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {

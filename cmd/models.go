@@ -50,10 +50,10 @@ Falls back to built-in estimates if SWE-bench data is unavailable.
 
 Examples:
 
-    cell models                  # cloud + local downloaded (default)
-    cell models --source=local   # local ollama models only
-    cell models --source=cloud   # cloud models only
-    cell models --debug`,
+    devcell models                  # cloud + local downloaded (default)
+    devcell models --source=local   # local ollama models only
+    devcell models --source=cloud   # cloud models only
+    devcell models --debug`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		applyOutputFlagsWithLog("models")
 		ctx := context.Background()

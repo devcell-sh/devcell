@@ -16,8 +16,8 @@ import (
 
 var stopCmd = &cobra.Command{
 	Use:   "stop",
-	Short: "Stop the running devcell container or VM",
-	Long: `Stops the devcell container or VM started by 'cell start'.
+	Short: "Stop the running DevCell container or VM",
+	Long: `Stops the DevCell container or VM started by 'cell start'.
 Docker containers are automatically removed after stopping.
 Windows VMs are shut down gracefully via SSH, then SIGTERM.`,
 	RunE: func(cmd *cobra.Command, args []string) error {

@@ -6,8 +6,8 @@ import (
 
 var geminiCmd = &cobra.Command{
 	Use:   "gemini [args...]",
-	Short: "Run Gemini CLI in a devcell container",
-	Long: `Starts a Google Gemini CLI session inside an isolated devcell container.
+	Short: "Run Gemini CLI in a DevCell container",
+	Long: `Starts a Google Gemini CLI session inside an isolated DevCell container.
 
 The current working directory is mounted as /workspace. All additional
 args are forwarded to the gemini binary unchanged.
@@ -21,9 +21,9 @@ OpenAI-compatible base URL override.
 
 Examples:
 
-    cell gemini
-    cell gemini -p "summarize this repo"
-    cell gemini --model=gemini-2.5-pro`,
+    devcell gemini
+    devcell gemini -p "summarize this repo"
+    devcell gemini --model=gemini-2.5-pro`,
 	DisableFlagParsing: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if wantsHelp(args) {

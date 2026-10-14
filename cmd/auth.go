@@ -12,6 +12,6 @@ var authCmd = &cobra.Command{
 credential on your host that the cell can mount read-only.
 
 Currently available:
-  cell auth kube     bootstrap a read-only kubeconfig from your admin context
-  cell auth chrome   mint a Playwright storage-state from an interactive Chromium login`,
+  devcell auth kube     bootstrap a read-only kubeconfig from your admin context
+  devcell auth chrome   mint a Playwright storage-state from an interactive Chromium login`,
 }
