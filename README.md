@@ -8,7 +8,7 @@ Claude Code, without the blast radius.
 [![Go Report Card](https://goreportcard.com/badge/github.com/devcell-sh/devcell)](https://goreportcard.com/report/github.com/devcell-sh/devcell)
 
 <p align="center">
-  <img src="web/public/demo.svg" alt="devcell claude boot sequence" width="700">
+  <img src="web/public/demo.svg" alt="devcell claude boot sequence">
 </p>
 
 ## Why DevCell?
