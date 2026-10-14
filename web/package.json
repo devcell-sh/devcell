@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@astrojs/cloudflare": "12",
+    "@astrojs/sitemap": "^3.7.4",
     "astro": "^5.17.1"
   },
   "devDependencies": {

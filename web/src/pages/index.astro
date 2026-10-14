@@ -5,6 +5,7 @@ import FeatureCards from '../components/FeatureCards.astro';
 import Quickstart from '../components/Quickstart.astro';
 import WhatsInside from '../components/WhatsInside.astro';
 import CompareSection from '../components/CompareSection.astro';
+import LogoStrips from '../components/LogoStrips.astro';
 import FAQ from '../components/FAQ.astro';
 
 const stableVersion = process.env.STABLE_VERSION || '';
@@ -32,31 +33,31 @@ const logoGrid = [
 ];
 
 const compareRows = [
-  { feature: "Host isolation",             devcell: "container, VM",       dockerSbx: "microVM",            e2b: "Firecracker",   microsandbox: "libkrun",  rawDocker: "manual" },
-  { feature: "Account / login required",   devcell: "no",                  dockerSbx: "yes",                e2b: "API key",       microsandbox: "no",       rawDocker: "no" },
-  { feature: "Claude Max/Pro (no API key)",devcell: "yes",                 dockerSbx: "documented, broken", e2b: "no",            microsandbox: "no",       rawDocker: "manual" },
-  { feature: "CLAUDE.md + hooks preserved",devcell: "yes",                 dockerSbx: "no",                 e2b: "no",            microsandbox: "no",       rawDocker: "manual" },
-  { feature: "MCP servers + backing tools",devcell: "yes, auto-config",    dockerSbx: "catalog (manual)",   e2b: "no",            microsandbox: "own MCP",  rawDocker: "manual" },
-  { feature: "macOS + Windows VMs",        devcell: "yes",                 dockerSbx: "no",                 e2b: "no",            microsandbox: "no",       rawDocker: "no" },
-  { feature: "Egress lockdown",            devcell: "yes",                 dockerSbx: "yes",                e2b: "yes",           microsandbox: "yes",      rawDocker: "manual" },
-  { feature: "Local-first",                devcell: "yes",                 dockerSbx: "yes",                e2b: "cloud only",    microsandbox: "yes",      rawDocker: "yes" },
-  { feature: "Credential brokering",       devcell: "not yet",             dockerSbx: "yes (proxy)",        e2b: "yes (proxy)",   microsandbox: "yes",      rawDocker: "manual" },
-  { feature: "Snapshot / restore",         devcell: "not yet",             dockerSbx: "not yet",            e2b: "yes",           microsandbox: "yes",      rawDocker: "no" },
+  { feature: "Host isolation",             devcell: "container, VM",       dockerSbx: "microVM",            daytona: "container",   microsandbox: "libkrun",  rawDocker: "manual" },
+  { feature: "Account / login required",   devcell: "no",                  dockerSbx: "yes",                daytona: "yes",       microsandbox: "no",       rawDocker: "no" },
+  { feature: "Claude Max/Pro (no API key)",devcell: "yes",                 dockerSbx: "documented, broken", daytona: "no",        microsandbox: "no",       rawDocker: "manual" },
+  { feature: "CLAUDE.md + hooks preserved",devcell: "yes",                 dockerSbx: "no",                 daytona: "no",        microsandbox: "no",       rawDocker: "manual" },
+  { feature: "MCP servers + backing tools",devcell: "yes, auto-config",    dockerSbx: "catalog (manual)",   daytona: "no",        microsandbox: "own MCP",  rawDocker: "manual" },
+  { feature: "macOS + Windows VMs",        devcell: "yes",                 dockerSbx: "no",                 daytona: "no",        microsandbox: "no",       rawDocker: "no" },
+  { feature: "Egress lockdown",            devcell: "yes",                 dockerSbx: "yes",                daytona: "yes",       microsandbox: "yes",      rawDocker: "manual" },
+  { feature: "Local-first",                devcell: "yes",                 dockerSbx: "yes",                daytona: "cloud only", microsandbox: "yes",     rawDocker: "yes" },
+  { feature: "Credential brokering",       devcell: "not yet",             dockerSbx: "yes (proxy)",        daytona: "yes (API)", microsandbox: "yes",      rawDocker: "manual" },
+  { feature: "Snapshot / restore",         devcell: "not yet",             dockerSbx: "not yet",            daytona: "yes",       microsandbox: "yes",      rawDocker: "no" },
 ];
 
 const faqItems = [
   { q: "Do I need an API key or Claude subscription?",
-    a: "Bring your own license or model. Claude Max, Pro, and API keys all work — devcell starts the same client you already use, just inside a container. Same goes for Codex, OpenCode, and Gemini." },
+    a: "Bring your own license or model. Claude Max, Pro, and API keys all work — DevCell starts the same client you already use, just inside a container. Same goes for Codex, OpenCode, and Gemini." },
   { q: "Why not just write my own Dockerfile?",
-    a: "You can — the afternoon is the demo; the maintenance is the product. A hand-rolled container needs MCP wiring, backing apps, a display server, secrets handling, UID mapping, and per-agent flags — and needs them again after every client update. Everything devcell ships is defined in the open devcell-sh/home modules: read them, fork them, or reuse them standalone if you'd rather keep your own setup." },
+    a: "You can — the afternoon is the demo; the maintenance is the product. A hand-rolled container needs MCP wiring, backing apps, a display server, secrets handling, UID mapping, and per-agent flags — and needs them again after every client update. Everything DevCell ships is defined in the open devcell-sh/home modules: read them, fork them, or reuse them standalone if you'd rather keep your own setup." },
   { q: "How is DevCell different from Docker Sandboxes?",
     a: "Docker Sandboxes use microVMs for stronger isolation and integrate with the Docker ecosystem. DevCell is local-first with no account required, preserves your CLAUDE.md and hooks, ships MCP servers with their backing tools pre-installed, and supports macOS and Windows VMs. Docker Sandboxes require a Docker account and drop your Claude config." },
   { q: "Can the agent install packages inside the container?",
-    a: "Yes. The agent can run apt, npm install, pip install, nix — whatever the project needs. Network access is unrestricted by default. devcell claude --solitary locks down egress to allow-listed domains only. Port forwarding and extra volume mounts are configurable in devcell.toml." },
+    a: "Yes. The agent can run apt, npm install, pip install, nix — whatever the project needs. Network access is unrestricted by default. <code>devcell claude --solitary</code> locks down egress to allow-listed domains only. Port forwarding and extra volume mounts are configurable in devcell.toml." },
   { q: "Does my existing Claude Code config carry over?",
     a: "Your project-level config (CLAUDE.md, .claude/) is mounted with your project. Host ~/.claude/skills is mounted read-write, the rest of ~/.claude is read-only. Your host-machine config stays safe." },
   { q: "How big are the images? Can I skip Docker?",
-    a: "Base is ~1.3 GB and builds in under 2 minutes; ultimate is ~20 GB. First run lets you pick a stack. No Docker? --os macos provisions the same cell as a VM (tart, Apple Silicon) — same toolchain, same commands." },
+    a: "Base is ~1.3 GB and builds in under 2 minutes; ultimate is ~20 GB. First run builds the default stack. No Docker? --os macos provisions the same cell as a VM (tart, Apple Silicon) — same toolchain, same commands." },
 ];
 
 ---
@@ -228,6 +229,59 @@ const faqItems = [
       margin: 0;
       letter-spacing: 0;
     }
+
+    /* AGENT LOGOS */
+    .agent-logos {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-top: 1.25rem;
+    }
+
+    .agent-logos-label {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: #888;
+      white-space: nowrap;
+    }
+
+    .agent-logo {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .agent-logo img {
+      height: 28px;
+      width: 28px;
+      opacity: 0.55;
+      transition: opacity 0.15s;
+    }
+
+    .agent-logo:hover img {
+      opacity: 1;
+    }
+
+    .agent-logo::after {
+      content: attr(data-title);
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--black);
+      color: var(--white);
+      font-family: var(--font-mono);
+      font-size: 0.6rem;
+      padding: 0.2rem 0.4rem;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s;
+    }
+
+    .agent-logo:hover::after { opacity: 1; }
 
     /* SECTION */
     section { max-width: 1200px; margin: 0 auto; padding: 3rem 2rem; }
@@ -516,6 +570,21 @@ const faqItems = [
     .code-block .cmd { color: #E5E5E5; }
     .code-block .arg { color: var(--accent); }
 
+    /* DEMO SVG */
+    .demo-wrap {
+      display: flex;
+      justify-content: center;
+      margin-top: 1.5rem;
+    }
+    .demo-svg {
+      width: 100%;
+      max-width: 720px;
+      border: var(--border);
+      box-shadow: var(--shadow);
+      border-radius: 4px;
+      display: block;
+    }
+
     /* NOTE */
     .note {
       border: var(--border);
@@ -751,10 +820,11 @@ const faqItems = [
     .compare-table tbody tr:hover td { background: color-mix(in srgb, var(--accent) 25%, white); }
 </style>
 
-<Base title="devcell — Claude Code, without the blast radius" description="Local-first sandbox for AI coding agents. Run Claude Code, Codex, OpenCode, or Gemini inside an isolated cell. No account, no API key with Max/Pro.">
+<Base title="DevCell — Claude Code, without the blast radius" description="Local-first sandbox for AI coding agents. Run Claude Code, Codex, OpenCode, or Gemini inside an isolated cell. No account, no API key with Max/Pro.">
   <Hero stableVersion={stableVersion} logoGrid={logoGrid} />
   <Quickstart />
   <FeatureCards />
+  <LogoStrips />
 
   <section id="compare">
     <p class="section-label">Comparison</p>
@@ -766,7 +836,7 @@ const faqItems = [
             <th></th>
             <th>DevCell</th>
             <th>Docker Sandboxes</th>
-            <th>E2B</th>
+            <th>Daytona</th>
             <th>Microsandbox</th>
             <th>Raw docker run</th>
           </tr>
@@ -777,7 +847,7 @@ const faqItems = [
               <td>{r.feature}</td>
               <td>{r.devcell}</td>
               <td>{r.dockerSbx}</td>
-              <td>{r.e2b}</td>
+              <td>{r.daytona}</td>
               <td>{r.microsandbox}</td>
               <td>{r.rawDocker}</td>
             </tr>
@@ -785,7 +855,7 @@ const faqItems = [
         </tbody>
       </table>
     </div>
-    <p class="stacks-more">Use Docker Sandboxes for microVM isolation or cloud-hosted sandboxes. Use E2B for ephemeral cloud sandboxes with an SDK. Use Microsandbox for libkrun microVMs. Use DevCell when the agent needs full auto-approve with your toolchain and Claude setup intact, and no account or cloud dependency.</p>
+    <p class="stacks-more">Use Docker Sandboxes for microVM isolation. Use Daytona for ephemeral cloud sandboxes with an SDK. Use Microsandbox for libkrun microVMs. Use DevCell when the agent needs full auto-approve with your toolchain and Claude setup intact, and no account or cloud dependency.</p>
   </section>
 
   <WhatsInside stackColumns={stackColumns} stackFeatures={stackFeatures} />

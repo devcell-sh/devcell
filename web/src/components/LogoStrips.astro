@@ -1,0 +1,111 @@
+---
+---
+
+<section id="runs-in" class="runs-in-wrap">
+  <p class="section-label">DevCell starts and controls</p>
+  <h2>One CLI. Three environments.</h2>
+  <div class="runs-in-grid">
+    <div class="env-card">
+      <img src="/logos/linux.png" alt="Linux" class="env-icon" />
+      <h3>Linux</h3>
+      <p>Docker container. Zero config. Starts in seconds.</p>
+      <code>devcell claude</code>
+    </div>
+    <div class="env-card">
+      <img src="/logos/apple.png" alt="macOS" class="env-icon" />
+      <h3>macOS</h3>
+      <p>Tart VM. Full macOS guest.</p>
+      <code>devcell claude --os macos</code>
+    </div>
+    <div class="env-card">
+      <img src="/logos/windows.png" alt="Windows" class="env-icon" />
+      <h3>Windows</h3>
+      <p>QEMU Windows VM with WSL inside.</p>
+      <code>devcell claude --os windows</code>
+    </div>
+  </div>
+  <p class="runs-in-note">Same commands, same config, same toolchain. DevCell provisions the environment, mounts your project, and launches the agent. Pick the guest with <code>--os</code>.</p>
+</section>
+
+<style>
+  .runs-in-wrap {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 3rem 2rem;
+  }
+
+  .runs-in-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    border: var(--border);
+    box-shadow: var(--shadow-lg);
+    margin-bottom: 1.5rem;
+  }
+
+  @media (max-width: 768px) {
+    .runs-in-grid { grid-template-columns: 1fr; }
+  }
+
+  .env-card {
+    padding: 2rem 1.75rem;
+    border-right: var(--border);
+    background: var(--white);
+    text-align: center;
+    transition: background 0.12s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .env-card:last-child { border-right: none; }
+  .env-card:hover { background: var(--accent); }
+
+  @media (max-width: 768px) {
+    .env-card { border-right: none; border-bottom: var(--border); }
+    .env-card:last-child { border-bottom: none; }
+  }
+
+  .env-icon {
+    width: 56px;
+    height: 56px;
+    margin-bottom: 1rem;
+  }
+
+  .env-card h3 {
+    font-size: 0.85rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.5rem;
+  }
+
+  .env-card p {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: #555;
+    line-height: 1.5;
+    margin-bottom: 0.75rem;
+  }
+
+  .env-card code {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    background: #0D0D0D;
+    color: var(--accent);
+    padding: 0.3rem 0.6rem;
+    border: 1px solid #333;
+    display: inline-block;
+    margin-top: auto;
+  }
+
+  .runs-in-note {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: #888;
+  }
+
+  .runs-in-note code {
+    font-size: 0.75rem;
+  }
+</style>

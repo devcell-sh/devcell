@@ -9,7 +9,7 @@ const { stableVersion, logoGrid } = Astro.props;
 <div class="hero-wrap">
   <div class="hero">
     <div>
-      <p class="hero-eyebrow">Open Source · Apache&nbsp;2.0 · <a href="https://github.com/devcell-sh/devcell" class="eyebrow-stars" style="white-space: nowrap;">★ GitHub</a>{stableVersion ? <Fragment> · <a href="https://github.com/devcell-sh/devcell/releases" class="eyebrow-stars">{stableVersion}</a></Fragment> : <Fragment> · <a href="https://github.com/devcell-sh/devcell/releases" class="eyebrow-stars">Releases</a></Fragment>} · <a href="https://github.com/devcell-sh/devcell/commits/main"><img src="https://img.shields.io/github/last-commit/devcell-sh/devcell?style=flat&label=last%20commit&color=C8FF00" alt="Last commit" class="star-badge" /></a></p>
+      <p class="hero-eyebrow">Open Source · Apache&nbsp;2.0 · <a href="https://github.com/devcell-sh/devcell" class="eyebrow-stars" style="white-space: nowrap;">★ GitHub</a>{stableVersion ? <Fragment> · <a href="https://github.com/devcell-sh/devcell/releases" class="eyebrow-stars">{stableVersion}</a></Fragment> : <Fragment> · <a href="https://github.com/devcell-sh/devcell/releases" class="eyebrow-stars">Releases</a></Fragment>} · <a href="https://github.com/devcell-sh/devcell/releases"><img src="https://img.shields.io/github/v/release/devcell-sh/devcell?style=flat&label=version&color=C8FF00" alt="Latest release" class="star-badge" /></a> · <a href="https://github.com/devcell-sh/devcell/commits/main"><img src="https://img.shields.io/github/last-commit/devcell-sh/devcell?style=flat&label=last%20commit&color=C8FF00" alt="Last commit" class="star-badge" /></a></p>
       <h1>Claude Code,<br/>Without The<br/><span class="hl">Blast&nbsp;Radius.</span></h1>
       <p class="hero-desc">
         DevCell is a local-first sandbox for AI coding agents. Run Claude Code,
@@ -24,6 +24,13 @@ const { stableVersion, logoGrid } = Astro.props;
       <div class="hero-actions">
         <a href="https://github.com/devcell-sh/devcell" class="btn btn-primary">View on GitHub →</a>
         <a href="#quickstart" class="btn btn-secondary">Quickstart</a>
+      </div>
+      <div class="agent-logos">
+        <span class="agent-logos-label">Works with</span>
+        <a href="#quickstart" class="agent-logo" data-title="Claude Code"><img src="/logos/claude-icon.png" alt="Claude Code" /></a>
+        <a href="#quickstart" class="agent-logo" data-title="Codex"><img src="/logos/openai-icon.png" alt="Codex" /></a>
+        <a href="#quickstart" class="agent-logo" data-title="Gemini CLI"><img src="/logos/gemini.png" alt="Gemini CLI" /></a>
+        <a href="#quickstart" class="agent-logo" data-title="OpenCode"><img src="/logos/opencode.png" alt="OpenCode" /></a>
       </div>
     </div>
 
