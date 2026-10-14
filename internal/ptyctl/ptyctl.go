@@ -1,3 +1,4 @@
+// Package ptyctl provides a virtual terminal for driving interactive CLI programs.
 package ptyctl
 
 import (

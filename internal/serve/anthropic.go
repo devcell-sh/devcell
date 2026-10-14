@@ -1,3 +1,4 @@
+// Package serve implements the HTTP API server for running AI agents inside a cell.
 package serve
 
 import (

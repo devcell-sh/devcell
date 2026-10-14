@@ -1,3 +1,4 @@
+// Package ollama detects local Ollama instances and ranks installed models for coding tasks.
 package ollama
 
 import (

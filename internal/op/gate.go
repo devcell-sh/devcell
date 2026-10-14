@@ -1,3 +1,4 @@
+// Package op resolves secrets from 1Password CLI for injection into cell containers.
 package op
 
 import "strings"

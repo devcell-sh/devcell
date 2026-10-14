@@ -1,3 +1,4 @@
+// Package scaffold generates the initial project configuration and build context for a new cell.
 package scaffold
 
 import (

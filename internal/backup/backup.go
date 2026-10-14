@@ -1,3 +1,4 @@
+// Package backup manages timestamped backups of cell session state.
 package backup
 
 import (

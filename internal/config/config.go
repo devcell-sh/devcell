@@ -1,3 +1,4 @@
+// Package config resolves runtime variables from the environment and working directory into a cell identity.
 package config
 
 import (
