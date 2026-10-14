@@ -15,8 +15,8 @@ import (
 
 func TestKickMcp_NoContainers_NoKills(t *testing.T) {
 	got := kickMcpInCellsSharingCellHome(kickDeps{
-		cellHome:       "/Users/dmitry/.devcell/FAM",
-		hostUser:       "dmitry",
+		cellHome:       "/Users/warden/.devcell/FAM",
+		hostUser:       "warden",
 		listContainers: func() ([]string, error) { return nil, nil },
 		mountSource:    func(string) (string, error) { return "", nil },
 		killMcp:        func(string) error { return nil },
@@ -29,12 +29,12 @@ func TestKickMcp_NoContainers_NoKills(t *testing.T) {
 func TestKickMcp_OneMatchingContainer_Kicked(t *testing.T) {
 	var killed []string
 	got := kickMcpInCellsSharingCellHome(kickDeps{
-		cellHome:       "/Users/dmitry/.devcell/FAM",
-		hostUser:       "dmitry",
+		cellHome:       "/Users/warden/.devcell/FAM",
+		hostUser:       "warden",
 		listContainers: func() ([]string, error) { return []string{"abc123"}, nil },
 		mountSource: func(id string) (string, error) {
 			if id == "abc123" {
-				return "/Users/dmitry/.devcell/FAM", nil
+				return "/Users/warden/.devcell/FAM", nil
 			}
 			return "", nil
 		},
@@ -55,11 +55,11 @@ func TestKickMcp_OneMatchingContainer_Kicked(t *testing.T) {
 func TestKickMcp_NonMatchingMountSource_Skipped(t *testing.T) {
 	var killed []string
 	got := kickMcpInCellsSharingCellHome(kickDeps{
-		cellHome:       "/Users/dmitry/.devcell/FAM",
-		hostUser:       "dmitry",
+		cellHome:       "/Users/warden/.devcell/FAM",
+		hostUser:       "warden",
 		listContainers: func() ([]string, error) { return []string{"def456"}, nil },
 		mountSource: func(string) (string, error) {
-			return "/Users/dmitry/.devcell/DIMM", nil // different session
+			return "/Users/warden/.devcell/CELL", nil // different session
 		},
 		killMcp: func(id string) error {
 			killed = append(killed, id)
@@ -77,13 +77,13 @@ func TestKickMcp_NonMatchingMountSource_Skipped(t *testing.T) {
 func TestKickMcp_MixedContainers_OnlyMatchingKicked(t *testing.T) {
 	var killed []string
 	mounts := map[string]string{
-		"a1": "/Users/dmitry/.devcell/FAM",  // match
-		"b2": "/Users/dmitry/.devcell/DIMM", // skip
-		"c3": "/Users/dmitry/.devcell/FAM",  // match
+		"a1": "/Users/warden/.devcell/FAM",  // match
+		"b2": "/Users/warden/.devcell/CELL", // skip
+		"c3": "/Users/warden/.devcell/FAM",  // match
 	}
 	got := kickMcpInCellsSharingCellHome(kickDeps{
-		cellHome:       "/Users/dmitry/.devcell/FAM",
-		hostUser:       "dmitry",
+		cellHome:       "/Users/warden/.devcell/FAM",
+		hostUser:       "warden",
 		listContainers: func() ([]string, error) { return []string{"a1", "b2", "c3"}, nil },
 		mountSource:    func(id string) (string, error) { return mounts[id], nil },
 		killMcp: func(id string) error {
@@ -102,8 +102,8 @@ func TestKickMcp_MixedContainers_OnlyMatchingKicked(t *testing.T) {
 
 func TestKickMcp_ListContainersError_ReturnsEmpty(t *testing.T) {
 	got := kickMcpInCellsSharingCellHome(kickDeps{
-		cellHome:       "/Users/dmitry/.devcell/FAM",
-		hostUser:       "dmitry",
+		cellHome:       "/Users/warden/.devcell/FAM",
+		hostUser:       "warden",
 		listContainers: func() ([]string, error) { return nil, errors.New("docker daemon down") },
 		mountSource:    func(string) (string, error) { t.Fatal("should not be called"); return "", nil },
 		killMcp:        func(string) error { t.Fatal("should not be called"); return nil },
@@ -116,14 +116,14 @@ func TestKickMcp_ListContainersError_ReturnsEmpty(t *testing.T) {
 func TestKickMcp_MountSourceError_SkipsContainer(t *testing.T) {
 	var killed []string
 	got := kickMcpInCellsSharingCellHome(kickDeps{
-		cellHome:       "/Users/dmitry/.devcell/FAM",
-		hostUser:       "dmitry",
+		cellHome:       "/Users/warden/.devcell/FAM",
+		hostUser:       "warden",
 		listContainers: func() ([]string, error) { return []string{"x", "y"}, nil },
 		mountSource: func(id string) (string, error) {
 			if id == "x" {
 				return "", errors.New("inspect failed")
 			}
-			return "/Users/dmitry/.devcell/FAM", nil
+			return "/Users/warden/.devcell/FAM", nil
 		},
 		killMcp: func(id string) error {
 			killed = append(killed, id)
@@ -141,10 +141,10 @@ func TestKickMcp_MountSourceError_SkipsContainer(t *testing.T) {
 func TestKickMcp_KillError_ContinuesWithOtherContainers(t *testing.T) {
 	var killAttempts []string
 	got := kickMcpInCellsSharingCellHome(kickDeps{
-		cellHome:       "/Users/dmitry/.devcell/FAM",
-		hostUser:       "dmitry",
+		cellHome:       "/Users/warden/.devcell/FAM",
+		hostUser:       "warden",
 		listContainers: func() ([]string, error) { return []string{"p", "q"}, nil },
-		mountSource:    func(string) (string, error) { return "/Users/dmitry/.devcell/FAM", nil },
+		mountSource:    func(string) (string, error) { return "/Users/warden/.devcell/FAM", nil },
 		killMcp: func(id string) error {
 			killAttempts = append(killAttempts, id)
 			if id == "p" {

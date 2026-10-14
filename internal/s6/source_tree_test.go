@@ -13,7 +13,7 @@ func sourceTreeRoot(t *testing.T) string {
 	t.Helper()
 	root := os.Getenv("S6_SOURCE_TREE")
 	if root == "" {
-		root = "/Users/dmitry/dev/devcell-sh/home/modules/s6"
+		root = "/Users/warden/dev/devcell-sh/home/modules/s6"
 	}
 	if _, err := os.Stat(root); err != nil {
 		t.Skipf("s6 source tree not available at %s (set S6_SOURCE_TREE to override)", root)

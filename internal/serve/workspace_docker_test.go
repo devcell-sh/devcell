@@ -22,7 +22,7 @@ func TestDockerEnumerator_ListCells_BasicDiscovery(t *testing.T) {
 			{
 				Names: []string{"/devcell-myproject-42"},
 				Labels: map[string]string{
-					"devcell.basedir": "/Users/dmitry/dev/myorg/myproject",
+					"devcell.basedir": "/Users/warden/dev/myorg/myproject",
 					"devcell.cellid":  "42",
 					"devcell.stack":   "ultimate",
 				},
@@ -122,9 +122,9 @@ func TestDockerEnumerator_ListCells_TitleFromBasedir(t *testing.T) {
 		basedir string
 		want    string
 	}{
-		{"/Users/dmitry/dev/dimmkirr/devcell", "devcell-1"},
-		{"/Users/dmitry/dev/kirr/kirr.dev", "kirr.dev-1"},
-		{"/Users/dmitry/dev/evercars/evercars-backend", "evercars-backend-1"},
+		{"/Users/warden/dev/dimmkirr/devcell", "devcell-1"},
+		{"/Users/warden/dev/kirr/kirr.dev", "kirr.dev-1"},
+		{"/Users/warden/dev/evercars/evercars-backend", "evercars-backend-1"},
 		{"/simple", "simple-1"},
 	}
 

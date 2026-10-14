@@ -388,7 +388,7 @@ jobs:
 
       - name: Delete existing tag
         run: |
-          git config --global user.email "dmitry@atd.sh"
+          git config --global user.email "warden@atd.sh"
           git config --global user.name "Dmitry Kireev"
           git tag -d "${{ env.RELEASE_VERSION }}" || echo "No local tag to delete"
           git push origin :refs/tags/${{ env.RELEASE_VERSION }} || echo "No remote tag to delete"

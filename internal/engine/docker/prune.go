@@ -126,7 +126,7 @@ type PruneOpts struct {
 	// GOOS == "linux" && Pure && Force; triggers system-profile cleanup.
 	NixOS bool
 
-	// HomeDir is the resolved user home (e.g. /home/dmitry). Used to
+	// HomeDir is the resolved user home (e.g. /home/warden). Used to
 	// compose absolute paths in macOS Docker Desktop wipe and the
 	// `~/.cache/nix` wipe on Linux. Tests pass a fixed value.
 	HomeDir string

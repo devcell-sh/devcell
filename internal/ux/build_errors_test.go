@@ -67,7 +67,7 @@ func TestClassifyBuildOutput_CaseInsensitive(t *testing.T) {
 }
 
 func TestClassifyBuildOutput_DockerDaemon(t *testing.T) {
-	output := `ERROR: Cannot connect to the Docker daemon at unix:///Users/dmitry/.docker/run/docker.sock. Is the docker daemon running?
+	output := `ERROR: Cannot connect to the Docker daemon at unix:///Users/warden/.docker/run/docker.sock. Is the docker daemon running?
 Error: docker build: exit status 1`
 	hint := ClassifyBuildOutput(output)
 	if hint == nil {

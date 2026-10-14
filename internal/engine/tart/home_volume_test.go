@@ -80,11 +80,11 @@ func TestEnsureHomeDir_Idempotent(t *testing.T) {
 }
 
 func TestGenerateHomeMountScript_ContainsKeyElements(t *testing.T) {
-	script := GenerateHomeMountScript("main", "dmitry")
+	script := GenerateHomeMountScript("main", "warden")
 
 	for _, want := range []string{
 		"home",
-		"/Users/dmitry",
+		"/Users/warden",
 		"automount",
 		"mount_virtiofs",
 	} {
@@ -95,7 +95,7 @@ func TestGenerateHomeMountScript_ContainsKeyElements(t *testing.T) {
 }
 
 func TestGenerateHomeMountScript_NoAPFS(t *testing.T) {
-	script := GenerateHomeMountScript("main", "dmitry")
+	script := GenerateHomeMountScript("main", "warden")
 	if strings.Contains(script, "APFS") || strings.Contains(script, "eraseDisk") {
 		t.Error("home mount script should not contain APFS or eraseDisk — VirtioFS, not disk image")
 	}

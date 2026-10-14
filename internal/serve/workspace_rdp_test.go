@@ -6,12 +6,12 @@ import (
 )
 
 func TestBuildRDPFile_AllFieldsPresent(t *testing.T) {
-	body := BuildRDPFile("myhost.example.com", 13389, "dmitry", "")
+	body := BuildRDPFile("myhost.example.com", 13389, "warden", "")
 
 	required := []string{
 		"full address:s:myhost.example.com:13389",
 		"server port:i:13389",
-		"username:s:dmitry",
+		"username:s:warden",
 		"screen mode id:i:1",
 		"desktopwidth:i:1920",
 		"desktopheight:i:1080",

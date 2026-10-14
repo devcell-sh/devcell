@@ -43,7 +43,7 @@ vars:
         v[0-9]*.[0-9]*.[0-9]*) echo "$VERSION" ;;
         *) echo "v0.0.0" ;;
       esac
-  CELL_LDFLAGS: -s -w -X github.com/DimmKirr/devcell/internal/version.Version={{.CELL_VERSION}} -X github.com/DimmKirr/devcell/internal/version.GitCommit={{.GIT_COMMIT_HASH}} -X github.com/DimmKirr/devcell/internal/version.BuildDate={{.BUILD_DATE}}
+  CELL_LDFLAGS: -s -w -X github.com/devcell-sh/devcell/internal/version.Version={{.CELL_VERSION}} -X github.com/devcell-sh/devcell/internal/version.GitCommit={{.GIT_COMMIT_HASH}} -X github.com/devcell-sh/devcell/internal/version.BuildDate={{.BUILD_DATE}}
   CELL_BUILD_TAGS:
     sh: |
       tags=""
@@ -634,7 +634,7 @@ tasks:
     deps: [install]
     silent: true
     vars:
-      CELL_NAME: '{{.CELL_NAME | default "DIMM"}}'
+      CELL_NAME: '{{.CELL_NAME | default "CELL"}}'
       TEMPLATE_DIR: '{{.HOME}}/.devcell/windows/ultimate'
       INSTANCE_DIR: '{{.HOME}}/.devcell/{{.CELL_NAME}}/windows'
       LOG: '{{.TASKFILE_DIR}}/.scratch/debug/windows.log'
@@ -692,13 +692,13 @@ tasks:
     platforms: [darwin]
     silent: true
     vars:
-      CELL_NAME: '{{.CELL_NAME | default "DIMM"}}'
+      CELL_NAME: '{{.CELL_NAME | default "CELL"}}'
       VM_USER: '{{.VM_USER | default .USER}}'
       DISK: '{{.HOME}}/.devcell/{{.CELL_NAME}}/darwin/disk.img'
       DEBUG_DIR: '{{.TASKFILE_DIR}}/.devcell/debug'
     preconditions:
       - sh: test -f "{{.DISK}}"
-        msg: "No disk image at {{.DISK}} — set CELL_NAME if not DIMM"
+        msg: "No disk image at {{.DISK}} — set CELL_NAME if not CELL"
     cmds:
       - |
         set -euo pipefail
@@ -1141,7 +1141,7 @@ tasks:
         if command -v docker >/dev/null 2>&1; then
           docker rm -f devcell-smb >/dev/null 2>&1 || true
           if docker run -d --name devcell-smb --restart unless-stopped \
-               -p 445:445 -e USER=dmitry -e PASS=rdp -e NAME=devcell \
+               -p 445:445 -e USER=warden -e PASS=rdp -e NAME=devcell \
                -v "{{.SHARE_DIR}}:/storage" dockurr/samba >/dev/null 2>&1; then
             SMB=1
           else
@@ -1315,11 +1315,11 @@ tasks:
 
         echo "VM is up"
         {{if ne .VNC "0"}}echo "  VNC:  open vnc://127.0.0.1:5907  (password: vnc)"{{end}}
-        echo "  RDP:  $GUEST_IP:3389  (user dmitry, password rdp)"
-        echo "  SSH:  ssh dmitry@$GUEST_IP"
+        echo "  RDP:  $GUEST_IP:3389  (user warden, password rdp)"
+        echo "  SSH:  ssh warden@$GUEST_IP"
         if [ -n "$SMB" ]; then
           GW=$(echo "$GUEST_IP" | sed 's/\.[0-9]*$/.1/')
-          echo "  Share: {{.SHARE_DIR}} — in the guest run:  net use Z: \\\\$GW\\devcell /user:dmitry rdp"
+          echo "  Share: {{.SHARE_DIR}} — in the guest run:  net use Z: \\\\$GW\\devcell /user:warden rdp"
         fi
         echo "  logs: $D/serial.log, $D/qemu.log"
 
@@ -1379,7 +1379,7 @@ tasks:
             GIP=$(arp -an 2>/dev/null | sed -n 's/.*(\([0-9.]*\)) at 72:5b:b2:9:74:68 .*/\1/p' | head -1)
             if [ -n "$GIP" ] && ps -p "$pid" >/dev/null 2>&1; then
               if ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
-                   "dmitry@$GIP" "shutdown /s /t 0" >/dev/null 2>&1; then
+                   "warden@$GIP" "shutdown /s /t 0" >/dev/null 2>&1; then
                 printf "guest shutdown via ssh — waiting..."
                 for _ in $(seq 1 15); do ps -p "$pid" >/dev/null 2>&1 || break; sleep 2; done
                 echo ""
@@ -1640,8 +1640,8 @@ tasks:
           # Plain if/break — a failing `[ -f ] && ...` list would trip
           # task's errexit on the last miss and kill the whole report.
           for c in \
-            "$HOME/dev/dimmkirr/nixhome/home/dmitry/packages/patches/hvf-vhe-emulation.patch" \
-            "$HOME/nixhome/home/dmitry/packages/patches/hvf-vhe-emulation.patch"; do
+            "$HOME/dev/dimmkirr/nixhome/home/warden/packages/patches/hvf-vhe-emulation.patch" \
+            "$HOME/nixhome/home/warden/packages/patches/hvf-vhe-emulation.patch"; do
             if [ -f "$c" ]; then P="$c"; break; fi
           done
           # Known locations missed — hunt for it (bounded depth, quick).
@@ -1696,7 +1696,7 @@ tasks:
         # ---- 5. Windows guest verdict (H3: did the hypervisor launch?) ----
         sect "WINDOWS GUEST (Event 43 check)"
         if ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
-             "dmitry@{{.GUEST_IP}}" "wevtutil qe System /q:\"*[System[Provider[@Name='Microsoft-Windows-Hyper-V-Hypervisor']]]\" /c:2 /rd:true /f:text" \
+             "warden@{{.GUEST_IP}}" "wevtutil qe System /q:\"*[System[Provider[@Name='Microsoft-Windows-Hyper-V-Hypervisor']]]\" /c:2 /rd:true /f:text" \
              2>/dev/null | tr -d '\0\r' | grep -E "Date:|Event ID:|present|failed|successfully" | sed 's/^/  /' | grep .; then
           :
         else
@@ -1752,7 +1752,7 @@ tasks:
         #   H1 BitLocker/TPM blocked TPM-less boots  -> manage-bde, Get-Tpm, BitLocker events
         #   H2 Automatic Repair after unclean kills  -> System events 41/6008
         #   H3 benign reboot (updates/PnP installs)  -> System event 1074 + boot time
-        ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 "dmitry@$GUEST_IP" '
+        ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 "warden@$GUEST_IP" '
           echo ===== GUEST: identity/boot ===== & ver & systeminfo | findstr /i /c:"Boot Time" &
           echo ===== H1: BitLocker status ===== & manage-bde -status C: 2>&1 &
           echo ===== H1: TPM state ===== & powershell -NoProfile -Command "Get-Tpm | Format-List TpmPresent,TpmReady,TpmEnabled 2>&1" &

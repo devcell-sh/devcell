@@ -15,7 +15,7 @@ type AcquireResult struct {
 
 // AcquireInputs are the parameters for AcquireDarwinVM.
 type AcquireInputs struct {
-	VMName       string            // tart VM name (instance, e.g. "DIMM-tart")
+	VMName       string            // tart VM name (instance, e.g. "CELL-tart")
 	TemplateName string            // template VM to clone from if instance doesn't exist
 	SharedDirs   map[string]string // tag -> host path (VirtioFS via --dir)
 	Disks        []string          // raw disk image paths (VirtIO block devices via --disk)

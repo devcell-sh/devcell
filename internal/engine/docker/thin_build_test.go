@@ -356,16 +356,16 @@ func TestThinBuildArgv_SslCertInNixConf(t *testing.T) {
 }
 
 func TestDockerHostPath_PassthroughWhenNoMapping(t *testing.T) {
-	got := DockerHostPath("/Users/dmitry/dev/proj/nixhome")
-	if got != "/Users/dmitry/dev/proj/nixhome" {
+	got := DockerHostPath("/Users/warden/dev/proj/nixhome")
+	if got != "/Users/warden/dev/proj/nixhome" {
 		t.Errorf("should pass through host paths unchanged, got: %s", got)
 	}
 }
 
 func TestDockerHostPath_ResolvesContainerAlias(t *testing.T) {
-	t.Setenv("DEVCELL_HOST_PROJECT_DIR", "/Users/dmitry/dev/dimmkirr/devcell")
+	t.Setenv("DEVCELL_HOST_PROJECT_DIR", "/Users/warden/dev/dimmkirr/devcell")
 	got := DockerHostPath("/devcell-256/nixhome")
-	if got != "/Users/dmitry/dev/dimmkirr/devcell/nixhome" {
+	if got != "/Users/warden/dev/dimmkirr/devcell/nixhome" {
 		t.Errorf("should resolve container alias to host path, got: %s", got)
 	}
 }
