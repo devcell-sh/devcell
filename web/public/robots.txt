@@ -1,3 +1,33 @@
+# Search and retrieval: ALLOW (these return traffic)
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: Claude-SearchBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Claude-User
+Allow: /
+
+# Training: ALLOW (OSS project, code is public on GitHub)
+User-agent: GPTBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: CCBot
+Disallow: /
+
+# Default
 User-agent: *
 Allow: /
 

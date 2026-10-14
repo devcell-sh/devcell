@@ -1,0 +1,59 @@
+# DevCell
+
+> Local-first sandbox for AI coding agents. Run Claude Code, Codex,
+> OpenCode, or Gemini inside an isolated container or VM with network
+> egress locked down by default. Agents write, delete, and install
+> freely. Your host is untouched. No account required.
+
+DevCell is an open-source CLI tool (Apache 2.0) that wraps AI coding
+agents in a sandboxed cell: a Docker container, macOS VM (Tart), or
+Windows VM (winkit). It preserves your CLAUDE.md, hooks, skills, and
+MCP config. Claude Max/Pro works without an API key.
+
+Install: `brew install devcell-sh/tap/devcell`
+Source: https://github.com/devcell-sh/devcell
+
+## Getting started
+
+- [Quickstart](https://devcell.sh/docs/quickstart): Install and run your first agent in under 5 minutes
+- [Configuration](https://devcell.sh/docs/configuration): All TOML keys, env vars, and project config
+- [Stacks and modules](https://devcell.sh/docs/stacks-and-modules): Image variants and toggleable Nix capabilities
+
+## CLI reference
+
+- [devcell claude](https://devcell.sh/docs/devcell_claude): Run Claude Code in a cell
+- [devcell codex](https://devcell.sh/docs/devcell_codex): Run Codex in a cell
+- [devcell gemini](https://devcell.sh/docs/devcell_gemini): Run Gemini CLI in a cell
+- [devcell opencode](https://devcell.sh/docs/devcell_opencode): Run OpenCode in a cell
+- [devcell shell](https://devcell.sh/docs/devcell_shell): Interactive shell or one-off command inside a cell
+- [devcell build](https://devcell.sh/docs/devcell_build): Build or rebuild the image for a stack
+- [devcell init](https://devcell.sh/docs/devcell_init): Scaffold devcell.toml in the current project
+- [devcell modules list](https://devcell.sh/docs/devcell_modules_list): List available modules with sizes and MCP servers
+- [devcell auth chrome](https://devcell.sh/docs/devcell_auth_chrome): Browser session handoff for in-cell Playwright
+- [devcell models](https://devcell.sh/docs/devcell_models): Detect local and cloud LLMs
+
+## Guides
+
+- [Browser testing](https://devcell.sh/docs/howto-browser-testing): Headed Chromium inside a container
+- [Electronics / PCB](https://devcell.sh/docs/howto-electronics): KiCad, ngspice, ESPHome workflows
+- [MCP development](https://devcell.sh/docs/howto-mcp-development): Build and test MCP servers
+- [Multi-agent](https://devcell.sh/docs/howto-multi-agent): Run multiple agents in the same workspace
+- [Secrets](https://devcell.sh/docs/howto-secrets): 1Password integration and credential handling
+- [CI integration](https://devcell.sh/docs/howto-ci): GitHub Actions and CI pipelines
+- [macOS VM](https://devcell.sh/docs/howto-macos-vm): Run agents inside a macOS VM via Tart
+- [Desktop / GUI](https://devcell.sh/docs/howto-desktop): VNC and RDP access to the cell
+
+## MCP servers
+
+- [MCP overview](https://devcell.sh/docs/mcp-overview): How MCP servers are auto-configured
+- [Playwright](https://devcell.sh/docs/mcp-playwright): Browser automation with backing Chromium
+- [OpenTofu](https://devcell.sh/docs/mcp-opentofu): Infrastructure as code
+- [KiCad](https://devcell.sh/docs/mcp-kicad): PCB design and schematic capture
+- [Inkscape](https://devcell.sh/docs/mcp-inkscape): Vector graphics editing
+- [Linear](https://devcell.sh/docs/mcp-linear): Issue tracking integration
+
+## Optional
+
+- [Contributing](https://github.com/devcell-sh/devcell/blob/main/CONTRIBUTING.md): How to contribute
+- [Changelog](https://github.com/devcell-sh/devcell/blob/main/CHANGELOG.md): Release history
+- [Security](https://github.com/devcell-sh/devcell/blob/main/SECURITY.md): Vulnerability reporting

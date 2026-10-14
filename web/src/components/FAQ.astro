@@ -13,7 +13,7 @@ const { faqItems } = Astro.props;
       <li>
         <details>
           <summary>{item.q}</summary>
-          <p class="faq-answer">{item.a}</p>
+          <p class="faq-answer" set:html={item.a}></p>
         </details>
       </li>
     ))}
