@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/DimmKirr/devcell/internal/engine"
+	"github.com/devcell-sh/devcell/internal/engine"
 )
 
 // Init is unavailable off macOS and Linux: go-winkit builds need either.

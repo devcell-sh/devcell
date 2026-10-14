@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/logger"
+	"github.com/devcell-sh/devcell/internal/logger"
 )
 
 // agentForPrefix maps model prefix to the binary name. "default" matches

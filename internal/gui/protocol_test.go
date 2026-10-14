@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/gui"
+	"github.com/devcell-sh/devcell/internal/gui"
 )
 
 func TestCellEndpoint_Addr(t *testing.T) {
@@ -53,9 +53,9 @@ func TestProtocol_Spec(t *testing.T) {
 }
 
 func TestURL_TartVNCUsesARDAuth(t *testing.T) {
-	tartEP := gui.CellEndpoint{Host: "192.168.64.5", Port: "5900", Engine: "tart", User: "dmitry"}
+	tartEP := gui.CellEndpoint{Host: "192.168.64.5", Port: "5900", Engine: "tart", User: "warden"}
 	got := gui.VNC.URL(tartEP)
-	want := "vnc://dmitry:admin@192.168.64.5:5900"
+	want := "vnc://warden:admin@192.168.64.5:5900"
 	if got != want {
 		t.Errorf("VNC URL for tart = %q, want %q", got, want)
 	}

@@ -5,4 +5,5 @@ package docker
 var (
 	ImageMetadataFromInspectExport = imageMetadataFromInspect
 	FormatImageVersionUserExport   = formatImageVersionUser
+	BootTimeoutErrorExport         = bootTimeoutError
 )

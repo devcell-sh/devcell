@@ -7,7 +7,7 @@ import (
 
 	nixoci "github.com/devcell-sh/go-nixoci"
 
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 // NixCacheDockerArch normalizes a nix-style arch ("aarch64", "x86_64") to

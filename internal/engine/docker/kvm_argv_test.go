@@ -4,17 +4,20 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/engine/docker"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/engine/docker"
 )
 
-// KVM passthrough — `[cell] kvm = true` hands the daemon host's /dev/kvm to
-// the container so QEMU can use hardware acceleration instead of TCG.
+// KVM passthrough hands the daemon host's /dev/kvm to the container so QEMU
+// can use hardware acceleration instead of TCG.
 //
 // It must be `--device`, not `-v`. A bind-mount creates the device node but
-// the cgroup device controller still denies open(2) — verified against a live
-// Colima daemon: `-v /dev/kvm:/dev/kvm` yields EPERM, `--device=/dev/kvm`
-// opens fine.
+// the cgroup device controller still denies open(2): `-v /dev/kvm:/dev/kvm`
+// yields EPERM, `--device=/dev/kvm` opens fine (verified against live Colima).
+//
+// When kvm is unset in config, the engine auto-detects by probing the daemon
+// host with a throwaway busybox container. RunSpec.KVMAutoDetected carries the
+// probe result into BuildArgv.
 
 func TestBuildArgv_KVMAddsDeviceFlag(t *testing.T) {
 	argv := buildArgv(t, func(s *docker.RunSpec) {
@@ -62,6 +65,48 @@ func TestBuildArgv_KVMKeepsFuseDevice(t *testing.T) {
 	})
 	if !hasArg(argv, "--device=/dev/fuse") {
 		t.Errorf("--device=/dev/fuse must still be present; argv: %v", argv)
+	}
+}
+
+// ── Auto-detect ──────────────────────────────────────────────────────────
+
+func TestBuildArgv_KVMAutoDetectedEmitsDevice(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.KVMAutoDetected = true
+	})
+	if !hasArg(argv, "--device=/dev/kvm") {
+		t.Errorf("auto-detected KVM must emit --device=/dev/kvm; argv: %v", argv)
+	}
+}
+
+func TestBuildArgv_KVMAutoDetectedRespectsExplicitFalse(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.KVMAutoDetected = true
+		s.CellCfg.Cell.KVM = boolPtr(false)
+	})
+	if hasArg(argv, "--device=/dev/kvm") {
+		t.Errorf("explicit kvm=false must override auto-detect; argv: %v", argv)
+	}
+}
+
+func TestBuildArgv_KVMAutoDetectedDeniedBySolitary(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.KVMAutoDetected = true
+		s.Policy = cfg.SolitaryPolicy()
+		s.ProxyEnabled = true
+	})
+	if hasArg(argv, "--device=/dev/kvm") {
+		t.Error("solitary policy must deny auto-detected KVM")
+	}
+}
+
+func TestBuildArgv_KVMAutoDetectedSkippedWhenProxyEnabled(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.KVMAutoDetected = true
+		s.ProxyEnabled = true
+	})
+	if hasArg(argv, "--device=/dev/kvm") {
+		t.Errorf("auto-detected KVM must be skipped when proxy is enabled; argv: %v", argv)
 	}
 }
 

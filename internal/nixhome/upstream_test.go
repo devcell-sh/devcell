@@ -3,7 +3,7 @@ package nixhome_test
 import (
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/nixhome"
+	"github.com/devcell-sh/devcell/internal/nixhome"
 )
 
 // UpstreamFlakeRef is the single builder for the canonical nixhome flake URL.

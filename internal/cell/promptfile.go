@@ -6,8 +6,8 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/config"
 )
 
 // promptDirName is the project-relative directory holding generated prompt

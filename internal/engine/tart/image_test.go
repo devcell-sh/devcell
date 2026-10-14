@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/cell"
+	"github.com/devcell-sh/devcell/internal/cell"
 )
 
 func TestTemplateVMName_Default(t *testing.T) {
@@ -51,10 +51,10 @@ func TestTemplateVMName_Deterministic(t *testing.T) {
 }
 
 func TestInstanceVMName(t *testing.T) {
-	got := InstanceVMName("DIMM")
-	want := "DIMM-tart"
+	got := InstanceVMName("CELL")
+	want := "CELL-tart"
 	if got != want {
-		t.Errorf("InstanceVMName(\"DIMM\") = %q, want %q", got, want)
+		t.Errorf("InstanceVMName(\"CELL\") = %q, want %q", got, want)
 	}
 }
 

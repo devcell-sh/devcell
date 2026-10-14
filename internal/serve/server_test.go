@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/version"
+	"github.com/devcell-sh/devcell/internal/version"
 )
 
 func TestServer_ListensOnConfiguredPort(t *testing.T) {

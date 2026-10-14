@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 // captureStdout redirects os.Stdout for the duration of fn and returns the

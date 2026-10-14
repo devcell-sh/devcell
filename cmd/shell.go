@@ -8,9 +8,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/DimmKirr/devcell/internal/cell"
-	"github.com/DimmKirr/devcell/internal/config"
-	"github.com/DimmKirr/devcell/internal/engine/docker"
+	"github.com/devcell-sh/devcell/internal/cell"
+	"github.com/devcell-sh/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/engine/docker"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )

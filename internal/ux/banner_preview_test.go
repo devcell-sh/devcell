@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 // TestPreviewBanner is a manual visual check — run with `go test -v -run
@@ -16,11 +16,11 @@ func TestPreviewBanner(t *testing.T) {
 		t.Skip("set DEVCELL_PREVIEW=1 to render the banner preview")
 	}
 	fmt.Println()
-	fmt.Println(" " + ux.Banner("DIMM", "devcell", "304"))
+	fmt.Println(" " + ux.Banner("CELL", "devcell", "304"))
 	fmt.Println()
 	const w = 8
-	fmt.Println("   " + ux.KV(w, "Project", "devcell"+ux.StyleMuted.Render("  /Users/dmitry/dev/dimmkirr/devcell")))
-	fmt.Println("   " + ux.KV(w, "Cell", "DIMM"+ux.StyleMuted.Render("  /Users/dmitry/.devcell/DIMM")))
+	fmt.Println("   " + ux.KV(w, "Project", "devcell"+ux.StyleMuted.Render("  /Users/warden/dev/devcell")))
+	fmt.Println("   " + ux.KV(w, "Cell", "CELL"+ux.StyleMuted.Render("  /Users/warden/.devcell/CELL")))
 	fmt.Println("   " + ux.KV(w, "Image", "devcell-user:ultimate-thin"+ux.StyleMuted.Render("  1.1 GB")))
 	fmt.Println("   " + ux.KV(w, "Modules", "stack=ultimate"))
 	fmt.Println("   " + ux.KV(w, "Network", "devcell-network"+ux.StyleMuted.Render(" · hostname devcell-304 · MAC auto")))

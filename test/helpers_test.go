@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/engine/docker"
-	"github.com/DimmKirr/devcell/internal/testutil"
+	"github.com/devcell-sh/devcell/internal/engine/docker"
+	"github.com/devcell-sh/devcell/internal/testutil"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"

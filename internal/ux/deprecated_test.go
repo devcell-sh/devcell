@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 func TestDeprecated_RendersSubjectAndHint(t *testing.T) {

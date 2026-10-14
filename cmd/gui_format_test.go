@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/gui"
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/gui"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 // captureStdoutMain redirects os.Stdout during fn and returns what was written.

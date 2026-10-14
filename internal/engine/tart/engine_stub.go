@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/DimmKirr/devcell/internal/engine"
+	"github.com/devcell-sh/devcell/internal/engine"
 )
 
 // Init needs darwin/arm64.

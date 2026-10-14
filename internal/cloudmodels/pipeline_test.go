@@ -17,8 +17,8 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/cloudmodels"
-	"github.com/DimmKirr/devcell/internal/ollama"
+	"github.com/devcell-sh/devcell/internal/cloudmodels"
+	"github.com/devcell-sh/devcell/internal/ollama"
 )
 
 // testdataDir returns the absolute path to test/testdata/ relative to this file.

@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/DimmKirr/devcell/internal/engine"
+	"github.com/devcell-sh/devcell/internal/engine"
 )
 
 func TestRunBuildQemu_DryRun_PrintsConfig(t *testing.T) {

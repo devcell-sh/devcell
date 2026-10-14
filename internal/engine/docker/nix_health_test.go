@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/engine/docker"
+	"github.com/devcell-sh/devcell/internal/engine/docker"
 )
 
 // CELL-390: startup nix-store health check. Read-only by construction —

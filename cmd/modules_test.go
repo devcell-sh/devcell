@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/nixhome"
+	"github.com/devcell-sh/devcell/internal/nixhome"
 )
 
 // TestFormatCatalogList: given a Catalog, the human-facing output should

@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/testutil"
+	"github.com/devcell-sh/devcell/internal/testutil"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )

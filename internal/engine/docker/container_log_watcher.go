@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 // ContainerEvent is one parsed JSONL event from docker logs.

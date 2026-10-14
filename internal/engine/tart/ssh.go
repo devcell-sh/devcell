@@ -3,7 +3,7 @@ package tart
 import (
 	"path/filepath"
 
-	"github.com/DimmKirr/devcell/internal/cell"
+	"github.com/devcell-sh/devcell/internal/cell"
 )
 
 // DarwinVMUser is the fixed nix-darwin/home-manager user inside the macOS VM

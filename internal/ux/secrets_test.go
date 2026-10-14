@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 func TestFormatSecretsPhase_AllResolved(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/backup"
+	"github.com/devcell-sh/devcell/internal/backup"
 )
 
 func countBackups(t *testing.T, dir string) []string {

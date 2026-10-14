@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/engine/docker"
+	"github.com/devcell-sh/devcell/internal/engine/docker"
 )
 
 // Tag-variant contract after the 2026-05-15 flip (CELL-189) + CELL-165

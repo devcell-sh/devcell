@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/cfg"
 )
 
 // The libvirt engine was retired. Its keys ([cell] libvirt_uri,
@@ -46,30 +46,30 @@ func TestLoadFile_LibvirtPathMap(t *testing.T) {
 	dir := t.TempDir()
 	writeTOML(t, dir, "devcell.toml", `
 [cell.libvirt_path_map]
-"/devcell-155" = "/Users/dmitry/dev/dimmkirr/devcell"
-"/home/dmitry" = "/Users/dmitry"
+"/devcell-155" = "/Users/warden/dev/dimmkirr/devcell"
+"/home/warden" = "/Users/warden"
 `)
 	c, err := cfg.LoadFile(filepath.Join(dir, "devcell.toml"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := c.Cell.LibvirtPathMap["/devcell-155"]; got != "/Users/dmitry/dev/dimmkirr/devcell" {
+	if got := c.Cell.LibvirtPathMap["/devcell-155"]; got != "/Users/warden/dev/dimmkirr/devcell" {
 		t.Errorf("LibvirtPathMap[/devcell-155] = %q", got)
 	}
-	if got := c.Cell.LibvirtPathMap["/home/dmitry"]; got != "/Users/dmitry" {
-		t.Errorf("LibvirtPathMap[/home/dmitry] = %q", got)
+	if got := c.Cell.LibvirtPathMap["/home/warden"]; got != "/Users/warden" {
+		t.Errorf("LibvirtPathMap[/home/warden] = %q", got)
 	}
 }
 
 func TestMerge_LibvirtPathMapAccumulates(t *testing.T) {
 	global := cfg.CellConfig{Cell: cfg.CellSection{LibvirtPathMap: map[string]string{
-		"/home/dmitry": "/Users/dmitry",
+		"/home/warden": "/Users/warden",
 	}}}
 	project := cfg.CellConfig{Cell: cfg.CellSection{LibvirtPathMap: map[string]string{
-		"/devcell-155": "/Users/dmitry/dev/dimmkirr/devcell",
+		"/devcell-155": "/Users/warden/dev/dimmkirr/devcell",
 	}}}
 	m := cfg.Merge(global, project).Cell.LibvirtPathMap
-	if m["/home/dmitry"] != "/Users/dmitry" || m["/devcell-155"] != "/Users/dmitry/dev/dimmkirr/devcell" {
+	if m["/home/warden"] != "/Users/warden" || m["/devcell-155"] != "/Users/warden/dev/dimmkirr/devcell" {
 		t.Errorf("merged map must accumulate both entries, got %v", m)
 	}
 }

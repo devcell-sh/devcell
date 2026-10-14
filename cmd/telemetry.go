@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/DimmKirr/devcell/internal/config"
-	"github.com/DimmKirr/devcell/internal/telemetry"
+	"github.com/devcell-sh/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/telemetry"
 	"github.com/spf13/cobra"
 )
 

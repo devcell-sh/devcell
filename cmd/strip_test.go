@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 func TestStripCellFlags_BoolFlagStripped(t *testing.T) {

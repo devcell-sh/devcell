@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/nixhome"
+	"github.com/devcell-sh/devcell/internal/nixhome"
 )
 
 func TestPreflightPlatformCheck_NoNix_SkipsGracefully(t *testing.T) {

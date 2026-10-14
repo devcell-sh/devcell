@@ -12,8 +12,8 @@ import (
 
 	ollamaapi "github.com/ollama/ollama/api"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/ollama"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/ollama"
 )
 
 // --- RankModels tests ---

@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/config"
-	"github.com/DimmKirr/devcell/internal/engine"
-	"github.com/DimmKirr/devcell/internal/telemetry"
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/engine"
+	"github.com/devcell-sh/devcell/internal/telemetry"
+	"github.com/devcell-sh/devcell/internal/ux"
 	"github.com/spf13/cobra"
 )
 

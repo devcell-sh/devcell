@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/cache"
+	"github.com/devcell-sh/devcell/internal/cache"
 )
 
 func TestLoadSave_RoundTrip(t *testing.T) {

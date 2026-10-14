@@ -18,8 +18,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/engine/docker"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/engine/docker"
 )
 
 // protonPTConfig is a ProtonVPN Portugal WireGuard config (sans PrivateKey).

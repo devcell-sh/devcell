@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/config"
 )
 
 func env(pairs ...string) func(string) string {

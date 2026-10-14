@@ -9,10 +9,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/DimmKirr/devcell/internal/config"
-	"github.com/DimmKirr/devcell/internal/engine"
-	"github.com/DimmKirr/devcell/internal/scaffold"
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/engine"
+	"github.com/devcell-sh/devcell/internal/scaffold"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 // Init scaffolds devcell.toml and the .devcell/ build context in the

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/serve"
+	"github.com/devcell-sh/devcell/internal/serve"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/responses"

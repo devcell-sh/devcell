@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/gui"
+	"github.com/devcell-sh/devcell/internal/gui"
 )
 
 func TestRDPUrl(t *testing.T) {
@@ -28,8 +28,8 @@ func TestRDPUrl_NonLocalhost(t *testing.T) {
 }
 
 func TestRoyalTSXUrl(t *testing.T) {
-	got := gui.RoyalTSXUrl("127.0.0.1", "389", "dmitry", "rdp")
-	want := "rtsx://rdp://dmitry:rdp@127.0.0.1:389"
+	got := gui.RoyalTSXUrl("127.0.0.1", "389", "warden", "rdp")
+	want := "rtsx://rdp://warden:rdp@127.0.0.1:389"
 	if got != want {
 		t.Errorf("want %q, got %q", want, got)
 	}

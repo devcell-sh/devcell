@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/DimmKirr/devcell/internal/ollama"
-	"github.com/DimmKirr/devcell/internal/ux"
-	"github.com/DimmKirr/devcell/internal/version"
+	"github.com/devcell-sh/devcell/internal/ollama"
+	"github.com/devcell-sh/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/version"
 )
 
 // InitFlowOptions configures the shared initialization flow.

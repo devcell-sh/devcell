@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/engine/docker"
+	"github.com/devcell-sh/devcell/internal/engine/docker"
 )
 
 // CELL-264 Layer 4 — BuildArgv emits the directory bind-mount + env when
@@ -13,10 +13,10 @@ import (
 
 func TestBuildArgv_BootDirAddsBindMountAndEnv(t *testing.T) {
 	argv := buildArgv(t, func(s *docker.RunSpec) {
-		s.BootDir = "/home/dmitry/.devcell/DIMM/boot"
+		s.BootDir = "/home/warden/.devcell/CELL/boot"
 	})
 	const containerPath = "/tmp/devcell-boot"
-	wantMount := "/home/dmitry/.devcell/DIMM/boot:" + containerPath
+	wantMount := "/home/warden/.devcell/CELL/boot:" + containerPath
 
 	if !hasConsecutive(argv, "-v", wantMount) {
 		t.Errorf("missing -v %q in argv: %v", wantMount, argv)

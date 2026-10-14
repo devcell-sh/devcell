@@ -15,7 +15,7 @@ import (
 	streak "github.com/dimmkirr/go-streak-chart"
 	"github.com/dimmkirr/termoscope"
 
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 // helperRealBoot replicates a real `cell claude` boot with 5 groups (27 dots),
@@ -92,34 +92,34 @@ func helperRealBoot() {
 	// Boot: Container set by runner, rest via boot events
 	panel.SetBoot("Boot", "Container", streak.Done, "Container started")
 
-	events := make(chan BootEvent, 4)
+	events := make(chan ContainerEvent, 4)
 	go func() {
-		send := func(e BootEvent) {
+		send := func(e ContainerEvent) {
 			events <- e
 			time.Sleep(pace)
 		}
-		send(BootEvent{Component: "entrypoint", State: "ready", Title: "Entrypoint ready"})
-		send(BootEvent{Component: "nix", State: "starting", Title: "Configuring nix"})
-		send(BootEvent{Component: "nix", State: "ready", Title: "Nix ready"})
-		send(BootEvent{Component: "s6", State: "starting", Title: "Activating session services"})
-		send(BootEvent{Component: "s6", State: "ready", Title: "Session services ready"})
-		send(BootEvent{Component: "secrets", State: "ready", Title: "Secrets ready"})
-		send(BootEvent{Component: "xvfb", State: "ready", Title: "Display server ready"})
-		send(BootEvent{Component: "dbus-session", State: "ready", Title: "D-Bus session ready"})
-		send(BootEvent{Component: "window-manager", State: "ready", Title: "Window manager ready"})
-		send(BootEvent{Component: "xrdp", State: "ready", Title: "Remote desktop ready"})
-		send(BootEvent{Component: "pulseaudio", State: "ready", Title: "Audio server ready"})
-		send(BootEvent{Component: "shell", State: "ready", Title: "Shell ready"})
-		send(BootEvent{Component: "mise", State: "ready", Title: "Mise ready"})
-		send(BootEvent{Component: "home", State: "ready", Title: "Home directory ready"})
-		send(BootEvent{Component: "claude", State: "ready", Title: "Claude ready"})
-		send(BootEvent{Component: "mcp-toggle", State: "ready", Title: "MCP ready"})
-		send(BootEvent{Component: "gui", State: "ready", Title: "GUI ready"})
-		events <- BootEvent{Component: "boot", State: "ready"}
+		send(ContainerEvent{Scope: "system", Service: "entrypoint", Status: "ready", Msg: "Entrypoint ready"})
+		send(ContainerEvent{Scope: "system", Service: "nix", Status: "starting", Msg: "Configuring nix"})
+		send(ContainerEvent{Scope: "system", Service: "nix", Status: "ready", Msg: "Nix ready"})
+		send(ContainerEvent{Scope: "system", Service: "s6", Status: "starting", Msg: "Activating session services"})
+		send(ContainerEvent{Scope: "system", Service: "s6", Status: "ready", Msg: "Session services ready"})
+		send(ContainerEvent{Scope: "system", Service: "secrets", Status: "ready", Msg: "Secrets ready"})
+		send(ContainerEvent{Scope: "service", Service: "xvfb", Status: "up", Msg: "Display server ready"})
+		send(ContainerEvent{Scope: "service", Service: "dbus-session", Status: "up", Msg: "D-Bus session ready"})
+		send(ContainerEvent{Scope: "service", Service: "window-manager", Status: "up", Msg: "Window manager ready"})
+		send(ContainerEvent{Scope: "service", Service: "xrdp", Status: "up", Msg: "Remote desktop ready"})
+		send(ContainerEvent{Scope: "service", Service: "pulseaudio", Status: "up", Msg: "Audio server ready"})
+		send(ContainerEvent{Scope: "service", Service: "shell-rc", Status: "up", Msg: "Shell ready"})
+		send(ContainerEvent{Scope: "service", Service: "mise", Status: "up", Msg: "Mise ready"})
+		send(ContainerEvent{Scope: "service", Service: "homedir", Status: "up", Msg: "Home directory ready"})
+		send(ContainerEvent{Scope: "service", Service: "claude-config", Status: "up", Msg: "Claude ready"})
+		send(ContainerEvent{Scope: "service", Service: "mcp-toggle", Status: "up", Msg: "MCP ready"})
+		send(ContainerEvent{Scope: "service", Service: "gui-config", Status: "up", Msg: "GUI ready"})
+		events <- ContainerEvent{Scope: "system", Service: "boot", Status: "ready"}
 		close(events)
 	}()
 
-	ConsumeBootEventsPanel(events, panel)
+	ConsumeContainerEventsPanel(events, panel)
 	panel.ClearBelowGroups()
 	printClaudeCodeTUI()
 	fmt.Println("DONE")

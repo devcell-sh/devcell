@@ -24,10 +24,10 @@ import (
 	"github.com/devcell-sh/go-winkit/vm/qemu"
 	"github.com/devcell-sh/go-winkit/wsl"
 
-	"github.com/DimmKirr/devcell/internal/cell"
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/engine"
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/cell"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/engine"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 // winkitBuildFunc is the function used to build guest images. Defaults to

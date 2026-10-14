@@ -213,6 +213,49 @@ func TestPTYExecutor_Integration_RealClaude(t *testing.T) {
 	}
 }
 
+func TestPTYExecutor_TimeoutIncludesBinaryAndDuration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("pty test requires PTY allocation")
+	}
+
+	script := writeFakeAgentSlow(t)
+
+	e := NewPTYExecutor(script,
+		WithPTYArgs(),
+		WithReadyMarker("READY>"),
+		WithStableDelay(10*time.Second),
+		WithResponseTimeout(1*time.Second),
+	)
+	defer e.Close()
+
+	result := e.Run(ExecOpts{Agent: "claude", Prompt: "hello"})
+	if result.ExitCode == 0 {
+		t.Fatal("expected non-zero exit for timeout")
+	}
+	if !strings.Contains(result.Stderr, script) {
+		t.Errorf("timeout error should contain binary path %q; got: %s", script, result.Stderr)
+	}
+	if !strings.Contains(result.Stderr, "1s") {
+		t.Errorf("timeout error should contain duration; got: %s", result.Stderr)
+	}
+}
+
+func writeFakeAgentSlow(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "fake-claude")
+	content := `#!/bin/sh
+printf "Welcome to fake claude\nREADY> "
+while IFS= read -r line; do
+    sleep 60
+done
+`
+	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func writeFakeAgent(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()

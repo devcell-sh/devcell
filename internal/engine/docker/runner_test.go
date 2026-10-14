@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/config"
-	"github.com/DimmKirr/devcell/internal/engine/docker"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/engine/docker"
 )
 
 func baseConfig() config.Config {
@@ -476,9 +476,9 @@ func TestArgv_ReadonlyVolume(t *testing.T) {
 // host path at the same path inside the container.
 func TestArgv_CfgVolumes_SinglePathShorthand(t *testing.T) {
 	argv := buildArgv(t, func(s *docker.RunSpec) {
-		s.CellCfg.Volumes = []cfg.VolumeMount{{Mount: "/Users/dmitry/dev/evercars/evercars-backend"}}
+		s.CellCfg.Volumes = []cfg.VolumeMount{{Mount: "/Users/warden/dev/evercars/evercars-backend"}}
 	})
-	want := "/Users/dmitry/dev/evercars/evercars-backend:/Users/dmitry/dev/evercars/evercars-backend"
+	want := "/Users/warden/dev/evercars/evercars-backend:/Users/warden/dev/evercars/evercars-backend"
 	if !hasConsecutive(argv, "-v", want) {
 		t.Errorf("expected -v %s in argv: %v", want, argv)
 	}
@@ -1074,10 +1074,10 @@ func TestUserImageTag_PerSession_Default(t *testing.T) {
 func TestUserImageTag_PerSession_TmuxFallback(t *testing.T) {
 	withCleanImageState(t)
 	docker.PerCellImage = true
-	t.Setenv("TMUX_SESSION_NAME", "DIMM")
+	t.Setenv("TMUX_SESSION_NAME", "CELL")
 	got := docker.UserImageTag()
-	if got != "devcell-user:DIMM" {
-		t.Errorf("per-session tmux: want devcell-user:DIMM, got %q", got)
+	if got != "devcell-user:CELL" {
+		t.Errorf("per-session tmux: want devcell-user:CELL, got %q", got)
 	}
 }
 
@@ -2118,6 +2118,49 @@ func TestArgv_SolitaryPolicy_DropsDockerSocket(t *testing.T) {
 		if strings.Contains(a, "docker.sock") {
 			t.Errorf("solitary policy should not mount docker socket, found: %s", a)
 		}
+	}
+}
+
+func TestArgv_DockerSocketFalse_DropsSocket(t *testing.T) {
+	ds := false
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.CellCfg.Cell.DockerSocket = &ds
+	})
+	for _, a := range argv {
+		if strings.Contains(a, "docker.sock") {
+			t.Errorf("docker_socket=false should not mount docker socket, found: %s", a)
+		}
+	}
+}
+
+func TestArgv_DockerSocketNil_MountsSocket(t *testing.T) {
+	argv := buildArgv(t)
+	found := false
+	for _, a := range argv {
+		if strings.Contains(a, "docker.sock") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("docker_socket unset (nil) should mount docker socket by default")
+	}
+}
+
+func TestArgv_DockerSocketTrue_MountsSocket(t *testing.T) {
+	ds := true
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.CellCfg.Cell.DockerSocket = &ds
+	})
+	found := false
+	for _, a := range argv {
+		if strings.Contains(a, "docker.sock") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("docker_socket=true should mount docker socket")
 	}
 }
 

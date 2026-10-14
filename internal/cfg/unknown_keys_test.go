@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/cfg"
 )
 
 // A typo or a key devcell no longer reads must fail loudly, not be ignored.

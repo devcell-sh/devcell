@@ -4,7 +4,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/engine/docker"
+	"github.com/devcell-sh/devcell/internal/engine/docker"
 )
 
 // ThinStoreVolume is the single source of truth for the named Docker volume

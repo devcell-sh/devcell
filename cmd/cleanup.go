@@ -6,9 +6,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/DimmKirr/devcell/internal/engine/docker"
-	"github.com/DimmKirr/devcell/internal/telemetry"
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/engine/docker"
+	"github.com/devcell-sh/devcell/internal/telemetry"
+	"github.com/devcell-sh/devcell/internal/ux"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )

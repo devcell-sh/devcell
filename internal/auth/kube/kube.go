@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 // okMark / failMark render styled prefixes that match the rest of devcell's
@@ -45,7 +45,7 @@ type Options struct {
 //
 //   - Source:    $KUBECONFIG, else ~/.kube/config
 //   - Output:    derived from Source: `nmd-prod` → `nmd-prod-read`, `config` → `config-read`
-//   - SAName:    $USER + "-readonly"  (e.g. dmitry-readonly)
+//   - SAName:    $USER + "-readonly"  (e.g. warden-readonly)
 //   - Namespace: "default"
 //   - TTL:       8760h (1 year; cluster may cap shorter)
 func Defaults(o Options) Options {

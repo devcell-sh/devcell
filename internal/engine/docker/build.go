@@ -14,13 +14,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/config"
-	"github.com/DimmKirr/devcell/internal/engine"
-	"github.com/DimmKirr/devcell/internal/nixhome"
-	"github.com/DimmKirr/devcell/internal/scaffold"
-	"github.com/DimmKirr/devcell/internal/ux"
-	"github.com/DimmKirr/devcell/internal/version"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/engine"
+	"github.com/devcell-sh/devcell/internal/nixhome"
+	"github.com/devcell-sh/devcell/internal/scaffold"
+	"github.com/devcell-sh/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/version"
 )
 
 // buildParams is a thin-image build resolved from engine.BuildOpts.

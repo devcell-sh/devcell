@@ -4,14 +4,14 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 // kickDeps wires the docker dependencies for kickMcpInCellsSharingCellHome.
 // Tests inject pure-Go fakes so they don't shell out.
 type kickDeps struct {
-	cellHome       string                          // host path, e.g. /Users/dmitry/.devcell/FAM
-	hostUser       string                          // session user, e.g. dmitry
+	cellHome       string                          // host path, e.g. /Users/warden/.devcell/FAM
+	hostUser       string                          // session user, e.g. warden
 	listContainers func() ([]string, error)        // list running cell-* container IDs
 	mountSource    func(id string) (string, error) // resolve a container's /home/<hostUser> mount source
 	killMcp        func(id string) error           // pkill -f mcp-server-patchright inside the container

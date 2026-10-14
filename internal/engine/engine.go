@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/cfg"
 )
 
 // Engine is one runtime a cell can run on. Each verb gets everything it
@@ -206,5 +206,5 @@ func For(n Name) (Engine, error) {
 	if e, ok := engines[n]; ok {
 		return e, nil
 	}
-	return nil, fmt.Errorf("engine %q is not available in this build; see https://github.com/DimmKirr/devcell/issues", n)
+	return nil, fmt.Errorf("engine %q is not available in this build; see https://github.com/devcell-sh/devcell/issues", n)
 }

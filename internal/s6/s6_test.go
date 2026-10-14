@@ -31,8 +31,8 @@ func TestConstants(t *testing.T) {
 
 func TestWriteEnvScript(t *testing.T) {
 	env := SessionEnv{
-		HostUser:    "dmitry",
-		SessionHome: "/Users/dmitry",
+		HostUser:    "warden",
+		SessionHome: "/Users/warden",
 		DevcellHome: "/Users/devcell",
 	}
 	script := WriteEnvScript(env)
@@ -44,8 +44,8 @@ func TestWriteEnvScript(t *testing.T) {
 		t.Errorf("must reference EnvDir (%s)", EnvDir)
 	}
 	for _, kv := range []struct{ key, val string }{
-		{"HOST_USER", "dmitry"},
-		{"SESSION_HOME", "/Users/dmitry"},
+		{"HOST_USER", "warden"},
+		{"SESSION_HOME", "/Users/warden"},
 		{"DEVCELL_HOME", "/Users/devcell"},
 	} {
 		if !strings.Contains(script, kv.key) {
@@ -74,12 +74,12 @@ func TestWriteEnvScript_Idempotent(t *testing.T) {
 }
 
 func TestDarwinSessionEnv(t *testing.T) {
-	env := DarwinSessionEnv("dmitry", "devcell")
-	if env.HostUser != "dmitry" {
-		t.Errorf("HostUser = %q, want dmitry", env.HostUser)
+	env := DarwinSessionEnv("warden", "devcell")
+	if env.HostUser != "warden" {
+		t.Errorf("HostUser = %q, want warden", env.HostUser)
 	}
-	if env.SessionHome != "/Users/dmitry" {
-		t.Errorf("SessionHome = %q, want /Users/dmitry", env.SessionHome)
+	if env.SessionHome != "/Users/warden" {
+		t.Errorf("SessionHome = %q, want /Users/warden", env.SessionHome)
 	}
 	if env.DevcellHome != "/Users/devcell" {
 		t.Errorf("DevcellHome = %q, want /Users/devcell", env.DevcellHome)
@@ -87,12 +87,12 @@ func TestDarwinSessionEnv(t *testing.T) {
 }
 
 func TestLinuxSessionEnv(t *testing.T) {
-	env := LinuxSessionEnv("dmitry")
-	if env.HostUser != "dmitry" {
-		t.Errorf("HostUser = %q, want dmitry", env.HostUser)
+	env := LinuxSessionEnv("warden")
+	if env.HostUser != "warden" {
+		t.Errorf("HostUser = %q, want warden", env.HostUser)
 	}
-	if env.SessionHome != "/home/dmitry" {
-		t.Errorf("SessionHome = %q, want /home/dmitry", env.SessionHome)
+	if env.SessionHome != "/home/warden" {
+		t.Errorf("SessionHome = %q, want /home/warden", env.SessionHome)
 	}
 	if env.DevcellHome != "/opt/devcell" {
 		t.Errorf("DevcellHome = %q, want /opt/devcell", env.DevcellHome)
@@ -118,14 +118,14 @@ func TestWSL1SessionEnv(t *testing.T) {
 }
 
 func TestWSL1ExecPATH(t *testing.T) {
-	env := WSL1SessionEnv("dmitry")
+	env := WSL1SessionEnv("warden")
 	path := WSL1ExecPATH(env)
 
 	for _, required := range []string{
-		"/home/dmitry/go/bin",
-		"/home/dmitry/.local/state/nix/profiles/profile/bin",
-		"/home/dmitry/.local/share/mise/shims",
-		"/home/dmitry/.local/bin",
+		"/home/warden/go/bin",
+		"/home/warden/.local/state/nix/profiles/profile/bin",
+		"/home/warden/.local/share/mise/shims",
+		"/home/warden/.local/bin",
 		"/opt/devcell/.local/state/nix/profiles/profile/bin",
 		"/nix/var/nix/profiles/default/bin",
 	} {
@@ -134,7 +134,7 @@ func TestWSL1ExecPATH(t *testing.T) {
 		}
 	}
 
-	goIdx := strings.Index(path, "/home/dmitry/go/bin")
+	goIdx := strings.Index(path, "/home/warden/go/bin")
 	nixIdx := strings.Index(path, "/nix/var/nix/profiles/default/bin")
 	if goIdx < 0 || nixIdx < 0 || goIdx > nixIdx {
 		t.Error("session-user paths must precede system paths in WSL1ExecPATH")
@@ -150,14 +150,14 @@ func TestWSL1ExecPATH_Root(t *testing.T) {
 }
 
 func TestLinuxExecPATH(t *testing.T) {
-	env := LinuxSessionEnv("dmitry")
+	env := LinuxSessionEnv("warden")
 	path := LinuxExecPATH(env)
 
 	for _, required := range []string{
-		"/home/dmitry/go/bin",
-		"/home/dmitry/.local/state/nix/profiles/profile/bin",
-		"/home/dmitry/.local/share/mise/shims",
-		"/home/dmitry/.local/bin",
+		"/home/warden/go/bin",
+		"/home/warden/.local/state/nix/profiles/profile/bin",
+		"/home/warden/.local/share/mise/shims",
+		"/home/warden/.local/bin",
 		"/run/wrappers/bin",
 		"/nix/var/nix/profiles/devcell-tools/bin",
 		"/opt/devcell/.local/state/nix/profiles/profile/bin",
@@ -168,7 +168,7 @@ func TestLinuxExecPATH(t *testing.T) {
 		}
 	}
 
-	goIdx := strings.Index(path, "/home/dmitry/go/bin")
+	goIdx := strings.Index(path, "/home/warden/go/bin")
 	nixIdx := strings.Index(path, "/nix/var/nix/profiles/default/bin")
 	if goIdx < 0 || nixIdx < 0 || goIdx > nixIdx {
 		t.Error("session-user paths must precede system paths in LinuxExecPATH")
@@ -176,14 +176,14 @@ func TestLinuxExecPATH(t *testing.T) {
 }
 
 func TestLinuxExecPATH_MatchesEntrypoint(t *testing.T) {
-	env := LinuxSessionEnv("dmitry")
+	env := LinuxSessionEnv("warden")
 	path := LinuxExecPATH(env)
 	snippet := EntrypointSnippet(env)
 	if !strings.Contains(snippet, "export PATH=") {
 		t.Fatal("entrypoint must export PATH")
 	}
 	for _, segment := range strings.Split(path, ":") {
-		resolved := strings.ReplaceAll(segment, "/home/dmitry", "$SESSION_HOME")
+		resolved := strings.ReplaceAll(segment, "/home/warden", "$SESSION_HOME")
 		resolved = strings.ReplaceAll(resolved, "/opt/devcell", "$DEVCELL_HOME")
 		if !strings.Contains(snippet, segment) && !strings.Contains(snippet, resolved) {
 			t.Errorf("LinuxExecPATH segment %q not found in entrypoint PATH", segment)
@@ -192,7 +192,7 @@ func TestLinuxExecPATH_MatchesEntrypoint(t *testing.T) {
 }
 
 func TestEntrypointSnippet_NotifyEmitsJSONL(t *testing.T) {
-	env := LinuxSessionEnv("dmitry")
+	env := LinuxSessionEnv("warden")
 	script := EntrypointSnippet(env)
 
 	if !strings.Contains(script, `"scope":"system"`) {
@@ -209,7 +209,7 @@ func TestEntrypointSnippet_NotifyEmitsJSONL(t *testing.T) {
 // --- EntrypointSnippet tests ---
 
 func TestEntrypointSnippet(t *testing.T) {
-	env := LinuxSessionEnv("dmitry")
+	env := LinuxSessionEnv("warden")
 	script := EntrypointSnippet(env)
 
 	// Must NOT invoke sudo (entrypoint runs as root).
@@ -297,9 +297,9 @@ func TestEntrypointSnippet(t *testing.T) {
 		t.Errorf("must touch ReadyFile (%s)", ReadyFile)
 	}
 
-	// Must write DEVCELL_BOOT_DIR to envdir so s6 services can signal boot progress
-	if !strings.Contains(script, "DEVCELL_BOOT_DIR") || !strings.Contains(script, "$S6_ENV/DEVCELL_BOOT_DIR") {
-		t.Error("must write DEVCELL_BOOT_DIR to s6 envdir so services can signal boot progress")
+	// Must NOT reference DEVCELL_BOOT_DIR (sentinel files removed)
+	if strings.Contains(script, "DEVCELL_BOOT_DIR") {
+		t.Error("must not reference DEVCELL_BOOT_DIR (sentinel files removed)")
 	}
 
 	// Must notify boot progress
@@ -349,7 +349,7 @@ func TestEntrypointSnippet(t *testing.T) {
 }
 
 func TestEntrypointSnippet_VsActivateScript_NoDuplicateSudo(t *testing.T) {
-	env := LinuxSessionEnv("dmitry")
+	env := LinuxSessionEnv("warden")
 	snippet := EntrypointSnippet(env)
 	activate := ActivateScript(env)
 
@@ -368,8 +368,8 @@ func TestEntrypointSnippet_VsActivateScript_NoDuplicateSudo(t *testing.T) {
 
 func TestActivateScript(t *testing.T) {
 	env := SessionEnv{
-		HostUser:    "dmitry",
-		SessionHome: "/Users/dmitry",
+		HostUser:    "warden",
+		SessionHome: "/Users/warden",
 		DevcellHome: "/Users/devcell",
 	}
 	script := ActivateScript(env)
@@ -429,8 +429,8 @@ func TestActivateScript(t *testing.T) {
 
 func TestActivateScript_ExportsEnvBeforeActivation(t *testing.T) {
 	env := SessionEnv{
-		HostUser:    "dmitry",
-		SessionHome: "/Users/dmitry",
+		HostUser:    "warden",
+		SessionHome: "/Users/warden",
 		DevcellHome: "/Users/devcell",
 	}
 	script := ActivateScript(env)
@@ -457,7 +457,7 @@ func TestTartDelegatesToDarwinSessionEnv(t *testing.T) {
 }
 
 func TestEntrypointSnippet_S6BootSequenceOrder(t *testing.T) {
-	env := LinuxSessionEnv("dmitry")
+	env := LinuxSessionEnv("warden")
 	script := EntrypointSnippet(env)
 
 	svscanPos := strings.Index(script, "s6-svscan")
@@ -481,7 +481,7 @@ func TestEntrypointSnippet_S6BootSequenceOrder(t *testing.T) {
 }
 
 func TestActivateScript_S6BootSequenceOrder(t *testing.T) {
-	env := DarwinSessionEnv("dmitry", "devcell")
+	env := DarwinSessionEnv("warden", "devcell")
 	script := ActivateScript(env)
 
 	svscanPos := strings.Index(script, "s6-svscan")

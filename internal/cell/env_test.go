@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/cell"
-	"github.com/DimmKirr/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/cell"
+	"github.com/devcell-sh/devcell/internal/cfg"
 )
 
 // envMap returns a getenv func backed by m.

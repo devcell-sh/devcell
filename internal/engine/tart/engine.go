@@ -1,3 +1,4 @@
+// Package tart implements the cell engine for macOS VMs on Apple Silicon via the tart CLI.
 package tart
 
 import (
@@ -12,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/cell"
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/engine"
-	"github.com/DimmKirr/devcell/internal/s6"
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/cell"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/engine"
+	"github.com/devcell-sh/devcell/internal/s6"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 // Engine runs a cell in a macOS VM on Apple Silicon through the tart CLI.

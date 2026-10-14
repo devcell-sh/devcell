@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/DimmKirr/devcell/internal/engine"
+	"github.com/devcell-sh/devcell/internal/engine"
 )
 
 func TestDefaultGuest(t *testing.T) {

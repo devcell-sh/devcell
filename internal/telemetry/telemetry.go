@@ -6,7 +6,7 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/DimmKirr/devcell/internal/version"
+	"github.com/devcell-sh/devcell/internal/version"
 	"github.com/posthog/posthog-go"
 )
 

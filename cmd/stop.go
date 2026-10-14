@@ -6,11 +6,11 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/config"
-	"github.com/DimmKirr/devcell/internal/engine"
-	"github.com/DimmKirr/devcell/internal/engine/docker"
-	"github.com/DimmKirr/devcell/internal/engine/winkit"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/engine"
+	"github.com/devcell-sh/devcell/internal/engine/docker"
+	"github.com/devcell-sh/devcell/internal/engine/winkit"
 	"github.com/spf13/cobra"
 )
 

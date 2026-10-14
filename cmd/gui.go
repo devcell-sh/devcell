@@ -15,11 +15,11 @@ import (
 	"runtime"
 	"strconv"
 
-	"github.com/DimmKirr/devcell/internal/config"
-	"github.com/DimmKirr/devcell/internal/engine/tart"
-	"github.com/DimmKirr/devcell/internal/engine/winkit"
-	"github.com/DimmKirr/devcell/internal/gui"
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/engine/tart"
+	"github.com/devcell-sh/devcell/internal/engine/winkit"
+	"github.com/devcell-sh/devcell/internal/gui"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 // guiCommand holds what `devcell rdp` and `devcell vnc` differ in beyond what

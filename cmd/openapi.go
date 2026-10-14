@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/cfg"
 	"github.com/spf13/cobra"
 )
 

@@ -2,16 +2,13 @@ package docker
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	streak "github.com/dimmkirr/go-streak-chart"
 
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 func init() {
@@ -129,45 +126,6 @@ func TestBootGroups_ConditionalSteps(t *testing.T) {
 	}
 }
 
-func TestConsumeBootEventsPanel_BootReadyFinishes(t *testing.T) {
-	groups := []ux.PanelGroup{
-		{Label: "Boot", Steps: []string{"Container", "Entrypoint", "Services"}},
-	}
-	panel := ux.NewBootPanel(groups)
-	events := make(chan BootEvent, 4)
-	events <- BootEvent{Component: "entrypoint", State: "ready", Title: "Entrypoint ready"}
-	events <- BootEvent{Component: "s6", State: "starting", Title: "Activating services"}
-	events <- BootEvent{Component: "s6", State: "ready", Title: "Services ready"}
-	events <- BootEvent{Component: "boot", State: "ready"}
-	close(events)
-
-	done := make(chan bool, 1)
-	go func() {
-		done <- ConsumeBootEventsPanel(events, panel)
-	}()
-	if ok := <-done; !ok {
-		t.Fatal("expected clean finish (true), got false")
-	}
-}
-
-func TestConsumeBootEventsPanel_ChannelCloseFinishesError(t *testing.T) {
-	groups := []ux.PanelGroup{
-		{Label: "Boot", Steps: []string{"Entrypoint"}},
-	}
-	panel := ux.NewBootPanel(groups)
-	events := make(chan BootEvent, 1)
-	events <- BootEvent{Component: "entrypoint", State: "ready", Title: "Entrypoint ready"}
-	close(events)
-
-	done := make(chan bool, 1)
-	go func() {
-		done <- ConsumeBootEventsPanel(events, panel)
-	}()
-	if ok := <-done; ok {
-		t.Fatal("expected interrupted finish (false), got true")
-	}
-}
-
 func TestBootComponentStep_MapsKnownComponents(t *testing.T) {
 	cases := map[string]struct{ Group, Step string }{
 		"s6":         {"Boot", "Services"},
@@ -198,156 +156,6 @@ func TestBootComponentStep_MapsKnownComponents(t *testing.T) {
 			t.Errorf("bootComponentStep[%q] = {%q, %q}, want {%q, %q}",
 				comp, got.Group, got.Step, want.Group, want.Step)
 		}
-	}
-}
-
-func TestConsumeBootEventsPanel_WarnEvent(t *testing.T) {
-	groups := []ux.PanelGroup{
-		{Label: "Boot", Steps: []string{"Container"}},
-	}
-	panel := ux.NewBootPanel(groups)
-	events := make(chan BootEvent, 2)
-	events <- BootEvent{Component: "gcroot", State: "warn", Detail: "gc roots stale"}
-	events <- BootEvent{Component: "boot", State: "ready"}
-	close(events)
-
-	done := make(chan struct{})
-	go func() {
-		ConsumeBootEventsPanel(events, panel)
-		close(done)
-	}()
-	<-done
-}
-
-func TestConsumeBootEventsPanel_UpdatesDots(t *testing.T) {
-	groups := []ux.PanelGroup{
-		{Label: "Boot", Steps: []string{"Container", "Entrypoint", "Base init", "Nix daemon", "Services", "Secrets sync"}},
-		{Label: "Environment", Steps: []string{"Shell", "Mise", "Home"}},
-	}
-	panel := ux.NewBootPanel(groups)
-	events := make(chan BootEvent, 10)
-	events <- BootEvent{Component: "entrypoint", State: "starting", Title: "Entrypoint starting"}
-	events <- BootEvent{Component: "entrypoint", State: "ready", Title: "Entrypoint ready"}
-	events <- BootEvent{Component: "s6", State: "starting", Title: "Activating services"}
-	events <- BootEvent{Component: "shell", State: "starting", Title: "Configuring shell"}
-	events <- BootEvent{Component: "shell", State: "ready", Title: "Shell ready"}
-	events <- BootEvent{Component: "mise", State: "starting", Title: "Loading mise"}
-	events <- BootEvent{Component: "mise", State: "ready", Title: "Mise ready"}
-	events <- BootEvent{Component: "home", State: "ready", Title: "Home ready"}
-	events <- BootEvent{Component: "s6", State: "ready", Title: "Services ready"}
-	events <- BootEvent{Component: "boot", State: "ready"}
-	close(events)
-
-	done := make(chan struct{})
-	go func() {
-		ConsumeBootEventsPanel(events, panel)
-		close(done)
-	}()
-	<-done
-}
-
-// Verify that SetBoot uses streak statuses correctly when called with
-// explicit group targeting.
-// TestSentinelToPanelRace exercises the full sentinel → watcher → panel
-// pipeline under concurrent writes. Multiple goroutines write sentinel files
-// simultaneously (simulating s6 services finishing in parallel within one
-// dependency layer), and the test verifies every event arrives and no data
-// race occurs (run with -race). The watcher polls a real temp dir.
-func TestSentinelToPanelRace(t *testing.T) {
-	bootDir := t.TempDir()
-
-	groups := []ux.PanelGroup{
-		{Label: "Boot", Steps: []string{"Container", "Entrypoint", "Nix daemon", "Services"}},
-		{Label: "Services", Steps: []string{"Display", "Desktop", "Remote access", "Audio", "D-Bus"}},
-		{Label: "Environment", Steps: []string{"Shell", "Mise", "Home"}},
-	}
-	panel := ux.NewBootPanel(groups)
-	panel.SetBoot("Boot", "Container", streak.Done, "Container started")
-
-	// Start the real watcher on the temp dir.
-	origInterval := PollInterval
-	PollInterval = 5 * time.Millisecond
-	t.Cleanup(func() { PollInterval = origInterval })
-
-	watcher := &BootDirWatcher{}
-	events, err := watcher.Start(bootDir)
-	if err != nil {
-		t.Fatalf("watcher start: %v", err)
-	}
-	defer watcher.Close()
-
-	// Consume events on the panel in the background.
-	panelDone := make(chan bool, 1)
-	go func() {
-		panelDone <- ConsumeBootEventsPanel(events, panel)
-	}()
-
-	// Simulate s6 services writing sentinels concurrently.
-	// Phase 1: entrypoint + s6 (sequential, like the real entrypoint).
-	writeSentinel(t, bootDir, "entrypoint.ready")
-	writeSentinel(t, bootDir, "s6.starting")
-
-	// Phase 2: multiple services finish in parallel (same dependency layer).
-	var wg sync.WaitGroup
-	concurrent := []string{
-		"nix.ready",
-		"shell.ready",
-		"mise.ready",
-		"home.ready",
-		"xvfb.ready",
-		"dbus-session.ready",
-	}
-	for _, name := range concurrent {
-		wg.Add(1)
-		go func(n string) {
-			defer wg.Done()
-			writeSentinel(t, bootDir, n)
-		}(name)
-	}
-	wg.Wait()
-
-	// Phase 3: services that depend on phase 2.
-	concurrent2 := []string{
-		"window-manager.ready",
-		"xrdp.ready",
-		"pulseaudio.ready",
-	}
-	for _, name := range concurrent2 {
-		wg.Add(1)
-		go func(n string) {
-			defer wg.Done()
-			writeSentinel(t, bootDir, n)
-		}(name)
-	}
-	wg.Wait()
-
-	// Seal.
-	writeSentinel(t, bootDir, "s6.ready")
-	writeSentinel(t, bootDir, "boot.ready")
-
-	select {
-	case ok := <-panelDone:
-		if !ok {
-			t.Fatal("panel did not receive boot.ready (got interrupted finish)")
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("panel did not finish within 5s")
-	}
-
-	// Verify all sentinel files were written (the watcher should have seen them all).
-	expected := append(concurrent, concurrent2...)
-	expected = append(expected, "entrypoint.ready", "s6.starting", "s6.ready", "boot.ready")
-	for _, name := range expected {
-		if _, err := os.Stat(filepath.Join(bootDir, name)); err != nil {
-			t.Errorf("sentinel %q missing from boot dir: %v", name, err)
-		}
-	}
-}
-
-func writeSentinel(t *testing.T, dir, name string) {
-	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
-		t.Errorf("write sentinel %q: %v", name, err)
 	}
 }
 

@@ -51,6 +51,10 @@
           "description": "subcommand to run when `cell` is invoked with no args; env: DEVCELL_DEFAULT_COMMAND",
           "type": "string"
         },
+        "docker_socket": {
+          "description": "mount /var/run/docker.sock into the container; default: true; env: DEVCELL_DOCKER_SOCKET",
+          "type": "boolean"
+        },
         "engine": {
           "description": "execution engine: \"docker\" (default), \"tart\" or \"winkit\"",
           "type": "string"

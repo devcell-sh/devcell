@@ -6,16 +6,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/config"
 )
 
 func sampleConfig() config.Config {
 	return config.Config{
 		CellName: "devcell-85",
-		BaseDir:  "/Users/dmitry/dev/dimmkirr/devcell",
-		HostUser: "dmitry",
-		HostHome: "/Users/dmitry",
+		BaseDir:  "/Users/warden/dev/dimmkirr/devcell",
+		HostUser: "warden",
+		HostHome: "/Users/warden",
 	}
 }
 
@@ -31,9 +31,9 @@ func TestContainerContext_DescribesMountsAndConstraints(t *testing.T) {
 	checks := map[string]string{
 		"container identity": "Docker container",
 		"project alias":      "/devcell-85",
-		"host base dir":      "/Users/dmitry/dev/dimmkirr/devcell",
+		"host base dir":      "/Users/warden/dev/dimmkirr/devcell",
 		"same filesystem":    "same filesystem",
-		"persistent home":    "/home/dmitry",
+		"persistent home":    "/home/warden",
 		"skills mount":       ".claude/skills",
 		"user volume":        "/run/secrets",
 		"user volume ro":     "read-only",

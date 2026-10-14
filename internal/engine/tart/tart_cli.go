@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 // VM wraps a tart VM managed via the tart CLI.

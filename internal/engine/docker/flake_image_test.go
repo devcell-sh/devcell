@@ -3,9 +3,9 @@ package docker_test
 import (
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/engine/docker"
-	"github.com/DimmKirr/devcell/internal/version"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/engine/docker"
+	"github.com/devcell-sh/devcell/internal/version"
 )
 
 func TestFlakeNixImage_DecoupledFromBinaryVersion(t *testing.T) {

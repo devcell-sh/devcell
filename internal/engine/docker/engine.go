@@ -5,8 +5,8 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/DimmKirr/devcell/internal/config"
-	"github.com/DimmKirr/devcell/internal/engine"
+	"github.com/devcell-sh/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/engine"
 )
 
 // Engine runs a cell as a docker container built from a thin image: a small

@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/nixhome"
+	"github.com/devcell-sh/devcell/internal/nixhome"
 )
 
 // TestParseCatalogJSON_HappyPath: feed JSON in the shape that

@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/cloudmodels"
-	"github.com/DimmKirr/devcell/internal/ollama"
+	"github.com/devcell-sh/devcell/internal/cloudmodels"
+	"github.com/devcell-sh/devcell/internal/ollama"
 )
 
 func TestFetchProviderModels_ParsesPricingAndName(t *testing.T) {

@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/logger"
-	"github.com/DimmKirr/devcell/internal/ptyctl"
+	"github.com/devcell-sh/devcell/internal/logger"
+	"github.com/devcell-sh/devcell/internal/ptyctl"
 )
 
 // PTYExecutor drives Claude Code interactively via a virtual terminal.
@@ -142,7 +142,7 @@ func (e *PTYExecutor) waitForStableResponse(ctx context.Context, before string) 
 		select {
 		case <-ctx.Done():
 			return e.extractResponse(e.term.Screen(), before),
-				fmt.Errorf("timed out waiting for response")
+				fmt.Errorf("timed out waiting for response from %s after %s", e.bin, e.responseTimeout)
 		case <-ticker.C:
 			screen := e.term.Screen()
 			if screen != lastScreen {

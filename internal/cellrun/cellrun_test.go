@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/cellrun"
+	"github.com/devcell-sh/devcell/internal/cellrun"
 )
 
 func TestBegin_WritesJSON(t *testing.T) {

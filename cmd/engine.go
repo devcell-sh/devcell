@@ -7,13 +7,13 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/config"
-	"github.com/DimmKirr/devcell/internal/engine"
-	_ "github.com/DimmKirr/devcell/internal/engine/docker" // registers engine.Docker
-	_ "github.com/DimmKirr/devcell/internal/engine/tart"   // registers engine.Tart
-	_ "github.com/DimmKirr/devcell/internal/engine/winkit" // registers engine.Winkit
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/engine"
+	_ "github.com/devcell-sh/devcell/internal/engine/docker" // registers engine.Docker
+	_ "github.com/devcell-sh/devcell/internal/engine/tart"   // registers engine.Tart
+	_ "github.com/devcell-sh/devcell/internal/engine/winkit" // registers engine.Winkit
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 // resolveEngine picks the engine from --engine, --os and the [cell] engine

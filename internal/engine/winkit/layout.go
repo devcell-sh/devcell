@@ -3,7 +3,7 @@ package winkit
 import (
 	"path/filepath"
 
-	"github.com/DimmKirr/devcell/internal/cell"
+	"github.com/devcell-sh/devcell/internal/cell"
 )
 
 // templateDir returns the directory holding guest g's template for a stack

@@ -3,7 +3,7 @@ package winkit
 import (
 	"strconv"
 
-	"github.com/DimmKirr/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/config"
 )
 
 // AllocatedPorts holds the cell-ID-derived port strings for SSH, VNC, and RDP.

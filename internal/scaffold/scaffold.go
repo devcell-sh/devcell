@@ -10,10 +10,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/nixhome"
-	"github.com/DimmKirr/devcell/internal/ux"
-	"github.com/DimmKirr/devcell/internal/version"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/nixhome"
+	"github.com/devcell-sh/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/version"
 )
 
 //go:embed templates/devcell.toml.tmpl

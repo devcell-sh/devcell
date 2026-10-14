@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/version"
+	"github.com/devcell-sh/devcell/internal/version"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"github.com/swaggo/swag"
 )

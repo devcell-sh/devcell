@@ -22,9 +22,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/scaffold"
-	"github.com/DimmKirr/devcell/internal/testutil"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/scaffold"
+	"github.com/devcell-sh/devcell/internal/testutil"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
@@ -619,7 +619,7 @@ modules = ["`+innerModule+`"]
 // `[cell].nixhome` from TOML and running from a project dir with no local
 // `nixhome/`. Exercises the host-side git clone path in
 // `scaffold.SyncNixhome` end-to-end against the real upstream
-// `https://github.com/DimmKirr/devcell.git` @ `feature/wip`.
+// `https://github.com/devcell-sh/devcell.git` @ `feature/wip`.
 //
 // Pinpoints regressions in:
 //   - `runner.ResolvePureNixhomeRef` tier-3 (github) fallback

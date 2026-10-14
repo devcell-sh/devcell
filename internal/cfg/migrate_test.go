@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/cfg"
 )
 
 func migrate(t *testing.T, src string) cfg.MigrationResult {

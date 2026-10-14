@@ -7,26 +7,25 @@ import (
 // Banner renders the cell-open header — a single-line identity strip used at
 // the top of every `cell <command>` invocation:
 //
-//	cell ▸ DIMM · devcell #304
+//	CELL > devcell-304
 //
-// Color: "cell" + the chevron + "#cellID" use the muted palette so the eye
-// lands on the cell name (brand orange + bold) and project (default fg). Two
-// segments are suppressed when they carry no signal:
-//   - cell name empty (single-pane default `main`)
-//   - cellID "0" or "" (the no-multiplexer fallback; surfacing "#0" is noise).
+// Workspace name is bold + brand orange; the separator and cell ID are muted.
+// Two segments are suppressed when they carry no signal:
+//   - workspace name empty (single-pane default `main`)
+//   - cellID "0" or "" (the no-multiplexer fallback; surfacing "-0" is noise).
 func Banner(cell, project, cellID string) string {
-	chevron := StyleMuted.Render("▸")
-	parts := []string{StyleMuted.Render("cell"), chevron}
+	var parts []string
 	if cell != "" {
 		parts = append(parts,
 			StyleInfo.Bold(true).Render(cell),
-			StyleMuted.Render("·"),
+			StyleMuted.Render(">"),
 		)
 	}
-	parts = append(parts, project)
+	suffix := ""
 	if cellID != "" && cellID != "0" {
-		parts = append(parts, StyleMuted.Render("#"+cellID))
+		suffix = StyleMuted.Render("-"+cellID)
 	}
+	parts = append(parts, project+suffix)
 	return strings.Join(parts, " ")
 }
 

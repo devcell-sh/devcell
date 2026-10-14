@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/DimmKirr/devcell/internal/engine"
+	"github.com/devcell-sh/devcell/internal/engine"
 )
 
 // Keys lived at ~/.devcell/<cell>/qemu/, but .ssh is where anyone looks first.
@@ -23,9 +23,9 @@ import (
 func TestQemuKeyDir_PrefersDotSSH(t *testing.T) {
 	home := t.TempDir()
 
-	dir := keyDir(home, "DIMM")
+	dir := keyDir(home, "CELL")
 
-	if want := filepath.Join(home, ".devcell", "DIMM", ".ssh"); dir != want {
+	if want := filepath.Join(home, ".devcell", "CELL", ".ssh"); dir != want {
 		t.Errorf("new cells must use %s, got %s", want, dir)
 	}
 }
@@ -35,7 +35,7 @@ func TestQemuKeyDir_PrefersDotSSH(t *testing.T) {
 // one nothing can log into.
 func TestQemuKeyDir_KeepsUsingTheLegacyPathWhenAKeyIsAlreadyThere(t *testing.T) {
 	home := t.TempDir()
-	legacy := filepath.Join(home, ".devcell", "DIMM", "qemu")
+	legacy := filepath.Join(home, ".devcell", "CELL", "qemu")
 	if err := os.MkdirAll(legacy, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestQemuKeyDir_KeepsUsingTheLegacyPathWhenAKeyIsAlreadyThere(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	if dir := keyDir(home, "DIMM"); dir != legacy {
+	if dir := keyDir(home, "CELL"); dir != legacy {
 		t.Errorf("an existing key must keep its path, got %s", dir)
 	}
 }

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/ux"
 	"gopkg.in/yaml.v3"
 )
 

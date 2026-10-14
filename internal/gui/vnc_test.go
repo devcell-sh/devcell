@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/gui"
+	"github.com/devcell-sh/devcell/internal/gui"
 )
 
 func TestVNCUrl_Legacy(t *testing.T) {
@@ -16,8 +16,8 @@ func TestVNCUrl_Legacy(t *testing.T) {
 }
 
 func TestVNCUrl_ARDAuth(t *testing.T) {
-	got := gui.VNCUrl("192.168.64.5", "5900", "dmitry", "admin")
-	want := "vnc://dmitry:admin@192.168.64.5:5900"
+	got := gui.VNCUrl("192.168.64.5", "5900", "warden", "admin")
+	want := "vnc://warden:admin@192.168.64.5:5900"
 	if got != want {
 		t.Errorf("want %q, got %q", want, got)
 	}
@@ -46,8 +46,8 @@ func TestRoyalTSXVNCUrl_Legacy(t *testing.T) {
 }
 
 func TestRoyalTSXVNCUrl_ARDAuth(t *testing.T) {
-	got := gui.RoyalTSXVNCUrl("192.168.64.5", "5900", "dmitry", "admin")
-	want := "rtsx://vnc://dmitry:admin@192.168.64.5:5900"
+	got := gui.RoyalTSXVNCUrl("192.168.64.5", "5900", "warden", "admin")
+	want := "rtsx://vnc://warden:admin@192.168.64.5:5900"
 	if got != want {
 		t.Errorf("want %q, got %q", want, got)
 	}

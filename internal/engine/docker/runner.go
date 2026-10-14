@@ -20,9 +20,9 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/DimmKirr/devcell/internal/cell"
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/cell"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/config"
 )
 
 const (
@@ -30,7 +30,7 @@ const (
 	DefaultRegistry = "ghcr.io/devcell-sh/devcell"
 
 	// BootContainerPath is the container-side path where the host boot
-	// directory is bind-mounted. The Go-generated init script lives here.
+	// directory is bind-mounted. Hosts the Go-generated entrypoint script.
 	BootContainerPath = "/tmp/devcell-boot"
 )
 
@@ -192,13 +192,14 @@ type RunSpec struct {
 	Getenv       func(string) string // env lookup; defaults to os.Getenv when nil
 	GitConfig    func(string) string // host `git config` lookup (cell.HostGitConfig); nil skips that tier
 	ThinImage    bool                // when true, mount devcell-nix-store volume for /nix
-	BootDir      string              // CELL-264: host-side boot dir for fsnotify sentinels; empty disables the bind-mount
+	BootDir      string              // host-side boot dir for the Go-generated entrypoint script; empty disables the bind-mount
 	TTY          bool                // allocate a pseudo-TTY (-it); set from isatty check on stdin
 	Detach       bool                // run container in detached mode (-d); set by `cell start`
 	Lifecycle    string              // "persistent" (cell start) or "oneshot" (cell claude); empty defaults to "oneshot"
 	NoSecrets    bool                // skip `op run --` prefix and all secrets injection
-	ProxyEnabled bool                // when true, use internal network and inject proxy env vars
-	Policy       cfg.Policy          // isolation policy; nil defaults to OpenPolicy
+	ProxyEnabled    bool                // when true, use internal network and inject proxy env vars
+	KVMAutoDetected bool                // daemon host has /dev/kvm; set by the boot-checklist probe
+	Policy          cfg.Policy          // isolation policy; nil defaults to OpenPolicy
 }
 
 func (s RunSpec) getenv(key string) string {
@@ -261,7 +262,12 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	}
 
 	// KVM passthrough for QEMU guests (Windows cells).
-	if spec.CellCfg.Cell.ResolvedKVM() && !dp.DenyKVM() {
+	// Explicit kvm=true always wins; auto-detected KVM is used when the user
+	// has not opted out and neither proxy nor solitary policy blocks it.
+	kvmExplicit := spec.CellCfg.Cell.ResolvedKVM()
+	kvmAuto := spec.KVMAutoDetected && !spec.CellCfg.Cell.KVMExplicitlyDisabled() && !spec.ProxyEnabled
+	kvmWanted := kvmExplicit || kvmAuto
+	if kvmWanted && !dp.DenyKVM() {
 		dockerRunFlags = append(dockerRunFlags, "--device=/dev/kvm")
 	}
 
@@ -469,7 +475,7 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	v(c.BaseDir + ":" + c.BaseDir)
 	v(c.BaseDir + ":/" + c.CellName)
 	v(c.WorkspaceHome + ":/home/" + c.HostUser)
-	if !spec.ProxyEnabled && !dp.DenyDockerSock() {
+	if spec.CellCfg.Cell.ResolvedDockerSocket() && !spec.ProxyEnabled && !dp.DenyDockerSock() {
 		v("/var/run/docker.sock:/var/run/docker.sock")
 	}
 	v(c.HostHome + "/.claude/commands:/home/" + c.HostUser + "/.claude/commands")
@@ -485,11 +491,9 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 		v(ThinStoreVolume() + ":/nix")
 	}
 
-	// Boot dir bind-mount: hosts the Go-generated init script AND
-	// in-container progress sentinel files (CELL-264).
+	// Boot dir bind-mount: hosts the Go-generated entrypoint script.
 	if spec.BootDir != "" {
 		v(spec.BootDir + ":" + BootContainerPath)
-		e("DEVCELL_BOOT_DIR", BootContainerPath)
 	}
 
 	// cfg [[volumes]] entries — skip any whose container path duplicates

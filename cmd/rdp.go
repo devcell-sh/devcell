@@ -7,9 +7,9 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/DimmKirr/devcell/internal/config"
-	"github.com/DimmKirr/devcell/internal/gui"
-	"github.com/DimmKirr/devcell/internal/telemetry"
+	"github.com/devcell-sh/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/gui"
+	"github.com/devcell-sh/devcell/internal/telemetry"
 	"github.com/spf13/cobra"
 )
 

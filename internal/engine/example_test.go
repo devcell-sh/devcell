@@ -3,7 +3,7 @@ package engine_test
 import (
 	"fmt"
 
-	"github.com/DimmKirr/devcell/internal/engine"
+	"github.com/devcell-sh/devcell/internal/engine"
 )
 
 // Example demonstrates looking up a registered engine by name.
@@ -13,5 +13,5 @@ func Example() {
 	_, err := engine.For("nonexistent")
 	fmt.Println(err)
 	// Output:
-	// engine "nonexistent" is not available in this build; see https://github.com/DimmKirr/devcell/issues
+	// engine "nonexistent" is not available in this build; see https://github.com/devcell-sh/devcell/issues
 }

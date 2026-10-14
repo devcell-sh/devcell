@@ -1,4 +1,4 @@
-module github.com/DimmKirr/devcell
+module github.com/devcell-sh/devcell
 
 go 1.26.8
 

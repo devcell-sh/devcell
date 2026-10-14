@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/cell"
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/cell"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/config"
 )
 
 func promptFlagsConfig(t *testing.T) config.Config {
@@ -17,8 +17,8 @@ func promptFlagsConfig(t *testing.T) config.Config {
 		CellName:      "devcell-85",
 		BaseDir:       t.TempDir(),
 		WorkspaceName: "main",
-		HostUser: "dmitry",
-		HostHome: "/Users/dmitry",
+		HostUser: "warden",
+		HostHome: "/Users/warden",
 	}
 }
 

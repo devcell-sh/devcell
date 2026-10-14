@@ -16,12 +16,12 @@ import (
 	"github.com/devcell-sh/go-winkit/sftpshare"
 	"github.com/devcell-sh/go-winkit/vm/vmstate"
 
-	"github.com/DimmKirr/devcell/internal/cell"
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/config"
-	"github.com/DimmKirr/devcell/internal/engine"
-	"github.com/DimmKirr/devcell/internal/s6"
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/cell"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/engine"
+	"github.com/devcell-sh/devcell/internal/s6"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 // Seams for tests: booting a VM, the host ports docker already publishes,

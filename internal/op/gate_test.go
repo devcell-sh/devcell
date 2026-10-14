@@ -3,7 +3,7 @@ package op_test
 import (
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/op"
+	"github.com/devcell-sh/devcell/internal/op"
 )
 
 // CELL-42: ShouldResolve is the pure gate that decides whether to invoke

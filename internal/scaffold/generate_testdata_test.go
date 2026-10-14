@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/scaffold"
-	"github.com/DimmKirr/devcell/internal/testutil"
+	"github.com/devcell-sh/devcell/internal/scaffold"
+	"github.com/devcell-sh/devcell/internal/testutil"
 )
 
 // TestGenerateTestdata writes generated flake.nix and Dockerfile variants to
@@ -65,7 +65,7 @@ func TestGenerateTestdata(t *testing.T) {
 			stack:       "go",
 			modules:     []string{"electronics"},
 			version:     "v1.0.0",
-			nixhome:     "/Users/dmitry/dev/dimmkirr/devcell/nixhome",
+			nixhome:     "/Users/warden/dev/dimmkirr/devcell/nixhome",
 			withNixhome: true,
 		},
 		{

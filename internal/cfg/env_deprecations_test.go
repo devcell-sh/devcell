@@ -3,7 +3,7 @@ package cfg_test
 import (
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/cfg"
 )
 
 func TestApplyEnv_PerCellImage_CanonicalName(t *testing.T) {

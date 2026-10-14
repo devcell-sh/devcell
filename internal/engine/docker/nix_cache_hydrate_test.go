@@ -3,7 +3,7 @@ package docker_test
 import (
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/engine/docker"
+	"github.com/devcell-sh/devcell/internal/engine/docker"
 )
 
 func TestNixCacheImageRef_Arm64(t *testing.T) {

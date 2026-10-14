@@ -28,13 +28,13 @@ const (
 // activating session services. Every s6 service script reads these via
 // `s6-envdir /etc/s6/env`.
 type SessionEnv struct {
-	HostUser    string // host $USER, e.g. "dmitry"
-	SessionHome string // session user's home, e.g. "/Users/dmitry" or "/home/dmitry"
+	HostUser    string // host $USER, e.g. "warden"
+	SessionHome string // session user's home, e.g. "/Users/warden" or "/home/warden"
 	DevcellHome string // nix profile owner's home, e.g. "/Users/devcell" or "/opt/devcell"
 }
 
 // DarwinSessionEnv builds a SessionEnv for macOS (Tart engine).
-// cellUser is the session user (e.g. "dmitry"), vmUser owns the nix
+// cellUser is the session user (e.g. "warden"), vmUser owns the nix
 // profile (e.g. "devcell").
 func DarwinSessionEnv(cellUser, vmUser string) SessionEnv {
 	return SessionEnv{
@@ -138,14 +138,6 @@ export PATH="$SESSION_HOME/go/bin:$SESSION_HOME/.local/state/nix/profiles/profil
 
 _notify() {
   local _name="$1" _msg="${2:-}"
-  # Sentinel files (backward compat with BootDirWatcher)
-  if [ -n "$DEVCELL_BOOT_DIR" ] && [ -d "$DEVCELL_BOOT_DIR" ]; then
-    if [ -n "$_msg" ]; then
-      echo "$_msg" > "$DEVCELL_BOOT_DIR/$_name" 2>/dev/null || true
-    else
-      touch "$DEVCELL_BOOT_DIR/$_name" 2>/dev/null || true
-    fi
-  fi
   # JSONL system event to docker logs (suppressed when PID 1 stdout is a TTY)
   case "$(readlink /proc/1/fd/1 2>/dev/null)" in
     /dev/pts/*) return 0 ;;
@@ -166,7 +158,6 @@ mkdir -p "$S6_ENV"
 echo "$HOST_USER" > "$S6_ENV/HOST_USER"
 echo "$SESSION_HOME" > "$S6_ENV/SESSION_HOME"
 echo "$DEVCELL_HOME" > "$S6_ENV/DEVCELL_HOME"
-echo "$DEVCELL_BOOT_DIR" > "$S6_ENV/DEVCELL_BOOT_DIR"
 
 # 2. Create session user (gosu prerequisite)
 if ! id "$HOST_USER" >/dev/null 2>&1; then
@@ -258,7 +249,6 @@ if command -v s6-rc >/dev/null 2>&1 && [ -d "$S6_COMPILED" ]; then
   echo "$HOST_USER" | sudo tee "$S6_ENV/HOST_USER" > /dev/null
   echo "$SESSION_HOME" | sudo tee "$S6_ENV/SESSION_HOME" > /dev/null
   echo "$DEVCELL_HOME" | sudo tee "$S6_ENV/DEVCELL_HOME" > /dev/null
-  echo "${DEVCELL_BOOT_DIR:-}" | sudo tee "$S6_ENV/DEVCELL_BOOT_DIR" > /dev/null
   echo "s6: activating session services for $HOST_USER"
 
   sudo mkdir -p "$S6_SCAN"

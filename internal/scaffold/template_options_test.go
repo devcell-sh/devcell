@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/scaffold"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/scaffold"
 )
 
 // schemaKeys lists every user-facing TOML key path in cfg.CellConfig, skipping

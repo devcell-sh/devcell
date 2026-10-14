@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/DimmKirr/devcell/internal/cell"
+	"github.com/devcell-sh/devcell/internal/cell"
 )
 
 func TestTemplateDir(t *testing.T) {

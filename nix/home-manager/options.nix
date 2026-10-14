@@ -46,6 +46,7 @@ in
     libvirt_path_map = opt (types.attrsOf types.str);
     qemu_project_sync = opt types.str;
     default_command = opt types.str;
+    docker_socket = opt types.bool;
     flake = opt types.bool;
     packages = opt (types.listOf types.str);
     volumes = opt (types.listOf types.str);

@@ -18,7 +18,7 @@ import (
 	"github.com/devcell-sh/go-winkit/gosshd"
 	"github.com/devcell-sh/go-winkit/unattend"
 
-	"github.com/DimmKirr/devcell/internal/engine"
+	"github.com/devcell-sh/devcell/internal/engine"
 )
 
 func init() {

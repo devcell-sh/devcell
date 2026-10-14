@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/cell"
+	"github.com/devcell-sh/devcell/internal/cell"
 )
 
 func TestShellQuote(t *testing.T) {

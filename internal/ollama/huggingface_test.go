@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/ollama"
+	"github.com/devcell-sh/devcell/internal/ollama"
 )
 
 func TestFetchHFModelInfo_ReturnsTaskType(t *testing.T) {

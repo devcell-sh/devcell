@@ -12,9 +12,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/config"
-	"github.com/DimmKirr/devcell/internal/telemetry"
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/telemetry"
+	"github.com/devcell-sh/devcell/internal/ux"
 	"github.com/spf13/cobra"
 )
 
@@ -271,7 +271,7 @@ func openExtractAndClose(profile, storageStatePath string, urls []string, noSync
 				// blocks login completion.
 				kickHostUser := os.Getenv("USER")
 				if kickHostUser == "" {
-					kickHostUser = "dmitry" // sensible default; only used for /home/<user> mount-source lookup
+					kickHostUser = "warden" // sensible default; only used for /home/<user> mount-source lookup
 				}
 				cellHome := filepath.Dir(filepath.Dir(storageStatePath))
 				kicked := kickMcpInCellsSharingCellHome(kickDeps{

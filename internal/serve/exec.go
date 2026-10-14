@@ -7,7 +7,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/logger"
+	"github.com/devcell-sh/devcell/internal/logger"
 )
 
 // ShellExecutor runs agent binaries as subprocesses.

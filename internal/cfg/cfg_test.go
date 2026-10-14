@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/cfg"
 )
 
 func writeTOML(t *testing.T, dir, name, content string) string {
@@ -98,7 +98,7 @@ func TestVolumeMount_Resolved(t *testing.T) {
 	}{
 		{"/host/path:/container/path", "/host/path:/container/path"},
 		{"/host:/container:ro", "/host:/container:ro"},
-		{"/Users/dmitry/dev/evercars/evercars-backend", "/Users/dmitry/dev/evercars/evercars-backend:/Users/dmitry/dev/evercars/evercars-backend"},
+		{"/Users/warden/dev/evercars/evercars-backend", "/Users/warden/dev/evercars/evercars-backend:/Users/warden/dev/evercars/evercars-backend"},
 		{"", ""},
 	}
 	for _, tc := range cases {
@@ -136,10 +136,10 @@ func TestMerge_VolumesDedupByContainerPath(t *testing.T) {
 
 func TestMerge_VolumesDedupShorthand(t *testing.T) {
 	global := cfg.CellConfig{Volumes: []cfg.VolumeMount{
-		{Mount: "/Users/dmitry/dev/skills"},
+		{Mount: "/Users/warden/dev/skills"},
 	}}
 	project := cfg.CellConfig{Volumes: []cfg.VolumeMount{
-		{Mount: "/Users/dmitry/dev/skills"},
+		{Mount: "/Users/warden/dev/skills"},
 	}}
 	merged := cfg.Merge(global, project)
 	if len(merged.Volumes) != 1 {
@@ -153,8 +153,8 @@ func TestVolumeMount_ContainerPath(t *testing.T) {
 	}{
 		{"/host:/container", "/container"},
 		{"/host:/container:ro", "/container"},
-		{"/Users/dmitry/dev/skills", "/Users/dmitry/dev/skills"},
-		{"/Users/dmitry/dev/skills/", "/Users/dmitry/dev/skills"},
+		{"/Users/warden/dev/skills", "/Users/warden/dev/skills"},
+		{"/Users/warden/dev/skills/", "/Users/warden/dev/skills"},
 		{"/host/:/container/", "/container"},
 		{"", ""},
 	}
@@ -171,7 +171,7 @@ func TestLoadFile_CellVolumes(t *testing.T) {
 	p := writeTOML(t, dir, "test.toml", `
 [cell]
 volumes = [
-  "/Users/dmitry/Library/CloudStorage/Box-Box",
+  "/Users/warden/Library/CloudStorage/Box-Box",
   "/host/path:/container/path:ro",
   "/same:/same",
 ]
@@ -183,7 +183,7 @@ volumes = [
 	if len(c.Volumes) != 3 {
 		t.Fatalf("want 3 volumes, got %d: %+v", len(c.Volumes), c.Volumes)
 	}
-	if c.Volumes[0].Mount != "/Users/dmitry/Library/CloudStorage/Box-Box" {
+	if c.Volumes[0].Mount != "/Users/warden/Library/CloudStorage/Box-Box" {
 		t.Errorf("vol[0] = %q", c.Volumes[0].Mount)
 	}
 	if c.Volumes[1].Mount != "/host/path:/container/path:ro" {
@@ -2457,7 +2457,7 @@ func TestLoadLayered_ProjectParseError_ReturnsError(t *testing.T) {
 stack = "ultimate"
 
 [[volumes]]
-mount = "/Users/dmitry/Library/Mobile\ Documents/com\~apple\~CloudDocs/foo:/bar"
+mount = "/Users/warden/Library/Mobile\ Documents/com\~apple\~CloudDocs/foo:/bar"
 `)
 	_, err := cfg.LoadLayered(globalPath, func(string) string { return "" }, projectPath)
 	if err == nil {

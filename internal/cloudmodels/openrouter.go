@@ -1,3 +1,4 @@
+// Package cloudmodels fetches and ranks cloud AI models from OpenRouter and other providers.
 package cloudmodels
 
 import (
@@ -11,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/cache"
-	"github.com/DimmKirr/devcell/internal/ollama"
+	"github.com/devcell-sh/devcell/internal/cache"
+	"github.com/devcell-sh/devcell/internal/ollama"
 )
 
 // OpenRouterURL is the public OpenRouter models endpoint (no auth required).

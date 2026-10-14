@@ -4,8 +4,8 @@ import (
 	"context"
 	"os"
 
-	"github.com/DimmKirr/devcell/internal/config"
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 // logDiagnostics logs, under --debug, which docker daemon the client talks

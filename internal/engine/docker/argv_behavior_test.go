@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/config"
-	"github.com/DimmKirr/devcell/internal/engine/docker"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/engine/docker"
 )
 
 func buildBehaviourArgv(cwd string, envPairs []string, binary string, defaultFlags, userArgs []string, cellCfg cfg.CellConfig) []string {

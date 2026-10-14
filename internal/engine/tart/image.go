@@ -1,6 +1,6 @@
 package tart
 
-import "github.com/DimmKirr/devcell/internal/cell"
+import "github.com/devcell-sh/devcell/internal/cell"
 
 // BaseTemplateName is the tart VM name for a stack-agnostic base template
 // (nix installed, store on external disk, but no nix-darwin activation).

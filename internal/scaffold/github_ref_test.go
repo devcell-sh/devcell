@@ -3,7 +3,7 @@ package scaffold_test
 import (
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/scaffold"
+	"github.com/devcell-sh/devcell/internal/scaffold"
 )
 
 // ParseGithubFlakeRef extracts (owner, repo, gitref, subdir) from refs like:

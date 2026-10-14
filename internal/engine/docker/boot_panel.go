@@ -3,7 +3,7 @@ package docker
 import (
 	streak "github.com/dimmkirr/go-streak-chart"
 
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 // bootGroups returns the 4-group panel layout. Each group is a row; each
@@ -46,6 +46,9 @@ func bootGroups(binary string, opts groupOpts) []ux.PanelGroup {
 	}
 	if opts.hasWireGuard {
 		configure.Steps = append(configure.Steps, "WireGuard")
+	}
+	if opts.hasKVMProbe {
+		configure.Steps = append(configure.Steps, "KVM")
 	}
 
 	// Group 3: Boot — container startup and s6 service activation.
@@ -109,6 +112,7 @@ type groupOpts struct {
 	hasSecrets     bool
 	hasAPIKeys     bool
 	hasWireGuard   bool
+	hasKVMProbe    bool
 	hasProxy       bool
 	hasPostgres    bool
 	hasNixPackages bool
@@ -116,11 +120,53 @@ type groupOpts struct {
 	hasGUI         bool
 }
 
+// titles maps "<component>.<state>" to a human title for boot panel rows.
+var titles = map[string]string{
+	"container.ready":   "Container started",
+	"entrypoint.ready":  "Entrypoint ready",
+	"s6.starting":       "Activating session services",
+	"s6.ready":          "Session services ready",
+	"nix.starting":      "Configuring nix",
+	"nix.ready":         "Nix ready",
+	"shell.starting":    "Configuring shell",
+	"shell.ready":       "Shell ready",
+	"nix-lib.starting":  "Wiring nix library paths",
+	"nix-lib.ready":     "Nix library paths ready",
+	"mise.starting":     "Loading mise tools",
+	"mise.ready":        "Mise ready",
+	"home.starting":     "Setting up home directory",
+	"home.ready":        "Home directory ready",
+	"secrets.starting":  "Injecting secrets",
+	"secrets.ready":     "Secrets ready",
+	"chromium.starting": "Releasing chromium locks",
+	"chromium.ready":    "Chromium ready",
+	"claude.starting":   "Initializing Claude",
+	"claude.ready":      "Claude ready",
+	"codex.starting":    "Initializing Codex",
+	"codex.ready":       "Codex ready",
+	"gemini.starting":   "Initializing Gemini",
+	"gemini.ready":      "Gemini ready",
+	"opencode.starting": "Initializing OpenCode",
+	"opencode.ready":    "OpenCode ready",
+	"postgres.starting": "Starting PostgreSQL",
+	"postgres.ready":    "PostgreSQL ready",
+	"gui.starting":            "Starting GUI",
+	"gui.ready":               "GUI ready",
+	"xvfb.ready":              "Display server ready",
+	"window-manager.ready":    "Window manager ready",
+	"xrdp.ready":              "Remote desktop ready",
+	"pulseaudio.ready":        "Audio server ready",
+	"dbus-session.ready":      "D-Bus session ready",
+	"boot.ready":              "",
+}
+
+func titleFor(component, state string) string {
+	return titles[component+"."+state]
+}
+
 // bootComponentStep maps a boot-event component name to its (group, step)
-// in the panel. The group label is the row; the step name is the column.
-// Entries cover both sentinel-file short names (entrypoint, s6, shell, ...)
-// and full s6 service names (shell-rc, nix-daemon, homedir, ...) so the
-// same map works for both BootDirWatcher and ContainerLogWatcher events.
+// in the panel. Entries cover both short names (entrypoint, s6, shell, ...)
+// and full s6 service names (shell-rc, nix-daemon, homedir, ...).
 var bootComponentStep = map[string]struct{ Group, Step string }{
 	"proxy":      {"Prepare", "Proxy"},
 	"container":  {"Boot", "Container"},
@@ -152,50 +198,6 @@ var bootComponentStep = map[string]struct{ Group, Step string }{
 	"gemini-config":   {"Environment", "Agent config"},
 	"opencode-config": {"Environment", "Agent config"},
 	"gui-config":      {"Environment", "GUI"},
-}
-
-// ConsumeBootEventsPanel reads BootDirWatcher events and updates the
-// streak-chart panel. Returns true when boot.ready arrived (clean
-// finish), false when the channel closed without it (crash/interrupt).
-func ConsumeBootEventsPanel(events <-chan BootEvent, panel *ux.BootPanel) bool {
-	for ev := range events {
-		if ev.Component == "boot" && ev.State == "ready" {
-			panel.PromoteRunning()
-			panel.Finish("Cell ready")
-			return true
-		}
-
-		if ev.State == "warn" {
-			msg := ev.Detail
-			if msg == "" {
-				msg = ev.Title
-			}
-			if msg == "" {
-				msg = ev.Component + " warned"
-			}
-			panel.WarnBoot(msg)
-			continue
-		}
-
-		loc, known := bootComponentStep[ev.Component]
-		if !known {
-			continue
-		}
-
-		title := ev.Title
-		if title == "" {
-			title = ev.Component + " " + ev.State
-		}
-
-		switch ev.State {
-		case "starting":
-			panel.SetBoot(loc.Group, loc.Step, streak.Running, title)
-		case "ready":
-			panel.SetBoot(loc.Group, loc.Step, streak.Done, title)
-		}
-	}
-	panel.FinishError("boot interrupted")
-	return false
 }
 
 // ConsumeContainerEventsPanel reads JSONL events from a ContainerLogWatcher

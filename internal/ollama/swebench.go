@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/cache"
+	"github.com/devcell-sh/devcell/internal/cache"
 )
 
 // SWEBenchURL is the default URL for SWE-bench leaderboard data.

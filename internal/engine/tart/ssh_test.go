@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/engine/tart"
+	"github.com/devcell-sh/devcell/internal/engine/tart"
 )
 
 // --- BuildExecCommand tests ---
@@ -50,7 +50,7 @@ func TestBuildExecCommand_DarwinHMProfileOnPath(t *testing.T) {
 	// (devcell), but the session runs as the host's $USER — the exec command
 	// must bridge that user's profile bin dir onto PATH or `claude` is not
 	// found (CELL: --os macos dropped into "command not found").
-	cmd := tart.BuildExecCommand(tart.ExecSpec{Binary: "claude", RunAsUser: "dmitry"})
+	cmd := tart.BuildExecCommand(tart.ExecSpec{Binary: "claude", RunAsUser: "warden"})
 	if !strings.Contains(cmd, "/etc/profiles/per-user/devcell/bin") {
 		t.Errorf("expected devcell per-user profile bin on PATH, got: %q", cmd)
 	}
@@ -60,7 +60,7 @@ func TestBuildExecCommand_DarwinHMProfileOnPath(t *testing.T) {
 }
 
 func TestBuildExecCommand_SessionUserPathsOnPath(t *testing.T) {
-	cmd := tart.BuildExecCommand(tart.ExecSpec{Binary: "claude", RunAsUser: "dmitry"})
+	cmd := tart.BuildExecCommand(tart.ExecSpec{Binary: "claude", RunAsUser: "warden"})
 	for _, required := range []string{
 		"$HOME/go/bin",
 		"$HOME/.local/state/nix/profiles/profile/bin",
@@ -76,7 +76,7 @@ func TestBuildExecCommand_SessionUserPathsOnPath(t *testing.T) {
 func TestBuildExecCommand_ProjectDirCd(t *testing.T) {
 	cmd := tart.BuildExecCommand(tart.ExecSpec{
 		Binary:     "claude",
-		ProjectDir: "/Users/dmitry/dev/myproject",
+		ProjectDir: "/Users/warden/dev/myproject",
 	})
 	if !strings.Contains(cmd, "cd ~/myproject") {
 		t.Errorf("expected 'cd ~/myproject' in exec command, got: %q", cmd)
@@ -88,10 +88,10 @@ func TestBuildExecCommand_WorkDirOverridesProjectDir(t *testing.T) {
 	// the VM); when set it must win over the ~/basename fallback.
 	cmd := tart.BuildExecCommand(tart.ExecSpec{
 		Binary:     "claude",
-		ProjectDir: "/Users/dmitry/dev/devcell-sh/devcell",
-		WorkDir:    "/Users/dmitry/dev/devcell-sh/devcell",
+		ProjectDir: "/Users/warden/dev/devcell-sh/devcell",
+		WorkDir:    "/Users/warden/dev/devcell-sh/devcell",
 	})
-	if !strings.Contains(cmd, "cd /Users/dmitry/dev/devcell-sh/devcell") {
+	if !strings.Contains(cmd, "cd /Users/warden/dev/devcell-sh/devcell") {
 		t.Errorf("expected cd to mirrored WorkDir, got: %q", cmd)
 	}
 	if strings.Contains(cmd, "cd ~/devcell") {
@@ -115,10 +115,10 @@ func TestBuildExecCommand_EnvVars(t *testing.T) {
 func TestBuildExecCommand_RunAsUser(t *testing.T) {
 	cmd := tart.BuildExecCommand(tart.ExecSpec{
 		Binary:    "claude",
-		RunAsUser: "dmitry",
+		RunAsUser: "warden",
 	})
-	if !strings.Contains(cmd, "sudo -u dmitry -i") {
-		t.Errorf("expected 'sudo -u dmitry -i' in exec command, got: %q", cmd)
+	if !strings.Contains(cmd, "sudo -u warden -i") {
+		t.Errorf("expected 'sudo -u warden -i' in exec command, got: %q", cmd)
 	}
 	if !strings.Contains(cmd, "bash -l -c") {
 		t.Errorf("expected 'bash -l -c' wrapper for su, got: %q", cmd)
@@ -135,10 +135,10 @@ func TestBuildExecCommand_NoRunAsUser(t *testing.T) {
 func TestBuildExecCommand_RunAsUserWithProjectDir(t *testing.T) {
 	cmd := tart.BuildExecCommand(tart.ExecSpec{
 		Binary:     "claude",
-		ProjectDir: "/Users/dmitry/dev/devcell",
-		RunAsUser:  "dmitry",
+		ProjectDir: "/Users/warden/dev/devcell",
+		RunAsUser:  "warden",
 	})
-	if !strings.Contains(cmd, "sudo -u dmitry -i") {
+	if !strings.Contains(cmd, "sudo -u warden -i") {
 		t.Errorf("expected sudo wrapper, got: %q", cmd)
 	}
 	if !strings.Contains(cmd, "cd ~/devcell") {
@@ -147,9 +147,9 @@ func TestBuildExecCommand_RunAsUserWithProjectDir(t *testing.T) {
 }
 
 func TestCreateSessionUserScript(t *testing.T) {
-	script := tart.GenerateCreateSessionUserScript("dmitry")
+	script := tart.GenerateCreateSessionUserScript("warden")
 	for _, want := range []string{
-		`USERNAME="dmitry"`,
+		`USERNAME="warden"`,
 		"dscl . -create",
 		"UserShell /bin/zsh",
 		"NFSHomeDirectory",
@@ -165,14 +165,14 @@ func TestCreateSessionUserScript(t *testing.T) {
 }
 
 func TestCreateSessionUserScript_Idempotent(t *testing.T) {
-	script := tart.GenerateCreateSessionUserScript("dmitry")
+	script := tart.GenerateCreateSessionUserScript("warden")
 	if !strings.Contains(script, "already exists") {
 		t.Errorf("expected idempotent check in create user script, got:\n%s", script)
 	}
 }
 
 func TestSetupSessionHomeScript(t *testing.T) {
-	script := tart.GenerateSetupSessionHomeScript("dmitry")
+	script := tart.GenerateSetupSessionHomeScript("warden")
 	for _, want := range []string{
 		"My Shared Files/home",
 		"/Users/$USERNAME",

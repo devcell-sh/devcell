@@ -18,8 +18,8 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/config"
 )
 
 //go:embed container_context.tmpl.md

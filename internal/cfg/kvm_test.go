@@ -4,15 +4,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/cfg"
 )
 
 // --- KVM field ---
 //
-// `[cell] kvm = true` opts the container into /dev/kvm passthrough. It cannot
-// be auto-detected: the device lives on the *docker daemon* host (the Colima
-// VM), which the CLI cannot stat from macOS. Hence explicit opt-in, with
-// DEVCELL_KVM as the escape hatch for hosts without nested virtualization.
+// `[cell] kvm = true` forces /dev/kvm passthrough; `kvm = false` forces it
+// off. When unset, the docker engine auto-detects by probing the daemon host.
 
 func TestLoadFile_KVMTrue(t *testing.T) {
 	dir := t.TempDir()
@@ -56,6 +54,37 @@ func TestLoadFile_KVMDefaultsFalse(t *testing.T) {
 	}
 	if c.Cell.ResolvedKVM() {
 		t.Error("expected ResolvedKVM()=false when kvm not set (opt-in)")
+	}
+}
+
+// --- KVMExplicitlyDisabled ---
+
+func TestKVMExplicitlyDisabled_UnsetIsFalse(t *testing.T) {
+	c := cfg.CellSection{}
+	if c.KVMExplicitlyDisabled() {
+		t.Error("unset KVM must not count as explicitly disabled")
+	}
+}
+
+func TestKVMExplicitlyDisabled_TrueIsFalse(t *testing.T) {
+	c := cfg.CellSection{KVM: boolPtr(true)}
+	if c.KVMExplicitlyDisabled() {
+		t.Error("kvm=true must not count as explicitly disabled")
+	}
+}
+
+func TestKVMExplicitlyDisabled_FalseIsTrue(t *testing.T) {
+	c := cfg.CellSection{KVM: boolPtr(false)}
+	if !c.KVMExplicitlyDisabled() {
+		t.Error("kvm=false must count as explicitly disabled")
+	}
+}
+
+func TestKVMExplicitlyDisabled_EnvZero(t *testing.T) {
+	t.Setenv("DEVCELL_KVM", "0")
+	c := cfg.CellSection{KVM: boolPtr(true)}
+	if !c.KVMExplicitlyDisabled() {
+		t.Error("DEVCELL_KVM=0 must count as explicitly disabled even when toml=true")
 	}
 }
 

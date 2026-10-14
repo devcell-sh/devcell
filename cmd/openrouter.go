@@ -3,7 +3,7 @@ package main
 import (
 	"strings"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/cfg"
 )
 
 // llmDefaultBaseURLs are the API roots of the built-in providers, as seen

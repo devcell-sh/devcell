@@ -11,7 +11,7 @@ import (
 	"github.com/devcell-sh/go-winkit/media"
 	"github.com/devcell-sh/go-winkit/media/uupdump"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/cfg"
 )
 
 // WindowsISODownloadURL is the Microsoft page for downloading Windows 11 ARM64 ISO.

@@ -31,10 +31,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/engine/tart"
-	"github.com/DimmKirr/devcell/internal/nixhome"
-	"github.com/DimmKirr/devcell/internal/testutil"
-	"github.com/DimmKirr/devcell/internal/version"
+	"github.com/devcell-sh/devcell/internal/engine/tart"
+	"github.com/devcell-sh/devcell/internal/nixhome"
+	"github.com/devcell-sh/devcell/internal/testutil"
+	"github.com/devcell-sh/devcell/internal/version"
 )
 
 func TestTartDarwinIntegration(t *testing.T) {

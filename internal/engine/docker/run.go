@@ -16,16 +16,16 @@ import (
 	streak "github.com/dimmkirr/go-streak-chart"
 	"github.com/mattn/go-isatty"
 
-	"github.com/DimmKirr/devcell/internal/backup"
-	"github.com/DimmKirr/devcell/internal/cell"
-	"github.com/DimmKirr/devcell/internal/cellrun"
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/config"
-	"github.com/DimmKirr/devcell/internal/engine"
-	"github.com/DimmKirr/devcell/internal/op"
-	"github.com/DimmKirr/devcell/internal/s6"
-	"github.com/DimmKirr/devcell/internal/telemetry"
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/backup"
+	"github.com/devcell-sh/devcell/internal/cell"
+	"github.com/devcell-sh/devcell/internal/cellrun"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/engine"
+	"github.com/devcell-sh/devcell/internal/op"
+	"github.com/devcell-sh/devcell/internal/s6"
+	"github.com/devcell-sh/devcell/internal/telemetry"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 // Run acquires the thin image (building it when it is missing, the nix-store
@@ -185,9 +185,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		fmt.Println("   " + ux.KV(keyW, "Locale", locale))
 		fmt.Println("   " + ux.KV(keyW, "Timezone", tz))
 		fmt.Println("   " + ux.KV(keyW, "Ports", "VNC localhost:"+c.VNCPort+ux.StyleMuted.Render(" · ")+"RDP localhost:"+c.RDPPort))
-		// Boot dir — where the BootDirWatcher polls for in-container sentinels.
-		// Useful in --debug: `ls $bootdir/` after a boot shows the chain of
-		// fragments that fired (post-mortem). CELL-264.
+		// Boot dir — hosts the Go-generated entrypoint script.
 		fmt.Println("   " + ux.KV(keyW, "Boot", filepath.Join(c.WorkspaceHome, "boot")))
 		fmt.Println()
 	}
@@ -195,13 +193,19 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	// Build the 4-group streak-chart boot panel.
 	hasSecretsResolve := op.ShouldResolve(opts.NoSecrets, os.Getenv("DEVCELL_NO_SECRETS"), cellCfg.Op.ResolvedDocuments())
 	_, hasORKeyPlaceholder := extraEnv["OPENROUTER_API_KEY"]
+	proxyEnabled := cfg.NetworkProxyEnabled(cellCfg) && !forceInsecure
+	kvmNeedsProbe := !cellCfg.Cell.ResolvedKVM() && !cellCfg.Cell.KVMExplicitlyDisabled() && !proxyEnabled
+	if kvmNeedsProbe && opts.Solitary {
+		kvmNeedsProbe = false
+	}
 	gopts := groupOpts{
 		hasPackages:    ImageLabel(ctx, imageTag(), "devcell.packages") != "",
 		hasGitLookup:   cell.ResolveGitIdentity(os.Getenv, cellCfg.Git, nil).Source == cell.GitSourceDefault,
 		hasSecrets:     hasSecretsResolve,
 		hasAPIKeys:     hasORKeyPlaceholder && extraEnv["OPENROUTER_API_KEY"] == "",
 		hasWireGuard:   cfg.WireguardEnabled(cellCfg),
-		hasProxy:       cfg.NetworkProxyEnabled(cellCfg) && !forceInsecure,
+		hasKVMProbe:    kvmNeedsProbe,
+		hasProxy:       proxyEnabled,
 		hasGUI:         cellCfg.GUI.ResolvedEnabled(),
 		hasMCP:         binary == "claude" || binary == "codex" || binary == "opencode",
 		hasNixPackages: opts.UseFlake || cellCfg.Cell.FlakeEnabled(),
@@ -214,7 +218,6 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 
 	_ = panel.Phase("Network", func() error { return EnsureNetwork(ctx) })
 
-	proxyEnabled := cfg.NetworkProxyEnabled(cellCfg) && !forceInsecure
 	if proxyEnabled {
 		phaseName := "Proxy"
 		if opts.Solitary {
@@ -467,6 +470,28 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		}
 	}
 
+	// KVM auto-detect: when the user hasn't explicitly set kvm, probe the
+	// daemon host. Skipped when the policy or proxy would block the device
+	// anyway, and when the user opted out explicitly.
+	kvmAutoDetected := false
+	if cellCfg.Cell.ResolvedKVM() {
+		ux.Debugf("kvm: explicit enable (toml or DEVCELL_KVM=1), skipping probe")
+	} else if cellCfg.Cell.KVMExplicitlyDisabled() {
+		ux.Debugf("kvm: explicitly disabled (toml kvm=false or DEVCELL_KVM=0), skipping probe")
+	} else if proxyEnabled {
+		ux.Debugf("kvm: proxy enabled, skipping probe (incompatible)")
+	} else if opts.Solitary {
+		ux.Debugf("kvm: solitary mode, skipping probe (policy denies)")
+	} else {
+		_ = panel.PhaseDetailedWarn("KVM", func() (string, bool, error) {
+			kvmAutoDetected = ProbeKVM(ctx)
+			if kvmAutoDetected {
+				return "available", false, nil
+			}
+			return "unavailable", false, nil
+		})
+	}
+
 	// Boot dir: hosts the Go-generated entrypoint script and (for backward
 	// compat) sentinel files from the entrypoint's _notify. Boot progress
 	// is now consumed from docker logs (JSONL events from devcell-event and
@@ -503,6 +528,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	spec.GitConfig = gitConfig
 	spec.InheritEnv = inheritEnv
 	spec.BootDir = bootDir
+	spec.KVMAutoDetected = kvmAutoDetected
 	spec.TTY = isatty.IsTerminal(os.Stdin.Fd())
 
 	if dryRun {
@@ -601,10 +627,11 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		case <-time.After(90 * time.Second):
 			logWatcher.Close()
 			panel.FinishError("boot timed out")
+			err := bootTimeoutError(c.ContainerName, 90*time.Second)
 			if sess != nil {
-				_ = sess.Finish(c.BaseDir, fmt.Errorf("boot timed out"))
+				_ = sess.Finish(c.BaseDir, err)
 			}
-			return fmt.Errorf("boot timed out after 90s")
+			return err
 		}
 	} else {
 		panel.SetBoot("Boot", "Container", streak.Done, "Container running")
@@ -837,6 +864,14 @@ func resolveTrustFlake(baseDir, cellHome string) bool {
 	}
 
 	return trusted
+}
+
+func bootTimeoutError(containerName string, timeout time.Duration) error {
+	return fmt.Errorf(
+		"boot timed out after %s: container %s did not become ready\n"+
+			"  troubleshoot with: docker logs %s",
+		timeout, containerName, containerName,
+	)
 }
 
 // configDrifted compares the running container's config hash label against

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/ptyctl"
+	"github.com/devcell-sh/devcell/internal/ptyctl"
 )
 
 // TestClaudeLogin_PTYControl spawns `claude` under a virtual terminal with a

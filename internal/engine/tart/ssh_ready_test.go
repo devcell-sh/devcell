@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/engine/tart"
+	"github.com/devcell-sh/devcell/internal/engine/tart"
 )
 
 func TestWaitForSSHObserved_FailsFastOnVMError(t *testing.T) {

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/config"
-	"github.com/DimmKirr/devcell/internal/telemetry"
+	"github.com/devcell-sh/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/telemetry"
 )
 
 func TestTelemetryOn_CreatesConfig(t *testing.T) {

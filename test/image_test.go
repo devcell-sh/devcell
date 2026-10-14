@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/scaffold"
-	"github.com/DimmKirr/devcell/internal/testutil"
+	"github.com/devcell-sh/devcell/internal/scaffold"
+	"github.com/devcell-sh/devcell/internal/testutil"
 	"github.com/creack/pty"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -237,7 +237,7 @@ func TestCell_Shell(t *testing.T) {
 	}
 
 	// Regenerate Swagger docs/ package. cmd/serve.go imports
-	// github.com/DimmKirr/devcell/docs (swag-generated, .gitignored), so go
+	// github.com/devcell-sh/devcell/docs (swag-generated, .gitignored), so go
 	// build fails on a fresh checkout. task cell:build wires this via
 	// deps: [swagger:generate]; this test bypasses Task and must self-bootstrap.
 	gen := osexec.Command("go", "run", "github.com/swaggo/swag/cmd/swag@latest",

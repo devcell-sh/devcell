@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/ollama"
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/ollama"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 func TestRenderModels_JSONOutputIsValidJSON(t *testing.T) {

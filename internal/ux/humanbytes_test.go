@@ -3,7 +3,7 @@ package ux_test
 import (
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 // HumanBytes is the format helper used by the pure-build spinner success line

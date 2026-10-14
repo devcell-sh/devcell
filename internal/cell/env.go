@@ -12,7 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/cfg"
 )
 
 // Defaults for any git identity field no precedence tier supplies.

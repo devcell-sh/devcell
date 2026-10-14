@@ -7,8 +7,8 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/DimmKirr/devcell/internal/engine/docker"
-	"github.com/DimmKirr/devcell/internal/telemetry"
+	"github.com/devcell-sh/devcell/internal/engine/docker"
+	"github.com/devcell-sh/devcell/internal/telemetry"
 	"github.com/spf13/cobra"
 )
 

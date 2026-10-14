@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 
-	"github.com/DimmKirr/devcell/internal/logger"
+	"github.com/devcell-sh/devcell/internal/logger"
 )
 
 // streamClaude spawns claude in --output-format=stream-json mode and

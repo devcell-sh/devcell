@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/config"
 )
 
 // promptFileConfig mirrors sampleConfig() but points BaseDir at a temp dir so
@@ -19,8 +19,8 @@ func promptFileConfig(t *testing.T, cellName string) config.Config {
 		CellName:      "devcell-85",
 		BaseDir:       t.TempDir(),
 		WorkspaceName: cellName,
-		HostUser: "dmitry",
-		HostHome: "/Users/dmitry",
+		HostUser: "warden",
+		HostHome: "/Users/warden",
 	}
 }
 

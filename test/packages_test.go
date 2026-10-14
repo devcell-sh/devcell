@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/testutil"
+	"github.com/devcell-sh/devcell/internal/testutil"
 )
 
 // TestPackages_MiseInstallsToolsAtStart builds a real image with `cell build`

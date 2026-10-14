@@ -39,7 +39,7 @@
     cellVersion = "v0.0.0-dev";
     cellCommit = self.shortRev or self.dirtyShortRev or "unknown";
     cellBuildDate = self.lastModifiedDate or "unknown";
-    versionPkg = "github.com/DimmKirr/devcell/internal/version";
+    versionPkg = "github.com/devcell-sh/devcell/internal/version";
   in {
     packages = forAllSystems ({
       system,

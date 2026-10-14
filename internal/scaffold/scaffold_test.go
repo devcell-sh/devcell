@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/BurntSushi/toml"
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/nixhome"
-	"github.com/DimmKirr/devcell/internal/scaffold"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/nixhome"
+	"github.com/devcell-sh/devcell/internal/scaffold"
 )
 
 func TestScaffold_CreatesAllFiles(t *testing.T) {

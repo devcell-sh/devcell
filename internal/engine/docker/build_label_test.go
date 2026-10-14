@@ -3,7 +3,7 @@ package docker_test
 import (
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/engine/docker"
+	"github.com/devcell-sh/devcell/internal/engine/docker"
 )
 
 // CELL-43: stacks are deprecated (see CELL-6/337). The "stack=X" qualifier

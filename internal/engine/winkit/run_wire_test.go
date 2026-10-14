@@ -18,8 +18,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/engine"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/engine"
 )
 
 func TestPERunnerCommand_AssemblesWSLCommand(t *testing.T) {
@@ -225,14 +225,14 @@ func TestRun_GuestCommandIncludesPATH(t *testing.T) {
 	home := t.TempDir()
 	out := captureStdout(t, func() {
 		require.NoError(t, Engine{}.Run(context.Background(), engine.RunOpts{
-			Cell:   engine.Cell{WorkspaceName: "main", HostHome: home, HostUser: "dmitry", BaseDir: home, Stack: "base"},
+			Cell:   engine.Cell{WorkspaceName: "main", HostHome: home, HostUser: "warden", BaseDir: home, Stack: "base"},
 			Binary: "claude",
 			DryRun: true,
 		}))
 	})
 	for _, required := range []string{
-		"/home/dmitry/go/bin",
-		"/home/dmitry/.local/share/mise/shims",
+		"/home/warden/go/bin",
+		"/home/warden/.local/share/mise/shims",
 		"/opt/devcell/.local/state/nix/profiles/profile/bin",
 		"/nix/var/nix/profiles/default/bin",
 	} {
@@ -247,7 +247,7 @@ func TestActivateS6Session_RunsWSL1ActivationOverSSH(t *testing.T) {
 	stubDial(t, func(context.Context, sshChannel) (guestSession, error) { return sess, nil })
 
 	ch := guestPE.channel(20022)
-	activateS6Session(context.Background(), ch, "dmitry", t.Logf)
+	activateS6Session(context.Background(), ch, "warden", t.Logf)
 
 	require.NotEmpty(t, sess.cmd, "must have run a command over SSH")
 	assert.Contains(t, sess.cmd, "wsl -d winkit --")
@@ -263,7 +263,7 @@ func TestActivateS6Session_BestEffort(t *testing.T) {
 
 	ch := guestPE.channel(20022)
 	// Must not panic or return error: best-effort.
-	activateS6Session(context.Background(), ch, "dmitry", t.Logf)
+	activateS6Session(context.Background(), ch, "warden", t.Logf)
 }
 
 // --- SFTP share for run ---

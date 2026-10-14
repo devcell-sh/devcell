@@ -6,8 +6,8 @@ import (
 	gowinkit "github.com/devcell-sh/go-winkit"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/DimmKirr/devcell/internal/cfg"
-	"github.com/DimmKirr/devcell/internal/engine"
+	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/engine"
 )
 
 // cellWith is a PE cell on stack base with the given [cell] section.

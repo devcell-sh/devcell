@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/cache"
-	"github.com/DimmKirr/devcell/internal/cloudmodels"
-	"github.com/DimmKirr/devcell/internal/ollama"
-	"github.com/DimmKirr/devcell/internal/telemetry"
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/cache"
+	"github.com/devcell-sh/devcell/internal/cloudmodels"
+	"github.com/devcell-sh/devcell/internal/ollama"
+	"github.com/devcell-sh/devcell/internal/telemetry"
+	"github.com/devcell-sh/devcell/internal/ux"
 	"github.com/spf13/cobra"
 )
 

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/DimmKirr/devcell/internal/s6"
+	"github.com/devcell-sh/devcell/internal/s6"
 )
 
 // GenerateSetHostnameScript returns a script that sets the macOS hostname to
@@ -458,7 +458,7 @@ echo "=== VirtioFS mount done ==="`,
 
 // ProjectPathInVM maps the host project path to its in-VM location.
 // When the project lives under the host home, the relative path is mirrored
-// into the cell user's VM home — so /Users/dmitry/dev/acme/proj on the
+// into the cell user's VM home — so /Users/warden/dev/acme/proj on the
 // host appears at the same path inside the VM (cell user == host $USER).
 // Projects outside the host home fall back to ~/<basename>.
 func ProjectPathInVM(hostHome, baseDir, cellUser string) string {

@@ -1,3 +1,4 @@
+// Package cfg defines the TOML configuration schema for devcell projects and workspaces.
 package cfg
 
 import (
@@ -67,6 +68,7 @@ type CellSection struct {
 	LibvirtPathMap   map[string]string `toml:"libvirt_path_map"`        // container prefix -> host prefix rewrites for domain XML paths (CELL-375); empty = CLI runs on the host
 	QemuProjectSync  string            `toml:"qemu_project_sync"`       // retired with the libvirt engine; parsed only so the deprecation warning fires
 	DefaultCommand   string            `toml:"default_command"`         // subcommand to run when `cell` is invoked with no args; env: DEVCELL_DEFAULT_COMMAND
+	DockerSocket     *bool             `toml:"docker_socket"`           // mount /var/run/docker.sock into the container; default: true; env: DEVCELL_DOCKER_SOCKET
 	Flake            *bool             `toml:"flake"`                   // enable project-level flake.nix install; default: false (opt-in); env: DEVCELL_FLAKE
 	Packages         []string          `toml:"packages"`                // nix packages from the stable channel, baked into the image at build time
 	Volumes          []string          `toml:"volumes"`                 // shorthand volume list: "/path", "/host:/container", "/host:/container:ro"
@@ -273,9 +275,8 @@ func (c CellSection) ResolvedGUI() bool {
 }
 
 // ResolvedKVM returns the effective KVM passthrough setting: env > toml >
-// default OFF. It is opt-in because the device lives on the docker daemon
-// host (e.g. the Colima VM), which the CLI cannot stat — a wrong guess either
-// breaks `docker run` outright or silently drops the guest back to TCG.
+// default OFF. When no explicit setting exists, the docker engine auto-detects
+// by probing the daemon host; see RunSpec.KVMAutoDetected in the engine layer.
 func (c CellSection) ResolvedKVM() bool {
 	if v := os.Getenv("DEVCELL_KVM"); v == "1" {
 		return true
@@ -286,6 +287,34 @@ func (c CellSection) ResolvedKVM() bool {
 		return *c.KVM
 	}
 	return false
+}
+
+// KVMExplicitlyDisabled returns true when the user has explicitly opted out of
+// KVM passthrough via DEVCELL_KVM=0 or [cell] kvm = false. When true, the
+// engine must not auto-detect KVM even if the daemon host has /dev/kvm.
+func (c CellSection) KVMExplicitlyDisabled() bool {
+	if v := os.Getenv("DEVCELL_KVM"); v == "0" {
+		return true
+	}
+	if c.KVM != nil && !*c.KVM {
+		return true
+	}
+	return false
+}
+
+// ResolvedDockerSocket returns the effective docker socket mount setting:
+// env > toml > default ON. Set docker_socket=false or DEVCELL_DOCKER_SOCKET=0
+// to prevent mounting /var/run/docker.sock into the container.
+func (c CellSection) ResolvedDockerSocket() bool {
+	if v := os.Getenv("DEVCELL_DOCKER_SOCKET"); v == "0" {
+		return false
+	} else if v == "1" {
+		return true
+	}
+	if c.DockerSocket != nil {
+		return *c.DockerSocket
+	}
+	return true
 }
 
 // ResolvedPerCellImage returns true only when explicitly enabled.

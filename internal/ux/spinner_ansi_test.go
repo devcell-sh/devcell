@@ -10,7 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 // Tiny ANSI processor for "what would a real terminal show, given these
@@ -209,7 +209,7 @@ func TestProgressSpinner_FastPhaseEmitsNothingFromRunner(t *testing.T) {
 
 	data := captureStdoutBytes(t, func() {
 		// Banner-like content; the test asserts this survives unscathed.
-		fmt.Print(" cell ▸ DIMM · devcell\n")
+		fmt.Print(" cell ▸ CELL · devcell\n")
 		// Fast phase: spinner created, Stop called before any tick fires.
 		sp := ux.NewProgressSpinner("Network")
 		// No work, no sleep — immediate Stop, no tick possible.
@@ -221,7 +221,7 @@ func TestProgressSpinner_FastPhaseEmitsNothingFromRunner(t *testing.T) {
 	})
 
 	visible := renderANSI(data)
-	if !strings.Contains(visible, "cell ▸ DIMM · devcell") {
+	if !strings.Contains(visible, "cell ▸ CELL · devcell") {
 		t.Errorf("banner must survive a fast-phase spinner Stop; rendered buffer:\n%s", visible)
 	}
 	if !strings.Contains(visible, "Network") {

@@ -3,7 +3,7 @@ package ollama_test
 import (
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/ollama"
+	"github.com/devcell-sh/devcell/internal/ollama"
 )
 
 func TestEstimateCloudSpeedTPM(t *testing.T) {

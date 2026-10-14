@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/DimmKirr/devcell/internal/gui"
-	"github.com/DimmKirr/devcell/internal/ux"
+	"github.com/devcell-sh/devcell/internal/gui"
+	"github.com/devcell-sh/devcell/internal/ux"
 	"github.com/spf13/cobra"
 )
 

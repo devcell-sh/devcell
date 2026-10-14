@@ -5,9 +5,9 @@ import (
 	"os"
 	"time"
 
-	authkube "github.com/DimmKirr/devcell/internal/auth/kube"
-	"github.com/DimmKirr/devcell/internal/telemetry"
-	"github.com/DimmKirr/devcell/internal/ux"
+	authkube "github.com/devcell-sh/devcell/internal/auth/kube"
+	"github.com/devcell-sh/devcell/internal/telemetry"
+	"github.com/devcell-sh/devcell/internal/ux"
 	"github.com/spf13/cobra"
 )
 

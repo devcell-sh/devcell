@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DimmKirr/devcell/internal/engine/docker"
+	"github.com/devcell-sh/devcell/internal/engine/docker"
 )
 
 // CELL-334: `cell cleanup` + prune preflight share one primitive — map

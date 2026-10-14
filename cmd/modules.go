@@ -8,8 +8,8 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/DimmKirr/devcell/internal/nixhome"
-	"github.com/DimmKirr/devcell/internal/telemetry"
+	"github.com/devcell-sh/devcell/internal/nixhome"
+	"github.com/devcell-sh/devcell/internal/telemetry"
 	"github.com/spf13/cobra"
 )
 
