@@ -2,16 +2,23 @@
 
 Claude Code, without the blast radius.
 
-DevCell is a local-first sandbox for AI coding agents. Run Claude Code, Codex, OpenCode, or Gemini inside an isolated cell. Agents write, delete, and install freely. Your host is untouched.
-
-No account. No API key with Max/Pro. `brew install` and go.
-
-> "Run this in a container, not your actual machine."
-> — Anthropic, Claude Code docs
+[![CI](https://img.shields.io/github/actions/workflow/status/devcell-sh/devcell/build.dev.yml?branch=main)](https://github.com/devcell-sh/devcell/actions)
+[![Release](https://img.shields.io/github/v/release/devcell-sh/devcell)](https://github.com/devcell-sh/devcell/releases)
+[![License](https://img.shields.io/github/license/devcell-sh/devcell)](LICENSE)
+[![Go Report Card](https://goreportcard.com/badge/github.com/devcell-sh/devcell)](https://goreportcard.com/report/github.com/devcell-sh/devcell)
 
 <p align="center">
   <img src="web/public/demo.svg" alt="devcell claude boot sequence" width="700">
 </p>
+
+## Why DevCell?
+
+AI coding agents need root-level access to be productive: they install packages, rewrite configs, delete files. If you let them do that on your actual machine, one bad tool call can wreck your environment. If you lock them down with permission prompts, you lose the speed that makes agents useful.
+
+DevCell gives agents a full sandbox with zero permission prompts. Your toolchain, your Claude config, your MCP servers: all carried over. Your host filesystem, SSH keys, and credentials: unreachable.
+
+> "Run this in a container, not your actual machine."
+> -- Anthropic, Claude Code docs
 
 ## Quickstart
 
@@ -29,19 +36,19 @@ On first run, `devcell` creates `devcell.toml` and `.devcell/` in your project d
 
 After `devcell claude` (or `codex`, `opencode`, `gemini`):
 
-- **Container sandbox** - every `devcell <agent>` runs inside an isolated cell. SSH keys, other repos, and host credentials are unreachable. The container is the guardrail, not the approval loop
-- **Full auto-approve in isolation** - agents run with no permission prompts. The sandbox makes it safe; the speed makes it worth it
-- **MCP servers with backing tools** - you don't install MCP servers; they come ready. 86% of MCP servers need local binaries that break on PATH mismatches and missing system libs. Here, the backing tools ship too: the agent can run `tofu plan` or edit PCBs because OpenTofu and KiCad are installed, not just their MCP servers
-- **Three OS engines** - Linux container (Docker), macOS VM (Tart), Windows VM (winkit). Same commands, same config
-- **No account, no login** - `brew install devcell-sh/tap/devcell`, `cd your-project`, `devcell claude`. No Docker Hub login, no cloud dashboard
-- **Claude Max/Pro works out of the box** - no API key, no proxy, no workarounds
-- **Your Claude setup carries over** - CLAUDE.md, hooks, skills, and MCP config mount into the cell
+### Container sandbox with full auto-approve
 
-One flag away:
+Every `devcell <agent>` runs inside an isolated cell. SSH keys, other repos, and host credentials are unreachable. The container is the guardrail, not the approval loop. Agents run with no permission prompts: the sandbox makes it safe, the speed makes it worth it.
 
-- **Egress lockdown** - `devcell claude --solitary` denies all outbound traffic except allow-listed domains. The agent cannot phone home, push to the wrong remote, or exfiltrate tokens
-- **1Password secrets** - fields injected as env vars at runtime on a RAM-only tmpfs, gone when the cell stops. Configured via `[secrets.onepassword]`
-- **Session handoff** - `devcell auth chrome` lets the agent browse authenticated pages without ever seeing your password. You log in on your host, cookies sync to the cell
+### MCP servers with backing tools
+
+You don't install MCP servers; they come ready. 86% of MCP servers need local binaries that break on PATH mismatches and missing system libs. Here, the backing tools ship too: the agent can run `tofu plan` or edit PCBs because OpenTofu and KiCad are installed, not just their MCP servers.
+
+### Your setup carries over
+
+CLAUDE.md, hooks, skills, and MCP config mount into the cell. Claude Max/Pro works out of the box: no API key, no proxy, no workarounds. No account or login required.
+
+**Also:** three OS engines (Linux container, macOS VM, Windows VM) | egress lockdown with `--solitary` | 1Password secrets on RAM-only tmpfs | session handoff for authenticated browsing
 
 ## Comparison
 
@@ -124,6 +131,8 @@ Headline servers: OpenTofu (IaC), KiCad (PCB analysis), Inkscape (SVG), Yahoo Fi
 - GPG isolation per container (prevents SQLite lock contention)
 - Gitleaks pre-commit hook and CI secret scanning
 
+Found a vulnerability? See [SECURITY.md](SECURITY.md) for reporting instructions.
+
 ## Configuration
 
 Project config at `devcell.toml` (created by `devcell init` or first run) with [JSON Schema](https://devcell.sh/schema/v0.0.0/devcell.json) for editor validation and completion. Optional global defaults at `~/.config/devcell/devcell.toml`. See `devcell --help` for the full reference.
@@ -187,7 +196,7 @@ task nix:validate    # Syntax check + attribute resolution across all stacks
 
 | Term | What it means |
 |---|---|
-| **workspace** | A persistent grouping and boundary. One shared `$HOME` (`~/.devcell/<workspaceName>/`), one network, one secrets scope. Examples: `DIMM`, `work`, `personal`, `main` (default). May host many projects. |
+| **workspace** | A persistent grouping and boundary. One shared `$HOME` (`~/.devcell/<workspaceName>/`), one network, one secrets scope. Examples: `CELL`, `work`, `personal`, `main` (default). May host many projects. |
 | **project** | A host directory with code. Mounted into a container. |
 | **cell** | The engine-agnostic runtime unit for one (workspace, project) pair. Named `<project>-<cellID>`. |
 | **stack** | The image variant a container is built from (`base`, `dev`, `ultimate`, `bbb`). |
@@ -203,6 +212,10 @@ task nix:validate    # Syntax check + attribute resolution across all stacks
 | Snapshot/restore cells | planned | `internal/engine/docker` |
 | `devcell pull` (skip build entirely for default stacks) | planned | image build pipeline |
 | `windows-full` guest | internal only | `internal/engine` capability table |
+
+## Contributing
+
+Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, rules, and PR expectations. [CHANGELOG.md](CHANGELOG.md) tracks releases.
 
 ## License
 

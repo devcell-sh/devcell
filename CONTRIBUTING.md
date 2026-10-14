@@ -3,7 +3,7 @@
 ## Quick start
 
 ```bash
-git clone https://github.com/DimmKirr/devcell.git
+git clone https://github.com/devcell-sh/devcell.git
 cd devcell
 task test
 ```
@@ -36,3 +36,7 @@ Nix home-manager modules live in the separate [devcell-sh/community-home](https:
 ## PR expectations
 
 Small, focused PRs are usually reviewed within a few days. One logical change per PR. If a PR touches multiple features, split it.
+
+## Response times
+
+We aim to acknowledge new PRs within 3 business days and complete review within 7 business days for small PRs (<200 lines changed).
