@@ -11,7 +11,6 @@ import (
 	"os"
 	osexec "os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -42,14 +41,6 @@ func nixhomeDir() string {
 }
 
 var (
-	ultimateOnce sync.Once
-	ultimateTag  string
-	ultimateErr  error
-
-	baseOnce sync.Once
-	baseTag  string
-	baseErr  error
-
 	testdataOnce sync.Once
 	testdataTag  string
 	testdataErr  error
@@ -157,21 +148,7 @@ func TestMain(m *testing.M) {
 	if err := checkDiskSpace(); err != nil {
 		log.Fatalf("disk space check failed: %v", err)
 	}
-	if os.Getenv("DEVCELL_TEST_BUILD_THIN") == "1" {
-		tag, err := buildLocalImage("ultimate-thin", "devcell-user")
-		if err != nil {
-			log.Fatalf("DEVCELL_TEST_BUILD_THIN=1: build failed: %v", err)
-		}
-		log.Printf("DEVCELL_TEST_BUILD_THIN=1: built %s, exporting DEVCELL_TEST_THIN_IMAGE", tag)
-		os.Setenv("DEVCELL_TEST_THIN_IMAGE", tag)
-	}
 	code := m.Run()
-	if ultimateTag != "" {
-		osexec.Command("docker", "rmi", ultimateTag).Run()
-	}
-	if baseTag != "" {
-		osexec.Command("docker", "rmi", baseTag).Run()
-	}
 	if testdataTag != "" {
 		osexec.Command("docker", "rmi", testdataTag).Run()
 	}
@@ -190,31 +167,6 @@ func shortSHA() string {
 	return strings.TrimSpace(string(out))
 }
 
-// buildLocalImage builds a bake target with a unique tag and returns the tag.
-// THICK image path — produces a Dockerfile-built (impure) image. Use
-// buildThinImage for thin variants where nix store lives on a volume.
-//
-// Pins PLATFORMS to the host arch because `docker buildx bake --load` can't
-// import multi-platform manifests (docker-bake.hcl defaults to amd64+arm64).
-func buildLocalImage(target, tagPrefix string) (string, error) {
-	tag := fmt.Sprintf("%s:%s-%s", tagPrefix, shortSHA(), time.Now().Format("20060102T150405"))
-	hostPlatform := "linux/" + runtime.GOARCH // GOARCH already uses Docker's vocabulary (amd64, arm64)
-	log.Printf("Building %s image: %s (platform=%s)", target, tag, hostPlatform)
-	cmd := osexec.Command("docker", "buildx", "bake",
-		"--file", "docker-bake.hcl",
-		"--load",
-		"--set", fmt.Sprintf("%s.tags=%s", target, tag),
-		"--set", fmt.Sprintf("%s.platform=%s", target, hostPlatform),
-		target)
-	cmd.Dir = ".."
-	cmd.Env = append(os.Environ(), "PLATFORMS="+hostPlatform)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("build %s: %w", target, err)
-	}
-	return tag, nil
-}
 
 func buildThinImage(stack string) (string, error) {
 	cellBin, err := ensureCellBinary()
@@ -270,13 +222,11 @@ var (
 )
 
 // Local tag conventions (CELL-108):
-//   - `task image:impure:build:ultimate` → ghcr.io/devcell-sh/devcell:ultimate-local
 //   - `task image:pure:build:ultimate`   → devcell-user:ultimate-pure
 const (
-	localImpureUltimateTag = "ghcr.io/devcell-sh/devcell:ultimate-local"
-	localPureUltimateTag   = "devcell-user:ultimate-pure"
-	localThinUltimateTag   = "devcell-user:ultimate-thin"
-	defaultThinVolumeName  = "devcell-nix-store"
+	localPureUltimateTag  = "devcell-user:ultimate-pure"
+	localThinUltimateTag  = "devcell-user:ultimate-thin"
+	defaultThinVolumeName = "devcell-nix-store"
 )
 
 // thinVolumeName returns the Docker volume to mount at /nix for thin-variant
@@ -328,24 +278,18 @@ func imageTagForVariant(variant, pureEnv, impureEnv string, exists func(string) 
 		if impureEnv != "" {
 			return impureEnv, ""
 		}
-		if exists(localImpureUltimateTag) {
-			return localImpureUltimateTag, ""
-		}
-		return "", "" // caller falls back to scratch bake
+		return "", ""
 	default:
 		return "", "unknown DEVCELL_TEST_VARIANT: " + variant
 	}
 }
 
-// image returns the test image tag for the default variant (impure unless
-// DEVCELL_TEST_VARIANT=pure). Priority within a variant:
+// image returns the test image tag for the current variant (set via
+// DEVCELL_TEST_VARIANT). Priority:
 //  1. Variant-specific env override (DEVCELL_TEST_PURE_IMAGE for pure,
-//     DEVCELL_TEST_IMAGE for impure)
-//  2. Locally-loaded variant tag (devcell-user:ultimate-pure or ultimate-local)
-//  3. Impure only: build from testdata Dockerfile on top of ultimate-local;
-//     or, last resort, scratch-bake `local-ultimate` (~10 min)
-//  4. Pure only: panic with a setup hint — no automatic bake for pure
-//     because nix2container builds are not safe to run unattended from go test
+//     DEVCELL_TEST_IMAGE for default)
+//  2. Locally-loaded variant tag (devcell-user:ultimate-pure, etc.)
+//  3. Panic with a setup hint
 func image() string {
 	variant := os.Getenv("DEVCELL_TEST_VARIANT")
 	tag, skip := imageTagForVariant(
@@ -355,28 +299,12 @@ func image() string {
 		imageExists,
 	)
 	if tag != "" {
-		// For impure local tag, route through the testdata Dockerfile path so
-		// nixhome/ changes are picked up on every test run (~53s). Env overrides
-		// and pure tags are used as-is.
-		if tag == localImpureUltimateTag && os.Getenv("DEVCELL_TEST_IMAGE") == "" {
-			return testdataImage()
-		}
 		return tag
 	}
 	if skip != "" {
-		// `image()` can't t.Skip: it has no *testing.T. Panic with a clear
-		// setup hint. In -short mode, requirePrebuiltImage(t) (called by
-		// startContainer) skips before this point is reached.
 		panic("image: " + skip)
 	}
-	// Empty tag + no skip = impure scratch-bake fallback.
-	ultimateOnce.Do(func() {
-		ultimateTag, ultimateErr = buildLocalImage("local-ultimate", "devcell-test")
-	})
-	if ultimateErr != nil {
-		panic(fmt.Sprintf("image: %v", ultimateErr))
-	}
-	return ultimateTag
+	panic("image: no prebuilt test image available; set DEVCELL_TEST_IMAGE or DEVCELL_TEST_PURE_IMAGE, or run `devcell build`")
 }
 
 // requirePrebuiltImage skips short tests when image() would have to build one.
@@ -391,8 +319,8 @@ func requirePrebuiltImage(t *testing.T) {
 		os.Getenv("DEVCELL_TEST_IMAGE"),
 		imageExists,
 	)
-	if tag == "" || (tag == localImpureUltimateTag && os.Getenv("DEVCELL_TEST_IMAGE") == "") {
-		t.Skip("short: no prebuilt test image; set DEVCELL_TEST_IMAGE or run `cell build`")
+	if tag == "" {
+		t.Skip("short: no prebuilt test image; set DEVCELL_TEST_IMAGE or run `devcell build`")
 	}
 }
 
@@ -407,13 +335,7 @@ func baseImage() string {
 	if img := os.Getenv("DEVCELL_TEST_BASE_IMAGE"); img != "" {
 		return img
 	}
-	baseOnce.Do(func() {
-		baseTag, baseErr = buildLocalImage("local-core", "devcell-test-base")
-	})
-	if baseErr != nil {
-		panic(fmt.Sprintf("baseImage: %v", baseErr))
-	}
-	return baseTag
+	panic("baseImage: no prebuilt base image available; set DEVCELL_TEST_BASE_IMAGE or run `devcell build`")
 }
 
 // copyDirRecursive copies src directory tree to dst.

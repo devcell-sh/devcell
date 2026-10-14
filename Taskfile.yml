@@ -8,8 +8,7 @@
 #
 # Taxonomy (post CELL-180 + Modules 2.0):
 #   image:pure:*    ← nix2container path (default, what CI ships)
-#   image:impure:*  ← Dockerfile/bake path (DEPRECATED, kept for one release)
-#   image:{build,push}        — aggregates (pure only after Modules 2.0)
+#   image:{build,push}        — aggregates (pure path)
 #   image:{mirror,manifest}   — variant-agnostic utilities
 #
 # Back-compat aliases for muscle memory + external refs are preserved
@@ -232,13 +231,6 @@ tasks:
           if ($fail) { exit 1 } else { Write-Output "All scripts clean." }
         '
 
-  bake:validate:
-    desc: Print resolved docker-bake config (HCL parse check, no build)
-    dir: "{{.TASKFILE_DIR}}"
-    silent: true
-    cmds:
-      - GIT_COMMIT={{.GIT_COMMIT_HASH}} docker buildx bake --file {{.TASKFILE_DIR}}/docker-bake.hcl --print ci
-
   # ── cell CLI binary ────────────────────────────────────────────────────
 
   cell:deps:
@@ -300,68 +292,15 @@ tasks:
 
   # ── image (CI/release aggregates) ──────────────────────────────────────
   # For LOCAL development, use `cell build` — these tasks are for CI/release.
-  # After Modules 2.0, image:build = pure only. Impure remains opt-in for
-  # one release as image:impure:* and will be removed when nothing depends
-  # on it.
   image:build:
-    desc: Build pure images (CI/release path). For local dev, use `cell build`.
+    desc: Build pure images (CI/release path). For local dev, use `devcell build`.
     cmds:
       - task: image:pure:build
 
   image:push:
-    desc: Push pure images to registry (CI). Impure path is opt-in via image:impure:push.
+    desc: Push pure images to registry (CI).
     cmds:
       - task: image:pure:push
-
-  # ── image:impure (DEPRECATED Dockerfile/bake path) ─────────────────────
-  # Kept for one release for callers still on the legacy build path.
-  # Will be removed once Modules 2.0 is the only supported workflow.
-  # Do not use for new local development — use `cell build` instead.
-  image:impure:build:
-    desc: "[DEPRECATED] Build legacy impure images. Use `cell build` for local dev."
-    cmds:
-      - task: image:impure:build:base
-      - task: image:impure:build:ultimate
-
-  image:impure:build:base:
-    aliases: [bake:local, image:build:base]    # back-compat
-    desc: "[DEPRECATED] Build legacy impure base image. Use `cell build` for local dev."
-    silent: true
-    cmds:
-      - >-
-        USER_UID=$(id -u) USER_GID=$(id -g)
-        GIT_COMMIT={{.GIT_COMMIT_HASH}}
-        NIX_CACHE_IMAGE=public.ecr.aws/docker/library/debian:trixie-slim
-        PLATFORMS=""
-        docker buildx bake --file {{.TASKFILE_DIR}}/docker-bake.hcl --load local-core {{.CLI_ARGS}}
-
-  image:impure:build:ultimate:
-    aliases: [image:build:ultimate]            # back-compat
-    desc: "[DEPRECATED] Build legacy impure ultimate image. Use `cell build` for local dev."
-    silent: true
-    cmds:
-      - >-
-        USER_UID=$(id -u) USER_GID=$(id -g)
-        GIT_COMMIT={{.GIT_COMMIT_HASH}}
-        NIX_CACHE_IMAGE=public.ecr.aws/docker/library/debian:trixie-slim
-        PLATFORMS=""
-        docker buildx bake --file {{.TASKFILE_DIR}}/docker-bake.hcl --load local-ultimate {{.CLI_ARGS}}
-
-  image:impure:push:
-    aliases: [image:push:debian]               # back-compat (pre-rename name)
-    desc: "[DEPRECATED] Push legacy impure ci group. CI should publish pure images via image:pure:push."
-    silent: true
-    cmds:
-      # oci-mediatypes=true: publish with OCI manifest so zstd-compressed
-      # layers are legal. Without this, downstream skopeo trips:
-      #   "unsupported docker v2s2 media type:
-      #    application/vnd.docker.image.rootfs.diff.tar.zstd"
-      # because zstd is not a legal media type under Docker v2s2 (gzip only).
-      - >-
-        GIT_COMMIT={{.GIT_COMMIT_HASH}}
-        docker buildx bake --file {{.TASKFILE_DIR}}/docker-bake.hcl --push
-        --set '*.output=type=image,push=true,oci-mediatypes=true,compression=zstd,compression-level=3,force-compression=true'
-        ci {{.CLI_ARGS}}
 
   # ── image: variant-agnostic utilities ──────────────────────────────────
   image:mirror:
