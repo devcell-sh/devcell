@@ -1,6 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
 import Exp from '../components/Exp.astro';
+import { expHtml } from '../lib/exp';
 import Hero from '../components/Hero.astro';
 import FeatureCards from '../components/FeatureCards.astro';
 import Quickstart from '../components/Quickstart.astro';
@@ -51,7 +52,7 @@ const faqItems = [
   { q: "Why not just write my own Dockerfile?",
     a: "You can — the afternoon is the demo; the maintenance is the product. A hand-rolled container needs MCP wiring, backing apps, a display server, secrets handling, UID mapping, and per-agent flags — and needs them again after every client update. Everything DevCell ships is defined in the open devcell-sh/home modules: read them, fork them, or reuse them standalone if you'd rather keep your own setup." },
   { q: "How is DevCell different from Docker Sandboxes?",
-    a: "Docker Sandboxes use microVMs for stronger isolation and integrate with the Docker ecosystem. DevCell is local-first with no account required, preserves your CLAUDE.md and hooks, ships MCP servers with their backing tools pre-installed, and supports macOS and Windows VMs. Docker Sandboxes require a Docker account and drop your Claude config." },
+    a: `Docker Sandboxes use microVMs for stronger isolation and integrate with the Docker ecosystem. DevCell is local-first with no account required, preserves your CLAUDE.md and hooks, ships MCP servers with their backing tools pre-installed, and supports macOS and Windows VMs${expHtml("engine-windows")}. Docker Sandboxes require a Docker account and drop your Claude config.` },
   { q: "Can the agent install packages inside the container?",
     a: "Yes. The agent can run apt, npm install, pip install, nix — whatever the project needs. Network access is unrestricted by default. <code>devcell claude --solitary</code> locks down egress to allow-listed domains only. Port forwarding and extra volume mounts are configurable in devcell.toml." },
   { q: "Does my existing Claude Code config carry over?",
