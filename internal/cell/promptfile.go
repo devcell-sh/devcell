@@ -8,6 +8,7 @@ import (
 
 	"github.com/devcell-sh/devcell/internal/cfg"
 	"github.com/devcell-sh/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 // promptDirName is the project-relative directory holding generated prompt
@@ -68,15 +69,21 @@ func WriteBasePrompt(c config.Config, opts ResolveOpts) (string, error) {
 // per (cell, project) pair and ContainerContext embeds the cell name, so a
 // shared path would let one cell boot with another cell's container context.
 //
-// The returned path is the container-side path: the project is bind-mounted
-// at /<CellName>, so translating is a prefix swap of BaseDir for that root.
+// The returned path is the container-side path. Prompt files live under the
+// workspace home (not the project dir) because the project bind mount
+// inherits the host directory's permissions. On Linux with a UID mismatch
+// (host UID != container UID) and a private home dir (0700), the container
+// session user cannot traverse the project mount at all.
+//
+// The workspace home is mounted at /home/<HostUser>, and the entrypoint
+// chowns it to the session user, so files there are always accessible.
 func WritePromptFile(c config.Config, name, content string) (string, error) {
 	cell := c.WorkspaceName
 	if cell == "" {
 		cell = "main"
 	}
 
-	hostDir := filepath.Join(c.BaseDir, ".devcell", promptDirName, cell)
+	hostDir := filepath.Join(c.WorkspaceHome, promptDirName, cell)
 	if err := os.MkdirAll(hostDir, 0o755); err != nil {
 		return "", fmt.Errorf("create prompt dir %s: %w", hostDir, err)
 	}
@@ -86,5 +93,43 @@ func WritePromptFile(c config.Config, name, content string) (string, error) {
 		return "", fmt.Errorf("write prompt file %s: %w", hostPath, err)
 	}
 
-	return path.Join("/"+c.CellName, ".devcell", promptDirName, cell, name), nil
+	ensureWorldReadable(hostDir, hostPath)
+
+	containerPath := path.Join("/home/"+c.HostUser, promptDirName, cell, name)
+
+	ux.Debugf("prompt file: host=%s container=%s", hostPath, containerPath)
+	if info, err := os.Stat(hostPath); err == nil {
+		ux.Debugf("prompt file: size=%d mode=%o", info.Size(), info.Mode().Perm())
+	}
+
+	return containerPath, nil
+}
+
+// ensureWorldReadable makes sure the file and its parent directories are
+// accessible by any UID. Inside the container the session user's UID may
+// differ from the host UID that wrote the file (e.g. macOS 501 vs Linux
+// 1000), so the "other" permission bits must allow traversal and reading.
+func ensureWorldReadable(dir, file string) {
+	fixDir := func(p string) {
+		info, err := os.Stat(p)
+		if err != nil {
+			return
+		}
+		m := info.Mode()
+		if m&0o005 != 0o005 {
+			_ = os.Chmod(p, m|0o005)
+		}
+	}
+	fixDir(dir)
+	fixDir(filepath.Dir(dir))
+	fixDir(filepath.Dir(filepath.Dir(dir)))
+
+	info, err := os.Stat(file)
+	if err != nil {
+		return
+	}
+	m := info.Mode()
+	if m&0o004 == 0 {
+		_ = os.Chmod(file, m|0o004)
+	}
 }

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/devcell-sh/devcell/internal/cfg"
@@ -15,23 +16,25 @@ import (
 // per-cell namespacing is exercised.
 func promptFileConfig(t *testing.T, cellName string) config.Config {
 	t.Helper()
+	wsHome := t.TempDir()
 	return config.Config{
 		CellName:      "devcell-85",
 		BaseDir:       t.TempDir(),
+		WorkspaceHome: wsHome,
 		WorkspaceName: cellName,
-		HostUser: "warden",
-		HostHome: "/Users/warden",
+		HostUser:      "warden",
+		HostHome:      "/Users/warden",
 	}
 }
 
-func TestWritePromptFile_WritesContentToHostPath(t *testing.T) {
+func TestWritePromptFile_WritesContentToWorkspaceHome(t *testing.T) {
 	c := promptFileConfig(t, "main")
 
 	if _, err := WritePromptFile(c, "additional-systemprompt.md", "hello prompt\n"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	hostPath := filepath.Join(c.BaseDir, ".devcell", "prompts", "main", "additional-systemprompt.md")
+	hostPath := filepath.Join(c.WorkspaceHome, "prompts", "main", "additional-systemprompt.md")
 	got, err := os.ReadFile(hostPath)
 	if err != nil {
 		t.Fatalf("expected file at %s: %v", hostPath, err)
@@ -41,7 +44,7 @@ func TestWritePromptFile_WritesContentToHostPath(t *testing.T) {
 	}
 }
 
-func TestWritePromptFile_ReturnsContainerPathNotHostPath(t *testing.T) {
+func TestWritePromptFile_ReturnsContainerHomePath(t *testing.T) {
 	c := promptFileConfig(t, "main")
 
 	got, err := WritePromptFile(c, "additional-systemprompt.md", "x")
@@ -49,13 +52,15 @@ func TestWritePromptFile_ReturnsContainerPathNotHostPath(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := "/devcell-85/.devcell/prompts/main/additional-systemprompt.md"
+	want := "/home/warden/prompts/main/additional-systemprompt.md"
 	if got != want {
 		t.Errorf("container path:\n got %q\nwant %q", got, want)
 	}
-	// The host BaseDir must not leak into the path handed to the container.
-	if filepath.IsAbs(c.BaseDir) && got != want {
-		t.Errorf("returned path still carries the host base dir %q", c.BaseDir)
+	if strings.Contains(got, c.BaseDir) {
+		t.Errorf("returned path must not contain host BaseDir %q", c.BaseDir)
+	}
+	if strings.Contains(got, c.WorkspaceHome) {
+		t.Errorf("returned path must not contain host WorkspaceHome %q", c.WorkspaceHome)
 	}
 }
 
@@ -63,9 +68,9 @@ func TestWritePromptFile_ReturnsContainerPathNotHostPath(t *testing.T) {
 // ContainerContext embeds the cell name, so a shared path would let one cell
 // boot with another's container context.
 func TestWritePromptFile_NamespacedPerCell(t *testing.T) {
-	base := t.TempDir()
+	wsHome := t.TempDir()
 	mk := func(cell string) config.Config {
-		return config.Config{CellName: "devcell-85", BaseDir: base, WorkspaceName: cell}
+		return config.Config{CellName: "devcell-85", BaseDir: t.TempDir(), WorkspaceHome: wsHome, WorkspaceName: cell, HostUser: "warden"}
 	}
 
 	pathA, err := WritePromptFile(mk("alpha"), "additional-systemprompt.md", "content-alpha")
@@ -85,7 +90,7 @@ func TestWritePromptFile_NamespacedPerCell(t *testing.T) {
 		{"alpha", "content-alpha"},
 		{"beta", "content-beta"},
 	} {
-		got, err := os.ReadFile(filepath.Join(base, ".devcell", "prompts", tc.cell, "additional-systemprompt.md"))
+		got, err := os.ReadFile(filepath.Join(wsHome, "prompts", tc.cell, "additional-systemprompt.md"))
 		if err != nil {
 			t.Fatalf("%s: %v", tc.cell, err)
 		}
@@ -106,7 +111,7 @@ func TestWritePromptFile_OverwritesExisting(t *testing.T) {
 		t.Fatalf("second write: %v", err)
 	}
 
-	got, err := os.ReadFile(filepath.Join(c.BaseDir, ".devcell", "prompts", "main", "additional-systemprompt.md"))
+	got, err := os.ReadFile(filepath.Join(c.WorkspaceHome, "prompts", "main", "additional-systemprompt.md"))
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
@@ -124,7 +129,7 @@ func TestWritePromptFile_EmptyCellNameFallsBack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := "/devcell-85/.devcell/prompts/main/additional-systemprompt.md"
+	want := "/home/warden/prompts/main/additional-systemprompt.md"
 	if got != want {
 		t.Errorf("empty cell name should fall back to %q, got %q", want, got)
 	}
@@ -139,11 +144,11 @@ func TestWriteOverlayPrompt_WritesAssembledContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != "/devcell-85/.devcell/prompts/main/additional-systemprompt.md" {
+	if got != "/home/warden/prompts/main/additional-systemprompt.md" {
 		t.Errorf("container path = %q", got)
 	}
 
-	body, err := os.ReadFile(filepath.Join(c.BaseDir, ".devcell", "prompts", "main", "additional-systemprompt.md"))
+	body, err := os.ReadFile(filepath.Join(c.WorkspaceHome, "prompts", "main", "additional-systemprompt.md"))
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
@@ -167,7 +172,7 @@ func TestWriteOverlayPrompt_ContextOnlyWhenNothingConfigured(t *testing.T) {
 	if _, err := WriteOverlayPrompt(c, cfg.CellConfig{}, ResolveOpts{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	body, err := os.ReadFile(filepath.Join(c.BaseDir, ".devcell", "prompts", "main", "additional-systemprompt.md"))
+	body, err := os.ReadFile(filepath.Join(c.WorkspaceHome, "prompts", "main", "additional-systemprompt.md"))
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
@@ -200,7 +205,7 @@ func TestWriteBasePrompt_EmptyWhenUnconfigured(t *testing.T) {
 	if path != "" {
 		t.Errorf("expected no base path when unconfigured, got %q", path)
 	}
-	if _, statErr := os.Stat(filepath.Join(c.BaseDir, ".devcell", "prompts", "main", "system-prompt.md")); statErr == nil {
+	if _, statErr := os.Stat(filepath.Join(c.WorkspaceHome, "prompts", "main", "system-prompt.md")); statErr == nil {
 		t.Error("base prompt file must not be written when unconfigured")
 	}
 }
@@ -212,11 +217,11 @@ func TestWriteBasePrompt_WritesVerbatimWithoutContainerContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if path != "/devcell-85/.devcell/prompts/main/system-prompt.md" {
+	if path != "/home/warden/prompts/main/system-prompt.md" {
 		t.Errorf("base container path = %q", path)
 	}
 
-	body, err := os.ReadFile(filepath.Join(c.BaseDir, ".devcell", "prompts", "main", "system-prompt.md"))
+	body, err := os.ReadFile(filepath.Join(c.WorkspaceHome, "prompts", "main", "system-prompt.md"))
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
@@ -231,6 +236,75 @@ func TestWriteBasePrompt_WritesVerbatimWithoutContainerContext(t *testing.T) {
 	}
 }
 
+// A restrictive umask (0077) strips world-read/execute bits from mkdir(2) and
+// open(2). Without the post-creation chmod, the container user (different UID
+// from the host user that wrote the file) gets EACCES.
+func TestWritePromptFile_WorldReadableUnderRestrictiveUmask(t *testing.T) {
+	old := syscall.Umask(0o077)
+	defer syscall.Umask(old)
+
+	c := promptFileConfig(t, "main")
+
+	if _, err := WritePromptFile(c, "additional-systemprompt.md", "test"); err != nil {
+		t.Fatalf("WritePromptFile: %v", err)
+	}
+
+	promptsDir := filepath.Join(c.WorkspaceHome, "prompts")
+	for _, dir := range []string{
+		promptsDir,
+		filepath.Join(promptsDir, "main"),
+	} {
+		info, err := os.Stat(dir)
+		if err != nil {
+			t.Fatalf("stat %s: %v", dir, err)
+		}
+		if info.Mode()&0o005 != 0o005 {
+			t.Errorf("dir %s must be world-traversable (other r+x), got %o", dir, info.Mode()&os.ModePerm)
+		}
+	}
+
+	filePath := filepath.Join(promptsDir, "main", "additional-systemprompt.md")
+	info, err := os.Stat(filePath)
+	if err != nil {
+		t.Fatalf("stat file: %v", err)
+	}
+	if info.Mode()&0o004 == 0 {
+		t.Errorf("file must be world-readable (other r), got %o", info.Mode()&os.ModePerm)
+	}
+}
+
+// Pre-existing directories with restrictive permissions (e.g. created by a
+// previous build process running as a different user) must also get fixed.
+func TestWritePromptFile_FixesRestrictiveExistingDirs(t *testing.T) {
+	c := promptFileConfig(t, "main")
+
+	promptsDir := filepath.Join(c.WorkspaceHome, "prompts")
+	promptDir := filepath.Join(promptsDir, "main")
+	if err := os.MkdirAll(promptDir, 0o700); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	if err := os.Chmod(promptsDir, 0o700); err != nil {
+		t.Fatalf("chmod prompts: %v", err)
+	}
+
+	if _, err := WritePromptFile(c, "additional-systemprompt.md", "test"); err != nil {
+		t.Fatalf("WritePromptFile: %v", err)
+	}
+
+	for _, dir := range []string{
+		promptsDir,
+		promptDir,
+	} {
+		info, err := os.Stat(dir)
+		if err != nil {
+			t.Fatalf("stat %s: %v", dir, err)
+		}
+		if info.Mode()&0o005 != 0o005 {
+			t.Errorf("dir %s must be world-traversable, got %o", dir, info.Mode()&os.ModePerm)
+		}
+	}
+}
+
 // The overlay must carry container context plus append sources only.
 func TestWriteOverlayPrompt_UsesAppendSourcesNotBase(t *testing.T) {
 	c := promptFileConfig(t, "main")
@@ -242,7 +316,7 @@ func TestWriteOverlayPrompt_UsesAppendSourcesNotBase(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	body, err := os.ReadFile(filepath.Join(c.BaseDir, ".devcell", "prompts", "main", "additional-systemprompt.md"))
+	body, err := os.ReadFile(filepath.Join(c.WorkspaceHome, "prompts", "main", "additional-systemprompt.md"))
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}

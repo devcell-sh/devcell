@@ -16,9 +16,10 @@ func promptFlagsConfig(t *testing.T) config.Config {
 	return config.Config{
 		CellName:      "devcell-85",
 		BaseDir:       t.TempDir(),
+		WorkspaceHome: t.TempDir(),
 		WorkspaceName: "main",
-		HostUser: "warden",
-		HostHome: "/Users/warden",
+		HostUser:      "warden",
+		HostHome:      "/Users/warden",
 	}
 }
 
@@ -32,7 +33,7 @@ func TestClaudePromptFlags_EmitsAppendSystemPromptFile(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := []string{"--append-system-prompt-file", "/devcell-85/.devcell/prompts/main/additional-systemprompt.md"}
+	want := []string{"--append-system-prompt-file", "/home/warden/prompts/main/additional-systemprompt.md"}
 	if len(flags) != len(want) {
 		t.Fatalf("flags = %v, want %v", flags, want)
 	}
@@ -73,7 +74,7 @@ func TestClaudePromptFlags_WritesResolvedPromptToFile(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	body, err := os.ReadFile(filepath.Join(c.BaseDir, ".devcell", "prompts", "main", "additional-systemprompt.md"))
+	body, err := os.ReadFile(filepath.Join(c.WorkspaceHome, "prompts", "main", "additional-systemprompt.md"))
 	if err != nil {
 		t.Fatalf("read generated file: %v", err)
 	}
@@ -113,10 +114,10 @@ func TestClaudePromptFlags_EmitsBaseFlagWhenConfigured(t *testing.T) {
 	}
 
 	joined := strings.Join(flags, " ")
-	if !strings.Contains(joined, "--system-prompt-file /devcell-85/.devcell/prompts/main/system-prompt.md") {
+	if !strings.Contains(joined, "--system-prompt-file /home/warden/prompts/main/system-prompt.md") {
 		t.Errorf("expected base flag, got %v", flags)
 	}
-	if !strings.Contains(joined, "--append-system-prompt-file /devcell-85/.devcell/prompts/main/additional-systemprompt.md") {
+	if !strings.Contains(joined, "--append-system-prompt-file /home/warden/prompts/main/additional-systemprompt.md") {
 		t.Errorf("expected overlay flag, got %v", flags)
 	}
 }
@@ -149,7 +150,7 @@ func TestClaudePromptFlags_BaseAndOverlayAreSeparateFiles(t *testing.T) {
 	}
 
 	read := func(name string) string {
-		b, err := os.ReadFile(filepath.Join(c.BaseDir, ".devcell", "prompts", "main", name))
+		b, err := os.ReadFile(filepath.Join(c.WorkspaceHome, "prompts", "main", name))
 		if err != nil {
 			t.Fatalf("read %s: %v", name, err)
 		}
