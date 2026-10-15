@@ -3,6 +3,7 @@ package docker
 import (
 	streak "github.com/dimmkirr/go-streak-chart"
 
+	"github.com/devcell-sh/devcell/internal/cfg"
 	"github.com/devcell-sh/devcell/internal/ux"
 )
 
@@ -104,6 +105,13 @@ func bootGroups(binary string, opts groupOpts) []ux.PanelGroup {
 	return groups
 }
 
+// BootGroupCount is how many group rows bootGroups will draw for cellCfg:
+// the three fixed groups and Environment, plus Services when the GUI is on.
+// The cage sizes its boot popup from it before the engine builds the groups.
+func BootGroupCount(cellCfg cfg.CellConfig) int {
+	return len(bootGroups("", groupOpts{hasGUI: cellCfg.GUI.ResolvedEnabled()}))
+}
+
 // groupOpts controls which conditional steps appear.
 type groupOpts struct {
 	needsBuild     bool
@@ -122,42 +130,42 @@ type groupOpts struct {
 
 // titles maps "<component>.<state>" to a human title for boot panel rows.
 var titles = map[string]string{
-	"container.ready":   "Container started",
-	"entrypoint.ready":  "Entrypoint ready",
-	"s6.starting":       "Activating session services",
-	"s6.ready":          "Session services ready",
-	"nix.starting":      "Configuring nix",
-	"nix.ready":         "Nix ready",
-	"shell.starting":    "Configuring shell",
-	"shell.ready":       "Shell ready",
-	"nix-lib.starting":  "Wiring nix library paths",
-	"nix-lib.ready":     "Nix library paths ready",
-	"mise.starting":     "Loading mise tools",
-	"mise.ready":        "Mise ready",
-	"home.starting":     "Setting up home directory",
-	"home.ready":        "Home directory ready",
-	"secrets.starting":  "Injecting secrets",
-	"secrets.ready":     "Secrets ready",
-	"chromium.starting": "Releasing chromium locks",
-	"chromium.ready":    "Chromium ready",
-	"claude.starting":   "Initializing Claude",
-	"claude.ready":      "Claude ready",
-	"codex.starting":    "Initializing Codex",
-	"codex.ready":       "Codex ready",
-	"gemini.starting":   "Initializing Gemini",
-	"gemini.ready":      "Gemini ready",
-	"opencode.starting": "Initializing OpenCode",
-	"opencode.ready":    "OpenCode ready",
-	"postgres.starting": "Starting PostgreSQL",
-	"postgres.ready":    "PostgreSQL ready",
-	"gui.starting":            "Starting GUI",
-	"gui.ready":               "GUI ready",
-	"xvfb.ready":              "Display server ready",
-	"window-manager.ready":    "Window manager ready",
-	"xrdp.ready":              "Remote desktop ready",
-	"pulseaudio.ready":        "Audio server ready",
-	"dbus-session.ready":      "D-Bus session ready",
-	"boot.ready":              "",
+	"container.ready":      "Container started",
+	"entrypoint.ready":     "Entrypoint ready",
+	"s6.starting":          "Activating session services",
+	"s6.ready":             "Session services ready",
+	"nix.starting":         "Configuring nix",
+	"nix.ready":            "Nix ready",
+	"shell.starting":       "Configuring shell",
+	"shell.ready":          "Shell ready",
+	"nix-lib.starting":     "Wiring nix library paths",
+	"nix-lib.ready":        "Nix library paths ready",
+	"mise.starting":        "Loading mise tools",
+	"mise.ready":           "Mise ready",
+	"home.starting":        "Setting up home directory",
+	"home.ready":           "Home directory ready",
+	"secrets.starting":     "Injecting secrets",
+	"secrets.ready":        "Secrets ready",
+	"chromium.starting":    "Releasing chromium locks",
+	"chromium.ready":       "Chromium ready",
+	"claude.starting":      "Initializing Claude",
+	"claude.ready":         "Claude ready",
+	"codex.starting":       "Initializing Codex",
+	"codex.ready":          "Codex ready",
+	"gemini.starting":      "Initializing Gemini",
+	"gemini.ready":         "Gemini ready",
+	"opencode.starting":    "Initializing OpenCode",
+	"opencode.ready":       "OpenCode ready",
+	"postgres.starting":    "Starting PostgreSQL",
+	"postgres.ready":       "PostgreSQL ready",
+	"gui.starting":         "Starting GUI",
+	"gui.ready":            "GUI ready",
+	"xvfb.ready":           "Display server ready",
+	"window-manager.ready": "Window manager ready",
+	"xrdp.ready":           "Remote desktop ready",
+	"pulseaudio.ready":     "Audio server ready",
+	"dbus-session.ready":   "D-Bus session ready",
+	"boot.ready":           "",
 }
 
 func titleFor(component, state string) string {
@@ -168,27 +176,27 @@ func titleFor(component, state string) string {
 // in the panel. Entries cover both short names (entrypoint, s6, shell, ...)
 // and full s6 service names (shell-rc, nix-daemon, homedir, ...).
 var bootComponentStep = map[string]struct{ Group, Step string }{
-	"proxy":      {"Prepare", "Proxy"},
-	"container":  {"Boot", "Container"},
-	"entrypoint": {"Boot", "Entrypoint"},
-	"s6":         {"Boot", "Services"},
-	"nix":        {"Boot", "Nix daemon"},
-	"shell":      {"Environment", "Shell"},
-	"mise":       {"Environment", "Mise"},
-	"home":       {"Environment", "Home"},
-	"secrets":    {"Boot", "Secrets sync"},
-	"claude":     {"Environment", "Agent config"},
-	"codex":      {"Environment", "Agent config"},
-	"gemini":     {"Environment", "Agent config"},
-	"opencode":   {"Environment", "Agent config"},
-	"postgres":      {"Boot", "Postgres"},
-	"gui":           {"Environment", "GUI"},
-	"mcp-toggle":    {"Environment", "MCP"},
-	"xvfb":          {"Services", "Display"},
-	"window-manager":{"Services", "Desktop"},
-	"xrdp":          {"Services", "Remote access"},
-	"pulseaudio":    {"Services", "Audio"},
-	"dbus-session":  {"Services", "D-Bus"},
+	"proxy":          {"Prepare", "Proxy"},
+	"container":      {"Boot", "Container"},
+	"entrypoint":     {"Boot", "Entrypoint"},
+	"s6":             {"Boot", "Services"},
+	"nix":            {"Boot", "Nix daemon"},
+	"shell":          {"Environment", "Shell"},
+	"mise":           {"Environment", "Mise"},
+	"home":           {"Environment", "Home"},
+	"secrets":        {"Boot", "Secrets sync"},
+	"claude":         {"Environment", "Agent config"},
+	"codex":          {"Environment", "Agent config"},
+	"gemini":         {"Environment", "Agent config"},
+	"opencode":       {"Environment", "Agent config"},
+	"postgres":       {"Boot", "Postgres"},
+	"gui":            {"Environment", "GUI"},
+	"mcp-toggle":     {"Environment", "MCP"},
+	"xvfb":           {"Services", "Display"},
+	"window-manager": {"Services", "Desktop"},
+	"xrdp":           {"Services", "Remote access"},
+	"pulseaudio":     {"Services", "Audio"},
+	"dbus-session":   {"Services", "D-Bus"},
 	// s6 service names that differ from the short sentinel names above.
 	"nix-daemon":      {"Boot", "Nix daemon"},
 	"homedir":         {"Environment", "Home"},
@@ -204,7 +212,7 @@ var bootComponentStep = map[string]struct{ Group, Step string }{
 // and updates the boot panel. Handles both system events (from _notify in
 // the entrypoint) and service events (from devcell-event in s6 services).
 // Returns true when boot.ready arrived (clean finish), false on channel close.
-func ConsumeContainerEventsPanel(events <-chan ContainerEvent, panel *ux.BootPanel) bool {
+func ConsumeContainerEventsPanel(events <-chan ContainerEvent, panel ux.BootView) bool {
 	for ev := range events {
 		if ev.Service == "boot" && ev.Status == "ready" {
 			// Longruns emit "activating" at run-script start but exec

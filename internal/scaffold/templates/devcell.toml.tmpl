@@ -50,14 +50,24 @@
 # Keep the container/VM running after the shell exits. Default: false. Env: DEVCELL_BACKGROUND.
 # background = false
 #
+# Mount /var/run/docker.sock into the container. Default: true. Env: DEVCELL_DOCKER_SOCKET.
+# docker_socket = true
+#
 # Warn at start when the cell is behind its image. Default: true. Env: DEVCELL_STALE_WARN.
 # stale_warning = true
 #
 # Subcommand to run when `devcell` is invoked with no arguments. Env: DEVCELL_DEFAULT_COMMAND.
 # default_command = "claude"
 #
+# Opt-in experimental features, a list or a comma-separated string.
+# Flag: --experimental=ui-cage,ui-boot-popup. Env: DEVCELL_EXPERIMENTAL. Registry: docs/experimental.md.
+#   ui-cage        one-line bottom bar (workspace, cell name, clocks) drawn by a host tmux session
+#   ui-boot-popup   boot panel in a centred tmux popup, closed before the agent starts (needs ui-cage)
+#   engine-windows  Windows guest (os = "windows" or "winpe", engine winkit)
+# experimental = ["ui-cage", "ui-boot-popup"]
+#
 # --- Engine ---
-# Guest OS: linux (default), macos, windows (or winpe). Derives the engine when engine is unset.
+# Guest OS: linux (default), macos, windows (or winpe; experimental, needs experimental = ["engine-windows"]). Derives the engine when engine is unset.
 # os = "linux"
 #
 # Execution engine: docker (default), tart, winkit.
@@ -103,6 +113,23 @@
 # wm = "icewm"                     # icewm, fluxbox
 # resolution = "1920x1080x24"      # logical resolution, before scaling
 # scale = 1                        # 1 = 96 DPI, 2 = 192 DPI (HiDPI)
+
+# --- Cage bar colours (experimental = ["ui-cage"]) ---
+# Three elements, each with its own colours: workspace name, cell name, status panel
+# (clocks). bar_* colours the gap between them. name picks a preset; every other key
+# overrides one colour. Colours: "#rrggbb", "colour0".."colour255" or a name.
+# [theme]
+# name = "devcell"                 # devcell (cool tone, default), brand, nord, catppuccin-mocha, tokyo-night
+# workspace_bg = "#38bdf8"
+# workspace_fg = "#0f172a"
+# cell_bg = "#334155"
+# cell_fg = "#e2e8f0"
+# status_bg = "#1e293b"
+# status_fg = "#cbd5e1"
+# bar_bg = "#0f172a"
+# bar_fg = "#94a3b8"
+# accent = "#818cf8"               # copy-mode selection, messages
+# separator = " | "                # between status panel blocks
 
 # --- AI agents: all LLM settings in one place ---
 # [llm]

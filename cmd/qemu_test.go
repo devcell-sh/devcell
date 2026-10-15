@@ -38,7 +38,7 @@ func TestEngineQemu_DryRunShell(t *testing.T) {
 	home := qemuTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=winkit", "shell", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home, "TERM=xterm-256color")
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "DEVCELL_EXPERIMENTAL=engine-windows", "HOME="+home, "TERM=xterm-256color")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
@@ -65,7 +65,7 @@ func TestEngineQemu_DryRunClaude(t *testing.T) {
 	home := qemuTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=winkit", "claude", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "DEVCELL_EXPERIMENTAL=engine-windows", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
@@ -84,7 +84,7 @@ func TestEngineQemu_DryRunCustomSSHPort(t *testing.T) {
 	home := qemuTestHomeWithTOML(t, "[cell]\nwinkit_ssh_port = 3333\n")
 	cmd := exec.Command(binaryPath, "--engine=winkit", "shell", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "DEVCELL_EXPERIMENTAL=engine-windows", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
@@ -110,7 +110,7 @@ func TestEngineQemu_DeprecatedAliasForWinkit(t *testing.T) {
 	home := qemuTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=qemu", "shell", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "DEVCELL_EXPERIMENTAL=engine-windows", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
@@ -129,7 +129,7 @@ func TestBackgroundFlag_StrippedFromArgsQemu(t *testing.T) {
 	home := qemuTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=winkit", "--background", "shell", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "DEVCELL_EXPERIMENTAL=engine-windows", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
@@ -149,7 +149,7 @@ func TestEngineQemu_NoDebugOnLinux(t *testing.T) {
 	home := qemuTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=winkit", "shell")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "DEVCELL_EXPERIMENTAL=engine-windows", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected error on non-darwin without --debug, got exit 0:\n%s", out)
@@ -170,7 +170,7 @@ func TestEngineQemu_DebugMockOutput(t *testing.T) {
 	home := qemuTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=winkit", "--debug", "shell")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "DEVCELL_EXPERIMENTAL=engine-windows", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0 with --debug mock, got: %v\noutput: %s", err, out)
@@ -194,7 +194,7 @@ func TestEngineQemu_DebugMockNoDocker(t *testing.T) {
 	home := qemuTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=winkit", "--debug", "shell")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "DEVCELL_EXPERIMENTAL=engine-windows", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
@@ -210,7 +210,7 @@ func TestEngineQemu_BuildDryRun(t *testing.T) {
 	home := qemuTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=winkit", "build", "--dry-run", "--stack=base")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "DEVCELL_EXPERIMENTAL=engine-windows", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
@@ -228,7 +228,7 @@ func TestEngineQemu_BuildDryRun(t *testing.T) {
 // PE+WSL1 guest. Before cell.GuestEnv, qemu dropped [env] and [mise] and did
 // not set LC_ALL or IS_SANDBOX.
 func TestEngineQemu_DryRunGuestEnv(t *testing.T) {
-	assertGuestEnvDryRun(t, "--engine=winkit")
+	assertGuestEnvDryRun(t, "--engine=winkit", "--experimental=engine-windows")
 }
 
 // --stack=<name> and --force in an agent's args are cell's, not the
@@ -237,7 +237,7 @@ func TestEngineWinkit_DryRunTakesStackAndForceFromArgs(t *testing.T) {
 	home := qemuTestHome(t)
 	cmd := exec.Command(binaryPath, "--engine=winkit", "shell", "--stack=go", "--force", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "DEVCELL_EXPERIMENTAL=engine-windows", "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got: %v\noutput: %s", err, out)
@@ -249,6 +249,30 @@ func TestEngineWinkit_DryRunTakesStackAndForceFromArgs(t *testing.T) {
 	for _, arg := range []string{"--stack", "--force"} {
 		if strings.Contains(s, arg) {
 			t.Errorf("%s must not reach the guest command, got:\n%s", arg, s)
+		}
+	}
+}
+
+// --experimental is a persistent flag: cobra-parsed commands accept it after
+// the subcommand and validate it, instead of failing with "unknown flag".
+func TestExperimentalFlag_AcceptedAfterEverySubcommand(t *testing.T) {
+	home := qemuTestHome(t)
+	for _, args := range [][]string{
+		{"build", "--experimental=nope", "--dry-run"},
+		{"init", "--experimental=nope", "--dry-run"},
+		{"start", "--experimental=nope", "--dry-run"},
+		{"stop", "--experimental=nope"},
+		{"experimental", "--experimental=nope"},
+		{"shell", "--experimental=nope", "--dry-run"},
+		{"--experimental=nope", "build", "--dry-run"},
+	} {
+		cmd := exec.Command(binaryPath, args...)
+		cmd.Dir = home
+		cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "DEVCELL_EXPERIMENTAL=", "HOME="+home)
+		out, _ := cmd.CombinedOutput()
+		s := string(out)
+		if strings.Contains(s, "unknown flag") || !strings.Contains(s, "unknown experimental feature") {
+			t.Errorf("devcell %v: want the experimental validation error, got:\n%s", args, s)
 		}
 	}
 }

@@ -100,3 +100,24 @@ func TestRewriteDefaultCommand_HelpAndVersionUntouched(t *testing.T) {
 		}
 	}
 }
+
+// Cell flags may come before an explicit subcommand (`devcell --os macos
+// build`, `devcell --experimental=ui-cage shell`): the subcommand still wins
+// and the default command is not injected. A bare agent flag still is.
+func TestRewriteDefaultCommand_CellFlagsBeforeSubcommand(t *testing.T) {
+	cases := []struct {
+		in, want []string
+	}{
+		{[]string{"--experimental=ui-cage", "build", "--dry-run"}, []string{"--experimental=ui-cage", "build", "--dry-run"}},
+		{[]string{"--experimental", "ui-cage,ui-boot-popup", "shell"}, []string{"--experimental", "ui-cage,ui-boot-popup", "shell"}},
+		{[]string{"--os", "windows", "--dry-run", "build"}, []string{"--os", "windows", "--dry-run", "build"}},
+		{[]string{"--experimental=ui-cage,ui-boot-popup"}, []string{"claude", "--experimental=ui-cage,ui-boot-popup"}},
+		{[]string{"--experimental=ui-cage", "-c"}, []string{"claude", "--experimental=ui-cage", "-c"}},
+		{[]string{"-c"}, []string{"claude", "-c"}},
+	}
+	for _, tc := range cases {
+		if got := rewriteDefaultCommand(tc.in, "claude", testKnownCmds()); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%v: got %v, want %v", tc.in, got, tc.want)
+		}
+	}
+}

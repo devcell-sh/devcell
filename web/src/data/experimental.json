@@ -1,0 +1,26 @@
+[
+  {
+    "name": "ui-cage",
+    "group": "ui",
+    "summary": "one-line bottom bar (workspace, cell name, clocks) drawn by a host tmux session around the agent",
+    "doc": "docs/cage.md",
+    "ticket": "CELL-655",
+    "state": "active"
+  },
+  {
+    "name": "ui-boot-popup",
+    "group": "ui",
+    "summary": "boot panel in a centred tmux popup, closed before the agent starts (needs ui-cage)",
+    "doc": "docs/cage.md",
+    "ticket": "CELL-657",
+    "state": "active"
+  },
+  {
+    "name": "engine-windows",
+    "group": "engine",
+    "summary": "Windows guest (--os windows or winpe): a Windows PE + WSL VM run by the winkit engine on vz or QEMU",
+    "doc": "README.md#engines-and-guests",
+    "ticket": "",
+    "state": "active"
+  }
+]

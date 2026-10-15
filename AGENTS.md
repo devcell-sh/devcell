@@ -34,7 +34,7 @@ Note: `workspace` also appears in `internal/serve/` for the MS-TSWP RDP protocol
 
 Every behavioral change to `cmd/`, `internal/`, or `nixhome/modules/llm/*.nix` lands with a test that was failing before the change. Write the failing test first, implement the minimum to pass, then refactor.
 
-Applies to: a new flag, env var, TOML key, or CLI subcommand (`cmd/*_test.go`); a new `internal/*` function with observable behavior (same package); a new MCP server or docker argv field (`internal/engine/docker/*_test.go`); a new system-prompt source (`internal/cell/*_test.go`); a change to another engine's argv, options or capability table (`internal/engine/**/*_test.go`).
+Applies to: a new flag, env var, TOML key, or CLI subcommand (`cmd/*_test.go`); a new `internal/*` function with observable behavior (same package); a new MCP server or docker argv field (`internal/engine/docker/*_test.go`); a new system-prompt source (`internal/cell/*_test.go`); a change to another engine's argv, options or capability table (`internal/engine/**/*_test.go`); a new experimental feature (`internal/experiments/*_test.go` for the registry entry, plus the gated code path's own package).
 
 No new test required for: pure refactors, docs, dependency bumps, nix module additions (nixhome now lives in `devcell-sh/community-home`), or entrypoint shell fragments (covered by `test/`).
 
@@ -43,6 +43,10 @@ Integration tests in `test/` split into short and long buckets by image-build co
 ## Deprecation workflow
 
 Never remove or rename a user-facing TOML key, command or flag in one step. See [docs/deprecation.md](docs/deprecation.md) for the full process.
+
+## Experimental features
+
+Anything not ready for the deprecation contract above ships behind the experimental gate, never behind its own flag or key. Register it in `internal/experiments` (name `<group>-<slug>`, e.g. `ui-cage`, `engine-windows`), guard the code path with `set.Enabled(experiments.X)` or `experiments.Require(...)`, run `task docs:experimental`, and mark it in prose with `<sup>e</sup>` (README) or `<Exp name="..."/>` (website). See [docs/experimental.md](docs/experimental.md) for the lifecycle and the full checklist.
 
 ## Nix environment layout
 

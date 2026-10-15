@@ -220,6 +220,12 @@ func (g schemaGen) object(t reflect.Type, path []string) map[string]any {
 
 // schema maps a Go type to its JSON Schema fragment.
 func (g schemaGen) schema(t reflect.Type, path []string) map[string]any {
+	if t == reflect.TypeOf(StringList(nil)) {
+		return map[string]any{"anyOf": []any{
+			map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			map[string]any{"type": "string", "description": "comma-separated list"},
+		}}
+	}
 	switch t.Kind() {
 	case reflect.String:
 		return map[string]any{"type": "string"}

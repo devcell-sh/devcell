@@ -9,14 +9,17 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/devcell-sh/devcell/internal/cage"
 	"github.com/devcell-sh/devcell/internal/cfg"
 	"github.com/devcell-sh/devcell/internal/config"
 	"github.com/devcell-sh/devcell/internal/engine"
 	"github.com/devcell-sh/devcell/internal/engine/docker"
+	"github.com/devcell-sh/devcell/internal/experiments"
 	"github.com/devcell-sh/devcell/internal/scaffold"
 	"github.com/devcell-sh/devcell/internal/telemetry"
 	"github.com/devcell-sh/devcell/internal/ux"
 	"github.com/devcell-sh/devcell/internal/version"
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
 
@@ -85,6 +88,13 @@ func rewriteDefaultCommand(args []string, defaultCmd string, knownCmds map[strin
 		if knownCmds[first] {
 			return args
 		}
+		// Cell flags may precede the subcommand: `devcell --os macos build`
+		// or `devcell --experimental=ui-cage shell`. Cobra parses them as
+		// persistent flags, so the args are left alone when a known command
+		// follows them.
+		if knownCmds[firstAfterCellFlags(args)] {
+			return args
+		}
 		switch first {
 		case "--help", "-h", "--version", "help", "completion", "__complete", "__completeNoDesc":
 			return args
@@ -98,6 +108,26 @@ func rewriteDefaultCommand(args []string, defaultCmd string, knownCmds map[strin
 		}
 	}
 	return append([]string{defaultCmd}, args...)
+}
+
+// firstAfterCellFlags returns the first arg that is not a cell flag or a
+// cell flag's value, else "".
+func firstAfterCellFlags(args []string) string {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if cellBoolFlags[a] {
+			continue
+		}
+		if cellStringFlags[a] {
+			i++ // the value
+			continue
+		}
+		if name, _, ok := strings.Cut(a, "="); ok && cellStringFlags[name] {
+			continue
+		}
+		return a
+	}
+	return ""
 }
 
 // applyDefaultCommand resolves default_command from config and rewrites
@@ -242,6 +272,7 @@ func init() {
 	rootCmd.PersistentFlags().String("format", "text", "output format: text, yaml, or json")
 	rootCmd.PersistentFlags().String("engine", "", "execution engine, how the cell runs: docker (Linux container), tart (macOS VM) or winkit (Windows VM); default: picked from --os, else docker")
 	rootCmd.PersistentFlags().String("os", "", "guest OS inside the cell: linux (docker), macos (tart), windows or winpe (winkit, Windows PE + WSL1); picks the engine when --engine is unset")
+	rootCmd.PersistentFlags().String("experimental", "", "comma-separated experimental features to turn on (see `devcell experimental`); also DEVCELL_EXPERIMENTAL and [cell] experimental")
 	rootCmd.PersistentFlags().Bool("local", false, "no effect (the libvirt engine was retired)")
 	_ = rootCmd.PersistentFlags().MarkHidden("local")
 	rootCmd.PersistentFlags().Bool("background", false, "keep VM/container running after shell exit")
@@ -286,6 +317,8 @@ func init() {
 		authCmd,
 		telemetryCmd,
 		openapiCmd,
+		bootUICmd,
+		experimentalCmd,
 	)
 }
 
@@ -326,35 +359,36 @@ func applyOutputFlagsWithLog(commandName string) {
 
 // cellBoolFlags are boolean flags consumed by devcell: strip the flag token only.
 var cellBoolFlags = map[string]bool{
-	"--build":        true,
-	"--background":   true,
-	"--dry-run":      true,
-	"--plain-text":   true,
-	"--debug":        true,
-	"--macos":        true, // deprecated alias for --os macos
-	"--ollama":       true,
-	"--openrouter":   true,
-	"--nix-daemon":   true, // enable nix-daemon inside container for runtime package installs
-	"--thin":         true, // thin image mode (default)
-	"--no-thin":      true, // legacy, ignored
-	"--thick":        true, // legacy, ignored
-	"--no-secrets":   true, // skip all secrets injection: op item get + op run -- prefix
-	"--skip-secrets": true, // alias for --no-secrets
-	"--no-1password": true, // alias for --no-secrets (legacy, CELL-42)
-	"--local":        true, // deprecated no-op: only skipped the retired libvirt auto-default
-	"--auto-cleanup": true, // run the CELL-334 root reaper at cell start (CELL-390)
-	"--use-flake":    true, // opt-in to project-level flake.nix install (CELL-447)
-	"--no-flake":     true, // legacy, ignored (flake is off by default now)
-	"--skip-flake":   true, // legacy, ignored
-	"--no-ports":              true, // skip allocating docker ports even if [ports] is configured
+	"--build":                  true,
+	"--background":             true,
+	"--dry-run":                true,
+	"--plain-text":             true,
+	"--debug":                  true,
+	"--macos":                  true, // deprecated alias for --os macos
+	"--ollama":                 true,
+	"--openrouter":             true,
+	"--nix-daemon":             true, // enable nix-daemon inside container for runtime package installs
+	"--thin":                   true, // thin image mode (default)
+	"--no-thin":                true, // legacy, ignored
+	"--thick":                  true, // legacy, ignored
+	"--no-secrets":             true, // skip all secrets injection: op item get + op run -- prefix
+	"--skip-secrets":           true, // alias for --no-secrets
+	"--no-1password":           true, // alias for --no-secrets (legacy, CELL-42)
+	"--local":                  true, // deprecated no-op: only skipped the retired libvirt auto-default
+	"--auto-cleanup":           true, // run the CELL-334 root reaper at cell start (CELL-390)
+	"--use-flake":              true, // opt-in to project-level flake.nix install (CELL-447)
+	"--no-flake":               true, // legacy, ignored (flake is off by default now)
+	"--skip-flake":             true, // legacy, ignored
+	"--no-ports":               true, // skip allocating docker ports even if [ports] is configured
 	"--force-insecure-network": true, // disable proxy mode, run with open egress (CELL-623)
-	"--solitary":              true, // full lockdown: proxy on, dangerous settings stripped (CELL-623)
+	"--solitary":               true, // full lockdown: proxy on, dangerous settings stripped (CELL-623)
 }
 
 // cellStringFlags are string flags consumed by devcell: strip the flag token
 // AND its value (handles both "--flag value" and "--flag=value" forms).
 var cellStringFlags = map[string]bool{
 	"--engine":             true,
+	"--experimental":       true, // comma-separated experimental features (internal/experiments)
 	"--os":                 true,
 	"--vagrant-provider":   true, // deprecated no-op: the vagrant engine was retired
 	"--vagrant-box":        true, // deprecated no-op: the vagrant engine was retired
@@ -485,30 +519,74 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 	// expanding, so $SECRET_VAR references work. Tart and winkit expand
 	// immediately (no secrets to wait for).
 
+	exp, err := experimental(cellCfg.Cell)
+	if err != nil {
+		return err
+	}
+	dryRun := scanFlag("--dry-run")
+
+	// CELL-655: the cage is a host tmux session with a one-line bar; devcell
+	// re-runs itself inside it so the boot panel and the agent both render
+	// under the bar. The inner run sees DEVCELL_CAGE=1 and skips this.
+	if exp.Enabled(experiments.Cage) && !cage.Active() && !dryRun {
+		theme, err := cage.ResolveTheme(cellCfg.Theme)
+		if err != nil {
+			return err
+		}
+		if cage.Enabled(isatty.IsTerminal(os.Stdin.Fd()), isatty.IsTerminal(os.Stdout.Fd())) {
+			return cage.Run(cage.Spec{
+				WorkspaceName: c.WorkspaceName,
+				CellID:        c.CellID,
+				CellName:      c.CellName,
+				WorkspaceHome: c.WorkspaceHome,
+				Theme:         theme,
+			}, binary, osArgs[1:])
+		}
+	}
+
 	opts := runOpts(engineCell(c, cellCfg), binary, defaultFlags, userArgs, extraEnv)
+	// The bar already names the workspace and cell.
+	opts.HideBanner = cage.Active()
 	// thin: docker runs thin images; the VM engines report false.
 	telemetry.TrackCommandRun(filepath.Base(binary), string(engineName), opts.Cell.Stack, opts.Cell.Modules, engineName == engine.Docker)
+
+	// CELL-657: inside the cage, the boot panel renders in a tmux popup
+	// that is closed before the agent is attached. Docker only.
+	if cage.Active() && exp.Enabled(experiments.BootPopup) && engineName == engine.Docker && !dryRun {
+		if p := startBootPopup(c, cellCfg, opts); p != nil {
+			opts.NewBootView = p.NewBootView
+			opts.BeforeAttach = p.BeforeAttach
+			return p.Finish(runEngine(engineName, opts))
+		}
+	}
 	return runEngine(engineName, opts)
+}
+
+// experimental resolves the enabled experimental features from
+// --experimental=a,b and the config (which unions [cell] experimental with
+// DEVCELL_EXPERIMENTAL, like every other env override).
+func experimental(c cfg.CellSection) (experiments.Set, error) {
+	return experiments.Resolve(scanStringFlag(experiments.Flag), c.ResolvedExperimental())
 }
 
 // runOpts is the engine.RunOpts for an agent command: cell c, the agent, and
 // the cell flags scanned from argv.
 func runOpts(c engine.Cell, binary string, defaultFlags, userArgs []string, extraEnv map[string]string) engine.RunOpts {
 	return engine.RunOpts{
-		Cell:         c,
-		Binary:       binary,
-		DefaultFlags: defaultFlags,
-		Args:         userArgs,
-		Env:          extraEnv,
-		Rebuild:      scanFlag("--build"),
-		Background:   scanFlag("--background"),
-		DryRun:       scanFlag("--dry-run"),
-		Debug:        scanFlag("--debug"),
-		Detach:       startDetach,
-		NoSecrets:    scanFlag("--no-secrets") || scanFlag("--skip-secrets") || scanFlag("--no-1password"),
-		NixDaemon:    scanFlag("--nix-daemon"),
-		NoPorts:      scanFlag("--no-ports"),
-		UseFlake:     scanFlag("--use-flake"),
+		Cell:                 c,
+		Binary:               binary,
+		DefaultFlags:         defaultFlags,
+		Args:                 userArgs,
+		Env:                  extraEnv,
+		Rebuild:              scanFlag("--build"),
+		Background:           scanFlag("--background"),
+		DryRun:               scanFlag("--dry-run"),
+		Debug:                scanFlag("--debug"),
+		Detach:               startDetach,
+		NoSecrets:            scanFlag("--no-secrets") || scanFlag("--skip-secrets") || scanFlag("--no-1password"),
+		NixDaemon:            scanFlag("--nix-daemon"),
+		NoPorts:              scanFlag("--no-ports"),
+		UseFlake:             scanFlag("--use-flake"),
 		AutoCleanup:          scanFlag("--auto-cleanup"),
 		ForceInsecureNetwork: scanFlag("--force-insecure-network") || os.Getenv("DEVCELL_FORCE_INSECURE_NETWORK") == "1",
 		Solitary:             scanFlag("--solitary") || os.Getenv("DEVCELL_SOLITARY") == "1",

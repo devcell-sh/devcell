@@ -23,7 +23,7 @@ const topCommands = allDocs
 // Guide pages grouped by prefix
 const guides = allDocs.filter((d) => d.id.startsWith('quickstart'));
 const configDocs = allDocs
-  .filter((d) => d.id === 'configuration' || d.id === 'stacks-and-modules')
+  .filter((d) => d.id === 'configuration' || d.id === 'stacks-and-modules' || d.id === 'experimental')
   .sort((a, b) => a.id.localeCompare(b.id));
 const howtos = allDocs
   .filter((d) => d.id.startsWith('howto-'))

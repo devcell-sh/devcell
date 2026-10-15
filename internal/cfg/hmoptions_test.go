@@ -54,7 +54,7 @@ func TestHMOptionsNix_EmitsAllTopLevelSections(t *testing.T) {
 	for _, section := range []string{
 		"cell = {", "build = {", "nix = {", "llm = {", "git = {",
 		"ports = {", "op = {", "aws = {", "stealth = {", "gui = {",
-		"packages = {",
+		"packages = {", "theme = {",
 	} {
 		if !strings.Contains(out, section) {
 			t.Errorf("missing section %q", section)

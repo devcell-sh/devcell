@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+- `--experimental=<names>` (also `[cell] experimental` and `DEVCELL_EXPERIMENTAL`): the shared gate for experimental features, backed by the `internal/experiments` registry that also generates the README and website lists; `devcell experimental` prints it. See [docs/experimental.md](docs/experimental.md).
+  - `ui-cage` wraps the run in a host tmux session with a one-line bottom bar (workspace, cell name, UTC and ET clocks; `[theme]` picks or overrides colours) (CELL-655). `ui-boot-popup` renders the boot panel in a centred tmux popup that is closed before the agent starts (CELL-657). See [docs/cage.md](docs/cage.md).
+  - `engine-windows`: the Windows guest (`--os windows` or `winpe`, engine `winkit`) is now explicitly experimental and refuses to run until the experiment is on. Previously it ran unguarded.
+
 ## [v0.9.0] - 2026-08-28
 
 - Extracted nixhome into standalone [devcell-sh/community-home](https://github.com/devcell-sh/home) repo

@@ -22,7 +22,7 @@ const DefaultRegistry = "ghcr.io/devcell-sh/devcell"
 // DefaultNixImage is the pinned nixos/nix image for thin builds.
 // Pinned because nixos/nix symlinks /etc files into /nix/store; upgrading
 // changes the store hash and breaks when a shared volume is mounted over /nix.
-const DefaultNixImage = "nixos/nix:2.34.7"
+const DefaultNixImage = "docker.io/nixos/nix:2.34.9"
 
 // DefaultTartOCIImage is the default macOS base image for tart VMs.
 const DefaultTartOCIImage = "ghcr.io/cirruslabs/macos-tahoe-base:latest"
@@ -48,6 +48,7 @@ type CellSection struct {
 	Thin             *bool             `toml:"thin"`                    // thin image mode; default: true; disable with thin=false or DEVCELL_THIN=0
 	StaleWarning     *bool             `toml:"stale_warning"`           // CELL-391 "cell is behind — parallel reality" nudge at start; default: true; env: DEVCELL_STALE_WARN
 	Background       *bool             `toml:"background"`              // keep VM/container running after shell exit; default: false; env: DEVCELL_BACKGROUND
+	Experimental     StringList        `toml:"experimental"`            // opt-in experimental features, e.g. ["ui-cage", "ui-boot-popup"]; flag: --experimental=a,b; env: DEVCELL_EXPERIMENTAL=a,b; names and the gate live in internal/experiments
 	TartSSHPort      int               `toml:"tart_ssh_port"`           // SSH port for tart engine; default: 22; env: DEVCELL_TART_SSH_PORT
 	TartSSHHost      string            `toml:"tart_ssh_host"`           // SSH host for tart engine; default: "localhost"; env: DEVCELL_TART_SSH_HOST
 	TartSSHUser      string            `toml:"tart_ssh_user"`           // SSH user for tart engine; default: "admin"; env: DEVCELL_TART_SSH_USER
@@ -125,6 +126,58 @@ func (c CellSection) ResolvedBackground() bool {
 		return *c.Background
 	}
 	return false
+}
+
+// StringList is a []string that TOML may spell as a list or as one
+// comma-separated string: experimental = ["a", "b"] or experimental = "a,b".
+type StringList []string
+
+// UnmarshalTOML implements toml.Unmarshaler.
+func (l *StringList) UnmarshalTOML(v any) error {
+	switch x := v.(type) {
+	case string:
+		*l = nil
+		for _, part := range strings.Split(x, ",") {
+			if part = strings.TrimSpace(part); part != "" {
+				*l = append(*l, part)
+			}
+		}
+		return nil
+	case []any:
+		out := make(StringList, 0, len(x))
+		for _, item := range x {
+			s, ok := item.(string)
+			if !ok {
+				return fmt.Errorf("list item %v is not a string", item)
+			}
+			out = append(out, s)
+		}
+		*l = out
+		return nil
+	}
+	return fmt.Errorf("want a list of strings or a comma-separated string, got %T", v)
+}
+
+// ResolvedExperimental is the experimental features named in [cell]
+// experimental plus DEVCELL_EXPERIMENTAL (comma-separated), unioned, trimmed
+// and deduplicated, in that order. Validation and the --experimental flag
+// are internal/experiments' job (see experiments.Resolve).
+func (c CellSection) ResolvedExperimental() []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(names []string) {
+		for _, n := range names {
+			n = strings.TrimSpace(n)
+			if n == "" || seen[n] {
+				continue
+			}
+			seen[n] = true
+			out = append(out, n)
+		}
+	}
+	add(c.Experimental)
+	add(strings.Split(os.Getenv("DEVCELL_EXPERIMENTAL"), ","))
+	return out
 }
 
 // FlakeEnabled returns whether project-level flake.nix install is enabled: env > toml > false.
@@ -920,12 +973,13 @@ type NixSection struct {
 }
 
 // ResolvedImage returns the effective nix image: env > toml > default.
+// The result is always fully qualified (docker.io/ prefix) for Podman compatibility.
 func (n NixSection) ResolvedImage() string {
 	if v := os.Getenv("DEVCELL_NIX_IMAGE"); v != "" {
-		return v
+		return QualifyImage(v)
 	}
 	if n.Image != "" {
-		return n.Image
+		return QualifyImage(n.Image)
 	}
 	return DefaultNixImage
 }
@@ -1094,6 +1148,7 @@ type CellConfig struct {
 	Mcp       McpSection     `toml:"mcp"`
 	Stealth   StealthSection `toml:"stealth"`
 	GUI       GUISection     `toml:"gui"`
+	Theme     ThemeSection   `toml:"theme"`
 	Network   NetworkSection `toml:"network"`
 	Env       map[string]string
 	Mise      map[string]string `toml:"mise"` // [mise] — keys map to MISE_<UPPER_KEY> env vars
@@ -1102,6 +1157,26 @@ type CellConfig struct {
 	Wireguard []WireguardEntry `toml:"wireguard"`
 
 	DeprecatedUses []DeprecatedUse `toml:"-"` // deprecated keys found while loading, in file order
+}
+
+// ThemeSection holds [theme]: colours of the CELL-655 cage bar. name picks
+// a preset (devcell, brand, nord, catppuccin-mocha, tokyo-night); every
+// other key overrides one colour of that preset. The bar has three elements,
+// each with its own colours: the workspace name, the cell name and the
+// status panel (clocks). Colours are tmux colours: "#rrggbb",
+// "colour0".."colour255", or a name such as "brightblue".
+type ThemeSection struct {
+	Name        string `toml:"name"`         // preset; default: "devcell" (cool tone)
+	BarBG       string `toml:"bar_bg"`       // background of the bar between elements
+	BarFG       string `toml:"bar_fg"`       // foreground of the bar between elements
+	WorkspaceBG string `toml:"workspace_bg"` // workspace name element
+	WorkspaceFG string `toml:"workspace_fg"`
+	CellBG      string `toml:"cell_bg"` // cell name element (<project>-<cellID>)
+	CellFG      string `toml:"cell_fg"`
+	StatusBG    string `toml:"status_bg"` // status panel (clocks), right-aligned
+	StatusFG    string `toml:"status_fg"`
+	Accent      string `toml:"accent"`    // copy-mode selection and messages
+	Separator   string `toml:"separator"` // between status panel blocks; default: " | "
 }
 
 // LoadFile parses a TOML file into CellConfig.

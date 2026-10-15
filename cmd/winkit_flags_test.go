@@ -14,7 +14,7 @@ func runWinkit(t *testing.T, projectTOML string, extraEnv []string, args ...stri
 	home := qemuTestHomeWithTOML(t, projectTOML)
 	cmd := exec.Command(binaryPath, args...)
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "DEVCELL_BUNK=", "HOME="+home, "XDG_CONFIG_HOME=",
+	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "DEVCELL_BUNK=", "DEVCELL_EXPERIMENTAL=engine-windows", "HOME="+home, "XDG_CONFIG_HOME=",
 		"DEVCELL_WINKIT_WINDOWS_ISO=", "DEVCELL_QEMU_WINDOWS_ISO=",
 		"DEVCELL_WINKIT_SSH_PORT=", "DEVCELL_QEMU_SSH_PORT=",
 		"DEVCELL_WORKSPACE=test", "DEVCELL_CELL_NAME=")

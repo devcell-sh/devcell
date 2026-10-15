@@ -204,3 +204,17 @@ func TestScanStringFlag_Missing(t *testing.T) {
 		t.Errorf("want empty string, got %q", got)
 	}
 }
+
+// --experimental is a devcell flag in both forms, never forwarded to the agent.
+func TestStripCellFlags_ExperimentalStripped(t *testing.T) {
+	for _, in := range [][]string{
+		{"--experimental=ui-cage,ui-boot-popup", "--resume"},
+		{"--experimental", "ui-cage", "--resume"},
+	} {
+		got := stripCellFlags(in)
+		want := []string{"--resume"}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("stripCellFlags(%v) = %v, want %v", in, got, want)
+		}
+	}
+}

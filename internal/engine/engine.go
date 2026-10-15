@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"github.com/devcell-sh/devcell/internal/cfg"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 // Engine is one runtime a cell can run on. Each verb gets everything it
@@ -122,6 +123,18 @@ type RunOpts struct {
 	// strips dangerous caps/mounts/privileged, and isolates the container
 	// from the host (--solitary). Docker only.
 	Solitary bool
+
+	// NewBootView, when set, builds the boot panel the engine reports
+	// progress to instead of the inline ux.BootPanel (CELL-657: the cage
+	// renders it in a tmux popup). Docker only.
+	NewBootView func(groups []ux.PanelGroup) ux.BootView
+	// HideBanner drops the "<workspace> > <cell>" line above the boot panel
+	// (the cage's bar already shows it).
+	HideBanner bool
+	// BeforeAttach, when set, runs after the cell is booted and before the
+	// agent is attached to the terminal. An error aborts the run without
+	// starting the agent. Docker only.
+	BeforeAttach func() error
 }
 
 // BuildOpts configures Engine.Build.

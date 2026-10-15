@@ -94,8 +94,16 @@ tasks:
     desc: Generate cell CLI markdown reference for the web site (requires Go)
     dir: "{{.TASKFILE_DIR}}"
     silent: true
+    deps: [docs:experimental]
     cmds:
-      - go run $(ls cmd/*.go | grep -Ev '(_test|main)\.go') web/src/content/cell
+      - go run $(ls cmd/*.go | grep -Ev '(_test|main|schemagen|hmoptgen|catalogen|expgen)\.go') web/src/content/cell
+
+  docs:experimental:
+    desc: Regenerate the experimental-features blocks (README.md, docs/experimental.md, web/src/data/experimental.json, web/src/content/cell/experimental.md) from internal/experiments
+    dir: "{{.TASKFILE_DIR}}"
+    silent: true
+    cmds:
+      - go run cmd/expgen.go
 
   hm:generate:
     desc: Regenerate nix/home-manager/options.nix from the Go config schema (internal/cfg.CellConfig)

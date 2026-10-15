@@ -30,6 +30,7 @@ in
     thin = opt types.bool;
     stale_warning = opt types.bool;
     background = opt types.bool;
+    experimental = opt (types.listOf types.str);
     tart_ssh_port = opt types.int;
     tart_ssh_host = opt types.str;
     tart_ssh_user = opt types.str;
@@ -119,6 +120,19 @@ in
     wm = opt types.str;
     resolution = opt types.str;
     scale = opt types.int;
+  };
+  theme = {
+    name = opt types.str;
+    bar_bg = opt types.str;
+    bar_fg = opt types.str;
+    workspace_bg = opt types.str;
+    workspace_fg = opt types.str;
+    cell_bg = opt types.str;
+    cell_fg = opt types.str;
+    status_bg = opt types.str;
+    status_fg = opt types.str;
+    accent = opt types.str;
+    separator = opt types.str;
   };
   network = {
     proxy = {

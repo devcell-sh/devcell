@@ -1,4 +1,5 @@
 ---
+import Exp from './Exp.astro';
 ---
 
 <section id="runs-in" class="runs-in-wrap">
@@ -19,7 +20,7 @@
     </div>
     <div class="env-card">
       <img src="/logos/windows.png" alt="Windows" class="env-icon" />
-      <h3>Windows</h3>
+      <h3>Windows<Exp name="engine-windows" /></h3>
       <p>QEMU Windows VM with WSL inside.</p>
       <code>devcell claude --os windows</code>
     </div>

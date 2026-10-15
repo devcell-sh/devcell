@@ -13,11 +13,13 @@ import (
 	_ "github.com/devcell-sh/devcell/internal/engine/docker" // registers engine.Docker
 	_ "github.com/devcell-sh/devcell/internal/engine/tart"   // registers engine.Tart
 	_ "github.com/devcell-sh/devcell/internal/engine/winkit" // registers engine.Winkit
+	"github.com/devcell-sh/devcell/internal/experiments"
 	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 // resolveEngine picks the engine from --engine, --os and the [cell] engine
-// and os keys, in engine.Resolve's precedence. The deprecated --macos flag
+// and os keys, in engine.Resolve's precedence. The winkit engine (Windows
+// guest) needs the engine-windows experiment, else it is an error. The deprecated --macos flag
 // stands for --os macos when --os is unset; its own warning comes from
 // warnDeprecatedFlags or cobra. A deprecated engine name ("qemu") warns on
 // w here, once per invocation.
@@ -28,6 +30,20 @@ func resolveEngine(w io.Writer, cellCfg cfg.CellConfig) (engine.Name, error) {
 	}
 	if deprecation != "" {
 		ux.DeprecatedLine(w, deprecation)
+	}
+	// Every engine command resolves the experimental set here, so a typo in
+	// --experimental fails the same way on build, start or stop as on an
+	// agent command. The Windows guest is experimental: winkit only runs
+	// with experiments.Windows on, whichever of --os, --engine or [cell]
+	// named it.
+	exp, err := experimental(cellCfg.Cell)
+	if err != nil {
+		return "", err
+	}
+	if n == engine.Winkit {
+		if err := experiments.Require(exp, experiments.Windows, "the windows guest (engine winkit)"); err != nil {
+			return "", err
+		}
 	}
 	return n, nil
 }

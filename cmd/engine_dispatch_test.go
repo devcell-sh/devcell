@@ -13,6 +13,7 @@ import (
 	"github.com/devcell-sh/devcell/internal/cfg"
 	"github.com/devcell-sh/devcell/internal/config"
 	"github.com/devcell-sh/devcell/internal/engine"
+	"github.com/devcell-sh/devcell/internal/experiments"
 )
 
 func withOSArgs(t *testing.T, args ...string) {
@@ -323,5 +324,44 @@ func TestRunEngine_UnregisteredEngine(t *testing.T) {
 func TestTartEngineIsLinkedIn(t *testing.T) {
 	if _, err := engine.For(engine.Tart); err != nil {
 		t.Errorf("engine.For(tart): %v", err)
+	}
+}
+
+// Experimental features come from --experimental (both flag forms), the env
+// var and [cell] experimental; nothing is on by default.
+func TestExperimental_FlagFormsAndUnion(t *testing.T) {
+	t.Setenv("DEVCELL_EXPERIMENTAL", "")
+	cases := []struct {
+		name  string
+		args  []string
+		toml  []string
+		cage  bool
+		popup bool
+	}{
+		{"default off", nil, nil, false, false},
+		{"flag equals form", []string{"--experimental=ui-cage"}, nil, true, false},
+		{"flag space form", []string{"--experimental", "ui-cage,ui-boot-popup"}, nil, true, true},
+		{"toml", nil, []string{"ui-boot-popup"}, false, true},
+		{"flag and toml union", []string{"--experimental=ui-cage"}, []string{"ui-boot-popup"}, true, true},
+		{"env via cfg", nil, nil, false, true}, // DEVCELL_EXPERIMENTAL=ui-boot-popup set below
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.name == "env via cfg" {
+				t.Setenv("DEVCELL_EXPERIMENTAL", "ui-boot-popup")
+			}
+			withOSArgs(t, append([]string{"claude"}, tc.args...)...)
+			e, err := experimental(cfg.CellSection{Experimental: tc.toml})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if e.Enabled(experiments.Cage) != tc.cage || e.Enabled(experiments.BootPopup) != tc.popup {
+				t.Errorf("cage=%v popup=%v, want %v/%v", e.Enabled(experiments.Cage), e.Enabled(experiments.BootPopup), tc.cage, tc.popup)
+			}
+		})
+	}
+	withOSArgs(t, "claude", "--experimental=ui-cage,typo")
+	if _, err := experimental(cfg.CellSection{}); err == nil {
+		t.Error("unknown feature in --experimental must be an error")
 	}
 }

@@ -59,6 +59,21 @@
           "description": "execution engine: \"docker\" (default), \"tart\" or \"winkit\"",
           "type": "string"
         },
+        "experimental": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "description": "comma-separated list",
+              "type": "string"
+            }
+          ],
+          "description": "opt-in experimental features, e.g. [\"ui-cage\", \"ui-boot-popup\"]; flag: --experimental=a,b; env: DEVCELL_EXPERIMENTAL=a,b; names and the gate live in internal/experiments"
+        },
         "flake": {
           "description": "enable project-level flake.nix install; default: false (opt-in); env: DEVCELL_FLAKE",
           "type": "boolean"
@@ -707,6 +722,53 @@
           "type": "string"
         },
         "platform": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "theme": {
+      "additionalProperties": false,
+      "properties": {
+        "accent": {
+          "description": "copy-mode selection and messages",
+          "type": "string"
+        },
+        "bar_bg": {
+          "description": "background of the bar between elements",
+          "type": "string"
+        },
+        "bar_fg": {
+          "description": "foreground of the bar between elements",
+          "type": "string"
+        },
+        "cell_bg": {
+          "description": "cell name element (\u003cproject\u003e-\u003ccellID\u003e)",
+          "type": "string"
+        },
+        "cell_fg": {
+          "type": "string"
+        },
+        "name": {
+          "description": "preset; default: \"devcell\" (cool tone)",
+          "type": "string"
+        },
+        "separator": {
+          "description": "between status panel blocks; default: \" | \"",
+          "type": "string"
+        },
+        "status_bg": {
+          "description": "status panel (clocks), right-aligned",
+          "type": "string"
+        },
+        "status_fg": {
+          "type": "string"
+        },
+        "workspace_bg": {
+          "description": "workspace name element",
+          "type": "string"
+        },
+        "workspace_fg": {
           "type": "string"
         }
       },

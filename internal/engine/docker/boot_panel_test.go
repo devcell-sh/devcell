@@ -8,6 +8,7 @@ import (
 
 	streak "github.com/dimmkirr/go-streak-chart"
 
+	"github.com/devcell-sh/devcell/internal/cfg"
 	"github.com/devcell-sh/devcell/internal/ux"
 )
 
@@ -128,17 +129,17 @@ func TestBootGroups_ConditionalSteps(t *testing.T) {
 
 func TestBootComponentStep_MapsKnownComponents(t *testing.T) {
 	cases := map[string]struct{ Group, Step string }{
-		"s6":         {"Boot", "Services"},
-		"entrypoint": {"Boot", "Entrypoint"},
-		"shell":      {"Environment", "Shell"},
-		"mise":       {"Environment", "Mise"},
-		"home":       {"Environment", "Home"},
-		"gui":        {"Environment", "GUI"},
-		"container":  {"Boot", "Container"},
-		"nix":        {"Boot", "Nix daemon"},
-		"secrets":    {"Boot", "Secrets sync"},
-		"claude":     {"Environment", "Agent config"},
-		"codex":      {"Environment", "Agent config"},
+		"s6":             {"Boot", "Services"},
+		"entrypoint":     {"Boot", "Entrypoint"},
+		"shell":          {"Environment", "Shell"},
+		"mise":           {"Environment", "Mise"},
+		"home":           {"Environment", "Home"},
+		"gui":            {"Environment", "GUI"},
+		"container":      {"Boot", "Container"},
+		"nix":            {"Boot", "Nix daemon"},
+		"secrets":        {"Boot", "Secrets sync"},
+		"claude":         {"Environment", "Agent config"},
+		"codex":          {"Environment", "Agent config"},
 		"postgres":       {"Boot", "Postgres"},
 		"xvfb":           {"Services", "Display"},
 		"window-manager": {"Services", "Desktop"},
@@ -408,4 +409,43 @@ func TestSetBoot_ExplicitGroup(t *testing.T) {
 	panel.SetBoot("Boot", "Container", streak.Done, "started")
 	panel.SetBoot("Environment", "Shell", streak.Done, "ready")
 	panel.Finish("done")
+}
+
+// CELL-657: the container event consumer drives any BootView, so the cage
+// can route boot progress to a popup through an EventPanel.
+func TestConsumeContainerEventsPanel_DrivesEventPanel(t *testing.T) {
+	ep := ux.NewEventPanel([]ux.PanelGroup{{Label: "Boot", Steps: []string{"Container"}}, {Label: "Services", Steps: []string{"Shell"}}})
+	events := make(chan ContainerEvent, 3)
+	events <- ContainerEvent{Service: "shell-rc", Status: "up"}
+	events <- ContainerEvent{Service: "boot", Status: "ready"}
+	close(events)
+	if ok := ConsumeContainerEventsPanel(events, ep); !ok {
+		t.Fatal("boot.ready should report a clean finish")
+	}
+	finished, failed := ep.Finished()
+	if !finished || failed {
+		t.Errorf("EventPanel finished=%v failed=%v, want finished and not failed", finished, failed)
+	}
+	kinds := map[string]bool{}
+	for _, ev := range ep.Events() {
+		kinds[ev.Kind] = true
+	}
+	for _, want := range []string{ux.EventGroups, ux.EventSet, ux.EventPromoteRunning, ux.EventFinish} {
+		if !kinds[want] {
+			t.Errorf("missing %q event in %v", want, kinds)
+		}
+	}
+}
+
+// BootGroupCount is what the cage popup sizes itself from, so it must agree
+// with the groups bootGroups actually draws for the same cell config.
+func TestBootGroupCount_MatchesBootGroups(t *testing.T) {
+	for _, gui := range []bool{false, true} {
+		cellCfg := cfg.CellConfig{}
+		cellCfg.GUI.Enabled = &gui
+		want := len(bootGroups("claude", groupOpts{hasGUI: gui}))
+		if got := BootGroupCount(cellCfg); got != want {
+			t.Errorf("gui=%v: BootGroupCount = %d, bootGroups draws %d", gui, got, want)
+		}
+	}
 }

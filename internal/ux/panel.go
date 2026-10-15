@@ -26,7 +26,14 @@ type BootPanel struct {
 	groupIdx map[string]int
 	// stepIdx maps "group\x00step" -> column index within that row.
 	stepIdx map[string]int
+	// bannerRows is how many lines sit between the saved cursor and the
+	// first group row: 1 for the identity banner, 0 when it is hidden.
+	bannerRows int
 }
+
+// SetBannerRows tells ClearBelowGroups how many lines precede the group
+// rows. Default 1 (the identity banner); the cage hides it and passes 0.
+func (p *BootPanel) SetBannerRows(n int) { p.bannerRows = n }
 
 func stepKey(group, step string) string { return group + "\x00" + step }
 
@@ -66,10 +73,11 @@ func NewBootPanel(groups []PanelGroup) *BootPanel {
 	loader.Start()
 
 	return &BootPanel{
-		loader:   loader,
-		groups:   groups,
-		groupIdx: groupIdx,
-		stepIdx:  stepIdx,
+		loader:     loader,
+		groups:     groups,
+		groupIdx:   groupIdx,
+		stepIdx:    stepIdx,
+		bannerRows: 1,
 	}
 }
 
@@ -319,6 +327,6 @@ func (p *BootPanel) ClearBelowGroups() {
 	if LogPlainText || Verbose {
 		return
 	}
-	n := 1 + len(p.groups) + 1 // banner + groups + rule
+	n := p.bannerRows + len(p.groups) + 1 // banner + groups + rule
 	fmt.Fprintf(os.Stderr, "\x1b8\x1b[%dB\x1b[J", n)
 }

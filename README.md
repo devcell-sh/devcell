@@ -48,7 +48,7 @@ You don't install MCP servers; they come ready. 86% of MCP servers need local bi
 
 CLAUDE.md, hooks, skills, and MCP config mount into the cell. Claude Max/Pro works out of the box: no API key, no proxy, no workarounds. No account or login required.
 
-**Also:** three OS engines (Linux container, macOS VM, Windows VM) | egress lockdown with `--solitary` | 1Password secrets on RAM-only tmpfs | session handoff for authenticated browsing
+**Also:** three OS engines (Linux container, macOS VM, Windows VM<sup><a href="#experimental-features">e</a></sup>) | egress lockdown with `--solitary` | 1Password secrets on RAM-only tmpfs | session handoff for authenticated browsing
 
 ## Comparison
 
@@ -59,7 +59,7 @@ CLAUDE.md, hooks, skills, and MCP config mount into the cell. Claude Max/Pro wor
 | Claude Max/Pro (no API key) | yes | documented but broken | no | no | manual |
 | CLAUDE.md + hooks preserved | yes | no | no | no | manual |
 | MCP servers + backing tools | yes, auto-config | catalog (manual) | no | own MCP | manual |
-| macOS + Windows VMs | yes | no | no | no | no |
+| macOS + Windows VMs<sup><a href="#experimental-features">e</a></sup> | yes | no | no | no | no |
 | Egress lockdown | yes | yes | yes | yes | manual |
 | Local-first | yes | yes | cloud only | yes | yes |
 | Credential brokering | not yet | yes (proxy) | yes (proxy) | yes | manual |
@@ -99,11 +99,11 @@ The guest is the OS inside the cell (`--os`); the engine is how the cell runs (`
 |---|---|---|---|---|
 | `linux` (default) | `docker` | Linux container | any | Docker (see Quickstart) |
 | `macos` | `tart` | macOS VM | Apple Silicon | [Tart](https://github.com/cirruslabs/tart) |
-| `windows` or `winpe` | `winkit` | Windows PE + WSL1 VM (vz on macOS, qemu on Linux) | macOS, Linux | QEMU (Linux hosts) |
+| `windows` or `winpe`<sup><a href="#experimental-features">e</a></sup> | `winkit` | Windows PE + WSL1 VM (vz on macOS, qemu on Linux) | macOS, Linux | QEMU (Linux hosts) |
 
 ```bash
 devcell claude --os macos       # open Claude Code in a macOS VM
-devcell build --os windows      # build the Windows VM image
+devcell build --os windows --experimental=engine-windows   # build the Windows VM image (experimental)
 ```
 
 Set permanently in `devcell.toml`:
@@ -203,6 +203,20 @@ task nix:validate    # Syntax check + attribute resolution across all stacks
 | **module** | A toggleable Nix capability composed into a stack (`modules = ["android"]` in `devcell.toml`). |
 
 **One-line model:** *a workspace is the boundary; many projects live inside it; each project spawns one or more cells.*
+
+## Experimental features
+
+<!-- experiments:begin -->
+Off by default. Turn one on with `--experimental=<name>`, `DEVCELL_EXPERIMENTAL=<name>` or `[cell] experimental = ["<name>"]`; several are comma-separated. Experimental features may change or go away without a deprecation cycle.
+
+| Feature | What it does | Docs | Tracking |
+|---|---|---|---|
+| `ui-cage` | one-line bottom bar (workspace, cell name, clocks) drawn by a host tmux session around the agent | [docs/cage.md](docs/cage.md) | CELL-655 |
+| `ui-boot-popup` | boot panel in a centred tmux popup, closed before the agent starts (needs ui-cage) | [docs/cage.md](docs/cage.md) | CELL-657 |
+| `engine-windows` | Windows guest (--os windows or winpe): a Windows PE + WSL VM run by the winkit engine on vz or QEMU | [README.md#engines-and-guests](README.md#engines-and-guests) | - |
+<!-- experiments:end -->
+
+Run `devcell experimental` to see what is on. Details, lifecycle and how to add one: [docs/experimental.md](docs/experimental.md).
 
 ## Not yet
 

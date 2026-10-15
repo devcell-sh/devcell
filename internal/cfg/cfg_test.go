@@ -3,6 +3,7 @@ package cfg_test
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -2322,14 +2323,14 @@ func TestLoadFile_NixSection(t *testing.T) {
 	dir := t.TempDir()
 	writeTOML(t, dir, "devcell.toml", `
 [nix]
-image = "nixos/nix:2.35.0"
+image = "docker.io/nixos/nix:2.35.0"
 nixhome = "~/dev/nixhome"
 `)
 	c, err := cfg.LoadFile(filepath.Join(dir, "devcell.toml"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Nix.Image != "nixos/nix:2.35.0" {
+	if c.Nix.Image != "docker.io/nixos/nix:2.35.0" {
 		t.Errorf("nix.image: want nixos/nix:2.35.0, got %q", c.Nix.Image)
 	}
 	if c.Nix.NixhomePath != "~/dev/nixhome" {
@@ -2361,27 +2362,27 @@ func TestNixSection_ResolvedImage_Default(t *testing.T) {
 }
 
 func TestNixSection_ResolvedImage_Explicit(t *testing.T) {
-	n := cfg.NixSection{Image: "nixos/nix:2.35.0"}
+	n := cfg.NixSection{Image: "docker.io/nixos/nix:2.35.0"}
 	got := n.ResolvedImage()
-	if got != "nixos/nix:2.35.0" {
+	if got != "docker.io/nixos/nix:2.35.0" {
 		t.Errorf("want nixos/nix:2.35.0, got %q", got)
 	}
 }
 
 func TestNixSection_ResolvedImage_EnvOverride(t *testing.T) {
-	t.Setenv("DEVCELL_NIX_IMAGE", "nixos/nix:2.36.0")
-	n := cfg.NixSection{Image: "nixos/nix:2.35.0"}
+	t.Setenv("DEVCELL_NIX_IMAGE", "docker.io/nixos/nix:2.36.0")
+	n := cfg.NixSection{Image: "docker.io/nixos/nix:2.35.0"}
 	got := n.ResolvedImage()
-	if got != "nixos/nix:2.36.0" {
+	if got != "docker.io/nixos/nix:2.36.0" {
 		t.Errorf("env should win over toml, got %q", got)
 	}
 }
 
 func TestMerge_NixProjectWins(t *testing.T) {
-	global := cfg.CellConfig{Nix: cfg.NixSection{Image: "nixos/nix:2.34.7", NixhomePath: "/global/nixhome"}}
-	project := cfg.CellConfig{Nix: cfg.NixSection{Image: "nixos/nix:2.35.0", NixhomePath: "/project/nixhome"}}
+	global := cfg.CellConfig{Nix: cfg.NixSection{Image: "docker.io/nixos/nix:2.34.7", NixhomePath: "/global/nixhome"}}
+	project := cfg.CellConfig{Nix: cfg.NixSection{Image: "docker.io/nixos/nix:2.35.0", NixhomePath: "/project/nixhome"}}
 	merged := cfg.Merge(global, project)
-	if merged.Nix.Image != "nixos/nix:2.35.0" {
+	if merged.Nix.Image != "docker.io/nixos/nix:2.35.0" {
 		t.Errorf("project nix.image should win, got %q", merged.Nix.Image)
 	}
 	if merged.Nix.NixhomePath != "/project/nixhome" {
@@ -2390,10 +2391,10 @@ func TestMerge_NixProjectWins(t *testing.T) {
 }
 
 func TestMerge_NixGlobalKeptWhenProjectEmpty(t *testing.T) {
-	global := cfg.CellConfig{Nix: cfg.NixSection{Image: "nixos/nix:2.34.7", NixhomePath: "/global/nixhome"}}
+	global := cfg.CellConfig{Nix: cfg.NixSection{Image: "docker.io/nixos/nix:2.34.7", NixhomePath: "/global/nixhome"}}
 	project := cfg.CellConfig{}
 	merged := cfg.Merge(global, project)
-	if merged.Nix.Image != "nixos/nix:2.34.7" {
+	if merged.Nix.Image != "docker.io/nixos/nix:2.34.7" {
 		t.Errorf("global nix.image should be preserved, got %q", merged.Nix.Image)
 	}
 	if merged.Nix.NixhomePath != "/global/nixhome" {
@@ -2402,14 +2403,14 @@ func TestMerge_NixGlobalKeptWhenProjectEmpty(t *testing.T) {
 }
 
 func TestApplyEnv_NixImageOverride(t *testing.T) {
-	c := cfg.CellConfig{Nix: cfg.NixSection{Image: "nixos/nix:2.34.7"}}
+	c := cfg.CellConfig{Nix: cfg.NixSection{Image: "docker.io/nixos/nix:2.34.7"}}
 	cfg.ApplyEnv(&c, func(k string) string {
 		if k == "DEVCELL_NIX_IMAGE" {
-			return "nixos/nix:2.36.0"
+			return "docker.io/nixos/nix:2.36.0"
 		}
 		return ""
 	})
-	if c.Nix.Image != "nixos/nix:2.36.0" {
+	if c.Nix.Image != "docker.io/nixos/nix:2.36.0" {
 		t.Errorf("env should override toml: want nixos/nix:2.36.0, got %q", c.Nix.Image)
 	}
 }
@@ -3574,10 +3575,10 @@ func TestNetworkProxy_Merge_BlockUnion(t *testing.T) {
 
 func TestNetworkProxy_Merge_ModeAllowWins(t *testing.T) {
 	cases := []struct {
-		name         string
-		globalMode   string
-		projectMode  string
-		wantMode     string
+		name        string
+		globalMode  string
+		projectMode string
+		wantMode    string
 	}{
 		{"both_allow", "allow", "allow", "allow"},
 		{"global_allow_project_block", "allow", "block", "allow"},
@@ -3688,5 +3689,103 @@ func TestNetworkProxy_Merge_EmptyAllowDeniesAll(t *testing.T) {
 	}
 	if len(merged.Network.Proxy.Allow) != 0 {
 		t.Errorf("empty allow must stay empty (deny all), got %v", merged.Network.Proxy.Allow)
+	}
+}
+
+// --- [cell] experimental (CELL-655, CELL-657) ---
+
+func TestLoadFile_Experimental(t *testing.T) {
+	dir := t.TempDir()
+	writeTOML(t, dir, "devcell.toml", `
+[cell]
+experimental = ["ui-cage", "ui-boot-popup"]
+`)
+	c, err := cfg.LoadFile(filepath.Join(dir, "devcell.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Cell.Experimental) != 2 || c.Cell.Experimental[0] != "ui-cage" {
+		t.Errorf("Experimental = %v", c.Cell.Experimental)
+	}
+}
+
+// --- [theme] section (CELL-655) ---
+
+func TestLoadFile_ThemeSection(t *testing.T) {
+	dir := t.TempDir()
+	writeTOML(t, dir, "devcell.toml", `
+[theme]
+name = "nord"
+bar_bg = "#2e3440"
+bar_fg = "colour250"
+workspace_bg = "#88c0d0"
+workspace_fg = "#2e3440"
+cell_bg = "#434c5e"
+cell_fg = "#eceff4"
+status_bg = "#3b4252"
+status_fg = "#d8dee9"
+accent = "#81a1c1"
+separator = " / "
+`)
+	c, err := cfg.LoadFile(filepath.Join(dir, "devcell.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := cfg.ThemeSection{
+		Name: "nord", BarBG: "#2e3440", BarFG: "colour250",
+		WorkspaceBG: "#88c0d0", WorkspaceFG: "#2e3440",
+		CellBG: "#434c5e", CellFG: "#eceff4",
+		StatusBG: "#3b4252", StatusFG: "#d8dee9",
+		Accent: "#81a1c1", Separator: " / ",
+	}
+	if c.Theme != want {
+		t.Errorf("Theme = %+v, want %+v", c.Theme, want)
+	}
+}
+
+func TestLoadFile_ThemeUnknownKeyRejected(t *testing.T) {
+	dir := t.TempDir()
+	writeTOML(t, dir, "devcell.toml", "[theme]\ncolour = \"red\"\n")
+	if _, err := cfg.LoadFile(filepath.Join(dir, "devcell.toml")); err == nil {
+		t.Error("unknown [theme] key should be rejected")
+	}
+}
+
+// [cell] experimental accepts a TOML list or a comma-separated string.
+func TestLoadFile_ExperimentalCSVString(t *testing.T) {
+	dir := t.TempDir()
+	writeTOML(t, dir, "devcell.toml", `
+[cell]
+experimental = "ui-cage, ui-boot-popup"
+`)
+	c, err := cfg.LoadFile(filepath.Join(dir, "devcell.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := []string(c.Cell.Experimental); len(got) != 2 || got[0] != "ui-cage" || got[1] != "ui-boot-popup" {
+		t.Errorf("Experimental = %v, want [ui-cage ui-boot-popup]", got)
+	}
+}
+
+func TestLoadFile_ExperimentalRejectsOtherTypes(t *testing.T) {
+	dir := t.TempDir()
+	writeTOML(t, dir, "devcell.toml", "[cell]\nexperimental = 1\n")
+	if _, err := cfg.LoadFile(filepath.Join(dir, "devcell.toml")); err == nil {
+		t.Error("a number is neither a list nor a string; want an error")
+	}
+}
+
+// DEVCELL_EXPERIMENTAL is read on the struct like every other env override:
+// ResolvedExperimental unions it with [cell] experimental.
+func TestResolvedExperimental_UnionsTOMLAndEnv(t *testing.T) {
+	t.Setenv("DEVCELL_EXPERIMENTAL", " ui-boot-popup , engine-windows,,ui-cage")
+	got := cfg.CellSection{Experimental: []string{"ui-cage"}}.ResolvedExperimental()
+	want := []string{"ui-cage", "ui-boot-popup", "engine-windows"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ResolvedExperimental = %v, want %v", got, want)
+	}
+	t.Setenv("DEVCELL_EXPERIMENTAL", "")
+	if got := (cfg.CellSection{}).ResolvedExperimental(); len(got) != 0 {
+		t.Errorf("nothing set: want empty, got %v", got)
 	}
 }

@@ -51,6 +51,13 @@ packages = ["jq"]
 # Keep the container/VM running after the shell exits. Default: false. Env: DEVCELL_BACKGROUND.
 # background = false
 #
+# Opt-in experimental features, a list or a comma-separated string.
+# Flag: --experimental=ui-cage,ui-boot-popup. Env: DEVCELL_EXPERIMENTAL. Registry: docs/experimental.md.
+#   ui-cage        one-line bottom bar (workspace, cell name, clocks) drawn by a host tmux session
+#   ui-boot-popup   boot panel in a centred tmux popup, closed before the agent starts (needs ui-cage)
+#   engine-windows  Windows guest (os = "windows" or "winpe", engine winkit)
+# experimental = ["ui-cage", "ui-boot-popup"]
+#
 # Warn at start when the cell is behind its image. Default: true. Env: DEVCELL_STALE_WARN.
 # stale_warning = true
 #
@@ -58,7 +65,7 @@ packages = ["jq"]
 # default_command = "claude"
 #
 # --- Engine ---
-# Guest OS: linux (default), macos, windows (or winpe). Derives the engine when engine is unset.
+# Guest OS: linux (default), macos, windows (or winpe; experimental, needs experimental = ["engine-windows"]). Derives the engine when engine is unset.
 # os = "linux"
 #
 # Execution engine: docker (default), tart, winkit.
@@ -211,3 +218,21 @@ read_only = true
 # [Interface]
 # PrivateKey = "..."
 # """
+
+# Colours of the cage bar (experimental = ["ui-cage"]). name picks a preset; every other key overrides one colour
+# of that preset. The bar has three elements: workspace name, cell name, status panel (clocks).
+# Colours are tmux colours: "#rrggbb", "colour0".."colour255" or a name such as "brightblue".
+# Presets: devcell (cool tone, default), brand, nord, catppuccin-mocha, tokyo-night.
+# [theme]
+# name = "devcell"
+# name = "brand"       # option 2: the site's orange and lime
+# bar_bg = "#0f172a"   # the bar between elements
+# bar_fg = "#94a3b8"
+# workspace_bg = "#38bdf8"
+# workspace_fg = "#0f172a"
+# cell_bg = "#334155"
+# cell_fg = "#e2e8f0"
+# status_bg = "#1e293b"
+# status_fg = "#cbd5e1"
+# accent = "#818cf8"   # copy-mode selection, messages
+# separator = " | "    # between status panel blocks

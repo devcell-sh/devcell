@@ -198,7 +198,7 @@ func TestGUIFormat_MixedDockerAndVM(t *testing.T) {
 		t.Run(string(tc.p), func(t *testing.T) {
 			m := map[string]gui.CellEndpoint{
 				"devcell-myproject-3": ep("127.0.0.1", tc.port, "docker"),
-				"winkit-main":          ep("127.0.0.1", tc.vmPort, "winkit"),
+				"winkit-main":         ep("127.0.0.1", tc.vmPort, "winkit"),
 			}
 
 			out := renderCellListOutput(t, tc.p, "text", m)

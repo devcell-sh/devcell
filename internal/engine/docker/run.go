@@ -124,7 +124,9 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	ux.SaveCursor()
 
 	project := filepath.Base(c.BaseDir)
-	fmt.Println(" " + ux.Banner(c.WorkspaceName, project, c.CellID))
+	if !opts.HideBanner {
+		fmt.Println(" " + ux.Banner(c.WorkspaceName, project, c.CellID))
+	}
 
 	if ux.Verbose {
 		fmt.Println()
@@ -211,7 +213,16 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		hasNixPackages: opts.UseFlake || cellCfg.Cell.FlakeEnabled(),
 	}
 	groups := bootGroups(binary, gopts)
-	panel := ux.NewBootPanel(groups)
+	var panel ux.BootView
+	if opts.NewBootView != nil {
+		panel = opts.NewBootView(groups)
+	} else {
+		inline := ux.NewBootPanel(groups)
+		if opts.HideBanner {
+			inline.SetBannerRows(0)
+		}
+		panel = inline
+	}
 
 	// ── Group 1: Prepare ─────────────────────────────────────────────────
 	_ = panel.Phase("Docker", func() error { return nil }) // daemon already checked above
@@ -243,10 +254,10 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 				WorkspaceName: c.WorkspaceName,
 				CellID:        c.CellID,
 				WorkspaceHome: c.WorkspaceHome,
-				InternalNet: internalNet,
-				EgressNet:   "devcell-network",
-				Proxy:       cellCfg.Network.Proxy,
-				SquidImage:  cellCfg.Network.Proxy.ResolvedImage(),
+				InternalNet:   internalNet,
+				EgressNet:     "devcell-network",
+				Proxy:         cellCfg.Network.Proxy,
+				SquidImage:    cellCfg.Network.Proxy.ResolvedImage(),
 			})
 		}); err != nil {
 			return err
@@ -517,7 +528,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	useFlake := opts.UseFlake || cellCfg.Cell.FlakeEnabled()
 	trustFlake := false
 	if useFlake {
-		trustFlake = resolveTrustFlake(c.BaseDir, c.WorkspaceHome)
+		trustFlake = ResolveTrustFlake(c.BaseDir, c.WorkspaceHome)
 	}
 
 	spec := newRunSpec(opts, c)
@@ -639,6 +650,17 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		panel.Finish("Cell ready (attached)")
 	}
 	panel.ClearBelowGroups()
+
+	// CELL-657: the cage's popup gate. Nothing below runs while the boot
+	// panel is still on screen.
+	if opts.BeforeAttach != nil {
+		if err := opts.BeforeAttach(); err != nil {
+			if sess != nil {
+				_ = sess.Finish(c.BaseDir, err)
+			}
+			return err
+		}
+	}
 
 	// ── Exec into container ─────────────────────────────────────────────
 	env := s6.LinuxSessionEnv(c.HostUser)
@@ -831,7 +853,11 @@ func containerBooted(ctx context.Context, name string) bool {
 // user has trusted it. On first encounter, prompts interactively and caches
 // the answer in cellHome. Returns true if DEVCELL_FLAKE_TRUST=1 should be
 // passed to the container.
-func resolveTrustFlake(baseDir, cellHome string) bool {
+// ResolveTrustFlake answers "install this project's flake.nix packages?"
+// once per workspace: a recorded answer wins, otherwise the user is asked
+// on the terminal. The cage calls it before opening its boot popup, since
+// no prompt can be answered while the popup owns the keyboard.
+func ResolveTrustFlake(baseDir, cellHome string) bool {
 	flakePath := filepath.Join(baseDir, "flake.nix")
 	if _, err := os.Stat(flakePath); err != nil {
 		return false

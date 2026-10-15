@@ -250,6 +250,7 @@ func TestResolveEngine_MacosFlagDefersToOS(t *testing.T) {
 const qemuEngineWarning = ` ⚠      engine "qemu" is deprecated (use engine = "winkit" instead)` + "\n"
 
 func TestResolveEngine_QemuFlagWarnsOnce(t *testing.T) {
+	t.Setenv("DEVCELL_EXPERIMENTAL", "engine-windows") // qemu is the deprecated name of winkit, which is gated
 	withArgs(t, "--engine=qemu", "claude")
 	var buf bytes.Buffer
 	got, err := resolveEngine(&buf, cfg.CellConfig{})
@@ -265,6 +266,7 @@ func TestResolveEngine_QemuFlagWarnsOnce(t *testing.T) {
 }
 
 func TestResolveEngine_QemuTOMLWarnsOnce(t *testing.T) {
+	t.Setenv("DEVCELL_EXPERIMENTAL", "engine-windows") // qemu is the deprecated name of winkit, which is gated
 	withArgs(t, "claude")
 	var buf bytes.Buffer
 	got, err := resolveEngine(&buf, cfg.CellConfig{Cell: cfg.CellSection{Engine: "qemu"}})

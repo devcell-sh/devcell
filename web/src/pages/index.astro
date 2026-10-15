@@ -1,5 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
+import Exp from '../components/Exp.astro';
 import Hero from '../components/Hero.astro';
 import FeatureCards from '../components/FeatureCards.astro';
 import Quickstart from '../components/Quickstart.astro';
@@ -37,7 +38,7 @@ const compareRows = [
   { feature: "Claude Max/Pro (no API key)",devcell: "yes",                 dockerSbx: "documented, broken", daytona: "no",        microsandbox: "no",       rawDocker: "manual" },
   { feature: "CLAUDE.md + hooks preserved",devcell: "yes",                 dockerSbx: "no",                 daytona: "no",        microsandbox: "no",       rawDocker: "manual" },
   { feature: "MCP servers + backing tools",devcell: "yes, auto-config",    dockerSbx: "catalog (manual)",   daytona: "no",        microsandbox: "own MCP",  rawDocker: "manual" },
-  { feature: "macOS + Windows VMs",        devcell: "yes",                 dockerSbx: "no",                 daytona: "no",        microsandbox: "no",       rawDocker: "no" },
+  { feature: "macOS + Windows VMs",        exp: "engine-windows", devcell: "yes",                 dockerSbx: "no",                 daytona: "no",        microsandbox: "no",       rawDocker: "no" },
   { feature: "Egress lockdown",            devcell: "yes",                 dockerSbx: "yes",                daytona: "yes",       microsandbox: "yes",      rawDocker: "manual" },
   { feature: "Local-first",                devcell: "yes",                 dockerSbx: "yes",                daytona: "cloud only", microsandbox: "yes",     rawDocker: "yes" },
   { feature: "Credential brokering",       devcell: "not yet",             dockerSbx: "yes (proxy)",        daytona: "yes (API)", microsandbox: "yes",      rawDocker: "manual" },
@@ -843,7 +844,7 @@ const faqItems = [
         <tbody>
           {compareRows.map(r => (
             <tr>
-              <td>{r.feature}</td>
+              <td>{r.feature}{r.exp && <Exp name={r.exp} />}</td>
               <td>{r.devcell}</td>
               <td>{r.dockerSbx}</td>
               <td>{r.daytona}</td>

@@ -1,0 +1,30 @@
+# devcell cage (CELL-655): generated, do not edit. Theme: {{.ThemeName}}
+set -g status on
+set -g status-position bottom
+set -g status-interval 15
+set -g status-justify left
+set -g status-left-length 80
+set -g status-right-length 160
+set -g status-style "bg={{.Theme.BarBG}},fg={{.Theme.BarFG}}"
+set -g status-left "#[bg={{.Theme.WorkspaceBG}},fg={{.Theme.WorkspaceFG}},bold]{{.Workspace}}#[bg={{.Theme.CellBG}},fg={{.Theme.CellFG}}]{{.Cell}}#[default]"
+set -g window-status-format ""
+set -g window-status-current-format ""
+set -g status-right "#[bg={{.Theme.StatusBG}},fg={{.Theme.StatusFG}}]{{.Status}}#[default]"
+set -g mode-style "bg={{.Theme.Accent}},fg={{.Theme.BarBG}}"
+set -g message-style "bg={{.Theme.BarBG}},fg={{.Theme.Accent}}"
+set -g pane-border-style "fg={{.Theme.BarBG}}"
+set -g pane-active-border-style "fg={{.Theme.Accent}}"
+
+# display-only: no prefix key, every keystroke reaches the agent
+set -g prefix None
+set -g mouse on
+set -g history-limit 100000
+
+# keep the outer terminal's capabilities reachable through tmux
+set -g allow-passthrough on
+set -g extended-keys on
+set -g set-clipboard on
+set -s escape-time 0
+set -g focus-events on
+set -g default-terminal "tmux-256color"
+set -as terminal-features ",*:RGB:hyperlinks:usstyle"
