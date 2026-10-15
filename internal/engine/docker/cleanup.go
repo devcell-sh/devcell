@@ -221,7 +221,7 @@ func BuildCleanupSteps(closures []LiveClosure) []PruneStep {
 			"docker", "run", "--rm",
 			"-v", DefaultThinStoreVolume + ":/nix",
 			NixCoreImage,
-			"sh", "-c", BuildCleanupScript(closures),
+			"/bin/sh", "-c", BuildCleanupScript(closures),
 		}},
 	}
 }

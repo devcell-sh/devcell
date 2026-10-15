@@ -21,8 +21,9 @@ func DockerDaemonReachable(ctx context.Context) error {
 	return nil
 }
 
-// dockerInfoExec is swappable for tests. `--format '{{.ID}}'` keeps output
-// short on success and never prints the full daemon info block.
+// dockerInfoExec is swappable for tests. No --format: Podman's docker shim
+// supports `docker info` but fails on Docker-specific template fields like
+// {{.ID}}. Stdout/Stderr are nil so output goes to /dev/null regardless.
 var dockerInfoExec = func(ctx context.Context) error {
-	return exec.CommandContext(ctx, "docker", "info", "--format", "{{.ID}}").Run()
+	return exec.CommandContext(ctx, "docker", "info").Run()
 }

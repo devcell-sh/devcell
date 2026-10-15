@@ -8,8 +8,8 @@ import (
 
 func TestKVMProbeArgv_UsesBusybox(t *testing.T) {
 	argv := docker.KVMProbeArgv()
-	if !hasArg(argv, "busybox:1.36") {
-		t.Errorf("probe must use busybox:1.36; argv: %v", argv)
+	if !hasArg(argv, "docker.io/library/busybox:1.36") {
+		t.Errorf("probe must use docker.io/library/busybox:1.36; argv: %v", argv)
 	}
 }
 

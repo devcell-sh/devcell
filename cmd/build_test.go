@@ -18,6 +18,9 @@ func TestUserImageTag_BareLocal_PureSuffixOnVariant(t *testing.T) {
 	savedPure := os.Getenv("DEVCELL_USER_IMAGE_PURE")
 	defer os.Setenv("DEVCELL_USER_IMAGE_PURE", savedPure)
 	os.Unsetenv("DEVCELL_USER_IMAGE_PURE")
+	savedWS := os.Getenv("DEVCELL_WORKSPACE")
+	defer os.Setenv("DEVCELL_WORKSPACE", savedWS)
+	os.Unsetenv("DEVCELL_WORKSPACE")
 
 	savedStack := docker.Stack
 	defer func() { docker.Stack = savedStack }()
@@ -26,11 +29,11 @@ func TestUserImageTag_BareLocal_PureSuffixOnVariant(t *testing.T) {
 	bare := docker.UserImageTag()
 	pure := docker.UserImageTagPure()
 
-	if bare != "devcell-user:ultimate" {
-		t.Errorf("UserImageTag = %q, want devcell-user:ultimate (bare, unchanged)", bare)
+	if bare != "localhost/devcell-user:ultimate" {
+		t.Errorf("UserImageTag = %q, want localhost/devcell-user:ultimate", bare)
 	}
-	if pure != "devcell-user:ultimate-pure" {
-		t.Errorf("UserImageTagPure = %q, want devcell-user:ultimate-pure", pure)
+	if pure != "localhost/devcell-user:ultimate-pure" {
+		t.Errorf("UserImageTagPure = %q, want localhost/devcell-user:ultimate-pure", pure)
 	}
 	if pure != bare+"-pure" {
 		t.Errorf("UserImageTagPure must equal UserImageTag + '-pure': pure=%q bare=%q", pure, bare)
@@ -48,6 +51,9 @@ func TestPickImageTag_FlippedDirection(t *testing.T) {
 	savedPure := os.Getenv("DEVCELL_USER_IMAGE_PURE")
 	defer os.Setenv("DEVCELL_USER_IMAGE_PURE", savedPure)
 	os.Unsetenv("DEVCELL_USER_IMAGE_PURE")
+	savedWS := os.Getenv("DEVCELL_WORKSPACE")
+	defer os.Setenv("DEVCELL_WORKSPACE", savedWS)
+	os.Unsetenv("DEVCELL_WORKSPACE")
 
 	savedStack := docker.Stack
 	defer func() { docker.Stack = savedStack }()
@@ -56,11 +62,11 @@ func TestPickImageTag_FlippedDirection(t *testing.T) {
 	pure := docker.PickImageTag(false)
 	bare := docker.PickImageTag(true)
 
-	if pure != "devcell-user:ultimate-pure" {
-		t.Errorf("PickImageTag(false) = %q, want devcell-user:ultimate-pure (default)", pure)
+	if pure != "localhost/devcell-user:ultimate-pure" {
+		t.Errorf("PickImageTag(false) = %q, want localhost/devcell-user:ultimate-pure (default)", pure)
 	}
-	if bare != "devcell-user:ultimate" {
-		t.Errorf("PickImageTag(true) = %q, want devcell-user:ultimate (impure / --impure path)", bare)
+	if bare != "localhost/devcell-user:ultimate" {
+		t.Errorf("PickImageTag(true) = %q, want localhost/devcell-user:ultimate (impure / --impure path)", bare)
 	}
 	if pure == bare {
 		t.Errorf("pure and bare must differ: pure=%s bare=%s", pure, bare)

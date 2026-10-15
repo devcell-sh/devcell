@@ -28,6 +28,7 @@ type Config struct {
 	RDPPort       string
 	BaseDir       string
 	HostUser      string
+	HostUID       int // host user's numeric UID, passed to container for bind-mount parity
 	HostHome      string
 	LocalMode     bool // DEVCELL_LOCAL_MODE=true — always rebuild image on run
 }
@@ -75,6 +76,7 @@ func LoadFromOS() (Config, error) {
 		return Config{}, fmt.Errorf("getwd: %w", err)
 	}
 	c := Load(cwd, os.Getenv)
+	c.HostUID = os.Getuid()
 	_, err1 := os.Stat(filepath.Join(cwd, "devcell.toml"))
 	_, err2 := os.Stat(filepath.Join(cwd, ".devcell.toml"))
 	c.BuildDir = ResolveBuildDir(cwd, c.ConfigDir, err1 == nil || err2 == nil)

@@ -220,6 +220,16 @@ func build(ctx context.Context, c engine.Cell, p buildParams) error {
 		}
 	}
 
+	// ── Volume shell bootstrap ─────────────────────────────────────────────
+	// The nixos/nix image's /bin/sh symlinks into /nix/store. When the
+	// shared nix-store volume mounts over /nix, a stale volume (from an
+	// older image version) makes the symlink dangle, so the thin builder
+	// cannot even start. Copy the current image's default-profile closure
+	// onto the volume so /bin/sh and all core tools resolve.
+	if err := EnsureVolumeShell(ctx, volumeName, coreImage); err != nil {
+		ux.Debugf("volume shell bootstrap: %v", err)
+	}
+
 	// ── Build thin image ────────────────────────────────────────────────────
 	buildLabel := BuildLabel("Building thin image", stack, p.explicitStack)
 	sp := ux.NewProgressSpinner(buildLabel)

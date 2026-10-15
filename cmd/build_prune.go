@@ -109,6 +109,9 @@ func runBuildPrune(cmd *cobra.Command, _ []string) error {
 }
 
 func execStep(ctx context.Context, step docker.PruneStep) error {
+	if step.Func != nil {
+		return step.Func(ctx)
+	}
 	if len(step.Argv) == 0 {
 		return nil
 	}

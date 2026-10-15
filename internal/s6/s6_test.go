@@ -332,6 +332,11 @@ func TestEntrypointSnippet(t *testing.T) {
 		}
 	}
 
+	// useradd must use HOST_UID to match host bind-mount ownership
+	if !strings.Contains(script, "--uid") || !strings.Contains(script, "HOST_UID") {
+		t.Error("useradd must pass --uid $HOST_UID to match host file ownership")
+	}
+
 	// User creation must come before gosu exec
 	useraddPos := strings.Index(script, "useradd")
 	gosuPos := strings.Index(script, "exec gosu")

@@ -2,8 +2,10 @@ package docker
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
+	"os/exec"
 	"strings"
 )
 
@@ -144,9 +146,13 @@ type PruneOpts struct {
 
 // PruneStep is one command in a prune plan.
 type PruneStep struct {
-	// Argv is the command and arguments. For shell-substituted commands
-	// like `docker rm -f $(docker ps -aq)`, this is ["sh", "-c", "<script>"].
+	// Argv is the command and arguments.
 	Argv []string
+
+	// Func, when non-nil, is called instead of exec'ing Argv. Use this
+	// to replace shell-substituted commands with pure Go. When set, Argv
+	// is still joined for display (progress/dry-run output).
+	Func func(ctx context.Context) error
 
 	// IgnoreError lets the step fail without aborting the plan
 	// (e.g. `docker rm` with no containers exits non-zero).
@@ -165,7 +171,8 @@ func BuildDockerPruneSteps(opts PruneOpts) []PruneStep {
 	if !opts.Force {
 		return []PruneStep{
 			{
-				Argv:        []string{"sh", "-c", "docker rm -f $(docker ps -aq) 2>/dev/null || true"},
+				Argv:        []string{"docker", "rm", "-f", "$(docker ps -aq)"},
+				Func:        dockerRemoveAllContainers,
 				IgnoreError: true,
 			},
 			{Argv: []string{"docker", "system", "prune", "-af"}},
@@ -229,7 +236,7 @@ func BuildNixPruneSteps(opts PruneOpts) []PruneStep {
 				"docker", "run", "--rm",
 				"-v", DefaultThinStoreVolume + ":/nix",
 				NixCoreImage,
-				"sh", "-c", NixGCRootReportScript,
+				"/bin/sh", "-c", NixGCRootReportScript,
 			}, IgnoreError: true},
 		}
 		// Preflight gate (CELL-334): stamp roots for every running
@@ -240,7 +247,7 @@ func BuildNixPruneSteps(opts PruneOpts) []PruneStep {
 				"docker", "run", "--rm",
 				"-v", DefaultThinStoreVolume + ":/nix",
 				NixCoreImage,
-				"sh", "-c", stamp,
+				"/bin/sh", "-c", stamp,
 			}})
 		}
 		steps = append(steps,
@@ -248,7 +255,7 @@ func BuildNixPruneSteps(opts PruneOpts) []PruneStep {
 				"docker", "run", "--rm",
 				"-v", DefaultThinStoreVolume + ":/nix",
 				NixCoreImage,
-				"sh", "-c", SafeNixGCScript,
+				"/bin/sh", "-c", SafeNixGCScript,
 			}},
 			registryCleanup,
 		)
@@ -269,7 +276,7 @@ func BuildNixPruneSteps(opts PruneOpts) []PruneStep {
 			{Argv: []string{"sudo", "launchctl", "kickstart", "-k", service}, DryRun: true},
 			{
 				Argv: []string{
-					"sh", "-c",
+					"/bin/sh", "-c",
 					"until ssh -o ConnectTimeout=2 " + host + " true 2>/dev/null; do sleep 2; done",
 				},
 				DryRun: true,
@@ -297,6 +304,22 @@ func BuildNixPruneSteps(opts PruneOpts) []PruneStep {
 	}
 	steps = append(steps, registryCleanup)
 	return steps
+}
+
+// dockerRemoveAllContainers lists all container IDs and force-removes them.
+// Replaces the shell-dependent `sh -c "docker rm -f $(docker ps -aq)"` so
+// devcell works on hosts without sh in PATH (NixOS, pure-nix setups).
+func dockerRemoveAllContainers(ctx context.Context) error {
+	out, err := exec.CommandContext(ctx, "docker", "ps", "-aq").Output()
+	if err != nil {
+		return nil
+	}
+	ids := strings.Fields(strings.TrimSpace(string(out)))
+	if len(ids) == 0 {
+		return nil
+	}
+	args := append([]string{"rm", "-f"}, ids...)
+	return exec.CommandContext(ctx, "docker", args...).Run()
 }
 
 // RunPruneArgs bundles inputs to RunPrune. Keeps the call site readable

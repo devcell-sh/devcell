@@ -98,7 +98,7 @@ func ParseNixStoreReport(volume, out string) (NixStoreReport, error) {
 func CollectNixStore(ctx context.Context) (NixStoreReport, bool) {
 	volume := ThinStoreVolume()
 	out, err := exec.CommandContext(ctx, "docker", "run", "--rm",
-		"-v", volume+":/nix", NixCoreImage, "sh", "-c", NixDFReportScript,
+		"-v", volume+":/nix", NixCoreImage, "/bin/sh", "-c", NixDFReportScript,
 	).CombinedOutput()
 	if err != nil {
 		return NixStoreReport{}, false

@@ -297,13 +297,13 @@ func TestThinBuildArgv_UsesEntrypointSh(t *testing.T) {
 	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
 	found := false
 	for i, a := range argv {
-		if a == "--entrypoint" && i+1 < len(argv) && argv[i+1] == "sh" {
+		if a == "--entrypoint" && i+1 < len(argv) && argv[i+1] == "/bin/sh" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("expected --entrypoint sh in argv: %v", argv)
+		t.Errorf("expected --entrypoint /bin/sh in argv: %v", argv)
 	}
 }
 
@@ -1309,6 +1309,28 @@ func TestBuilderOrphanedByCancel(t *testing.T) {
 	}
 }
 
+func TestThinBuildArgv_HomeManagerTargetX86(t *testing.T) {
+	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", "base", "", "myproject")
+	script := argv[len(argv)-1]
+	want := "home-manager switch --flake /opt/nixhome#devcell-local\n"
+	if !strings.Contains(script, want) {
+		t.Errorf("x86_64 with hmTarget=local must produce %q in script", want)
+	}
+	// Must NOT contain an empty target or aarch64 suffix
+	if strings.Contains(script, "#devcell-\n") || strings.Contains(script, "#devcell- ") {
+		t.Error("home-manager target must not be empty (would produce homeConfigurations.\"\")")
+	}
+}
+
+func TestThinBuildArgv_HomeManagerTargetAarch64(t *testing.T) {
+	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "aarch64", "base", "", "myproject")
+	script := argv[len(argv)-1]
+	want := "home-manager switch --flake /opt/nixhome#devcell-local-aarch64\n"
+	if !strings.Contains(script, want) {
+		t.Errorf("aarch64 with hmTarget=local must produce %q in script", want)
+	}
+}
+
 // The build's package summary rides on the thin image as a label so
 // `cell <agent>` can show it at start without evaluating nix again.
 func TestThinBuildArgvWithPackages_LabelsImage(t *testing.T) {
@@ -1320,5 +1342,44 @@ func TestThinBuildArgvWithPackages_LabelsImage(t *testing.T) {
 	plain := ThinBuildArgvFull("core:1", "c", "v", "path:/x", "thin:1", "local", "aarch64", "ultimate", "", "proj")
 	if !strings.Contains(plain[len(plain)-1], `LABEL devcell.packages=""`) {
 		t.Errorf("ThinBuildArgvFull must keep the label with an empty value")
+	}
+}
+
+// home-manager uses jq internally to URI-encode the flake config name.
+// If jq is missing at runtime, the name becomes "" and nix looks for
+// homeConfigurations."" — an attribute that doesn't exist.
+func TestThinBuildArgv_JqInDevcellToolsProfile(t *testing.T) {
+	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", "base", "", "myproject")
+	script := argv[len(argv)-1]
+
+	profileInstallIdx := strings.Index(script, "nix profile install --profile /nix/var/nix/profiles/devcell-tools")
+	if profileInstallIdx < 0 {
+		t.Fatal("script must install devcell-tools profile")
+	}
+	profileSection := script[profileInstallIdx:]
+	endIdx := strings.Index(profileSection, "\nfi")
+	if endIdx > 0 {
+		profileSection = profileSection[:endIdx]
+	}
+	if !strings.Contains(profileSection, "nixpkgs#jq") {
+		t.Error("devcell-tools profile must include jq: home-manager's flake resolver requires it for URI-encoding the config name")
+	}
+}
+
+func TestThinBuildArgv_JqHealthCheckBeforeInstall(t *testing.T) {
+	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", "base", "", "myproject")
+	script := argv[len(argv)-1]
+
+	installIdx := strings.Index(script, "Installing system tools on volume")
+	if installIdx < 0 {
+		t.Fatal("script must contain system tools install block")
+	}
+	// The health check must exercise jq's dynamic linker (jq --version), not
+	// just test PATH presence: a stale volume can have the jq binary but with
+	// libonig.so missing. The check must appear BEFORE the install block so a
+	// broken profile gets wiped and reinstalled.
+	jqCheck := strings.Index(script, "jq --version")
+	if jqCheck < 0 || jqCheck > installIdx {
+		t.Error("script must health-check jq (jq --version) before the devcell-tools install block")
 	}
 }

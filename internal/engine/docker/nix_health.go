@@ -114,7 +114,7 @@ func NixHealthProbeArgv(volume string) []string {
 		"docker", "run", "--rm",
 		"-v", volume + ":/nix",
 		NixCoreImage,
-		"sh", "-c", NixHealthProbeScript,
+		"/bin/sh", "-c", NixHealthProbeScript,
 	}
 }
 

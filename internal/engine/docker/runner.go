@@ -23,6 +23,7 @@ import (
 	"github.com/devcell-sh/devcell/internal/cell"
 	"github.com/devcell-sh/devcell/internal/cfg"
 	"github.com/devcell-sh/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/ux"
 )
 
 const (
@@ -74,7 +75,7 @@ func UserImageTag() string {
 		return tag
 	}
 	if PerCellImage {
-		return "devcell-user:" + config.ResolveWorkspaceName(os.Getenv)
+		return localImage("devcell-user:" + config.ResolveWorkspaceName(os.Getenv))
 	}
 	tag := Stack
 	if tag == "" {
@@ -88,7 +89,14 @@ func UserImageTag() string {
 		h := sha256.Sum256([]byte(strings.Join(sorted, ",")))
 		tag += "-" + hex.EncodeToString(h[:])[:8]
 	}
-	return "devcell-user:" + tag
+	return localImage("devcell-user:" + tag)
+}
+
+// localImage prefixes a bare local image name with "localhost/" so Podman
+// can resolve it without unqualified-search-registries. Docker also handles
+// the localhost/ prefix correctly for locally-built images.
+func localImage(name string) string {
+	return "localhost/" + name
 }
 
 // UserImageTagPure returns the local tag for nix2container-built (pure)
@@ -329,6 +337,7 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	// [env], [mise]) come from cell.GuestEnv further down.
 	e := func(k, v string) { argv = append(argv, "-e", k+"="+v) }
 	e("HOST_USER", c.HostUser)
+	e("HOST_UID", strconv.Itoa(c.HostUID))
 	e("HOME", "/home/"+c.HostUser)
 	e("TERM", os.Getenv("TERM"))
 	e("HISTFILE", "/home/"+c.HostUser+"/zsh_history_"+c.CellName)
@@ -336,7 +345,16 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	e("CODEX_OSS_BASE_URL", envOrDefault("CODEX_OSS_BASE_URL", "http://host.docker.internal:1234/v1"))
 	e("DEVCELL_HOST_PROJECT_DIR", c.BaseDir)
 
-	v := func(mount string) { argv = append(argv, "-v", mount) }
+	mountSeen := map[string]string{} // container path → source description
+	v := func(mount string) {
+		cp := volumeContainerPath(mount)
+		if prev, dup := mountSeen[cp]; dup {
+			ux.Debugf("volume: skipping duplicate mount %s (already mounted by %s)", mount, prev)
+			return
+		}
+		mountSeen[cp] = mount
+		argv = append(argv, "-v", mount)
+	}
 
 	// Optional .env file — resolve self-referencing vars (KEY=${KEY}) by passing
 	// -e KEY so Docker inherits the real value from the host environment.
@@ -471,10 +489,18 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 		argv = append(argv, "-e", "DEVCELL_SECRET_KEYS="+strings.Join(spec.InheritEnv, ","))
 	}
 
-	// Standard volumes
+	// Standard volumes — all go through v() which deduplicates by container path.
+	// Workspace home goes first so it claims /home/<user> before the project's
+	// BaseDir:BaseDir convenience mount. Without this ordering, running devcell
+	// from $HOME on Linux would mount the real home at /home/<user>, and the
+	// entrypoint's shell-rc service would overwrite host dotfiles.
+	v(c.WorkspaceHome + ":/home/" + c.HostUser)
+	homeTarget := "/home/" + c.HostUser
+	if filepath.Clean(c.BaseDir) == filepath.Clean(homeTarget) {
+		ux.Warn("Project dir is your home directory. The workspace home (" + c.WorkspaceHome + ") is mounted at " + homeTarget + "; your project is at /" + c.CellName + ".")
+	}
 	v(c.BaseDir + ":" + c.BaseDir)
 	v(c.BaseDir + ":/" + c.CellName)
-	v(c.WorkspaceHome + ":/home/" + c.HostUser)
 	if spec.CellCfg.Cell.ResolvedDockerSocket() && !spec.ProxyEnabled && !dp.DenyDockerSock() {
 		v("/var/run/docker.sock:/var/run/docker.sock")
 	}
@@ -494,37 +520,19 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	// Boot dir bind-mount: hosts the Go-generated entrypoint script.
 	if spec.BootDir != "" {
 		v(spec.BootDir + ":" + BootContainerPath)
+		e("DEVCELL_BOOT_DIR", BootContainerPath)
 	}
 
-	// cfg [[volumes]] entries — skip any whose container path duplicates
-	// a standard mount (e.g. BaseDir identity mount) to avoid Docker's
-	// "Duplicate mount point" error.
-	stdMounts := map[string]bool{
-		c.BaseDir:              true,
-		"/" + c.CellName:        true,
-		"/home/" + c.HostUser:  true,
-		"/var/run/docker.sock": true,
-		"/home/" + c.HostUser + "/.claude/commands":        true,
-		"/home/" + c.HostUser + "/.claude/agents":          true,
-		"/home/" + c.HostUser + "/.claude/skills":          true,
-		"/home/" + c.HostUser + "/.agents":                 true,
-		"/home/" + c.HostUser + "/.config/opencode/agents": true,
-		"/etc/devcell/config":                              true,
-		"/home/" + c.HostUser + "/.config/devcell":         true,
-	}
+	// User [[volumes]] / [cell] volumes entries — also deduplicated by v().
 	deniedPaths := dp.DeniedMountPaths()
 	for _, vol := range spec.CellCfg.Volumes {
-		cp := vol.ContainerPath()
-		if stdMounts[cp] {
-			continue
-		}
 		if dp.DenyUserVolumes() {
-			continue
+			break
 		}
 		if isDeniedByPolicy(vol.Mount, deniedPaths) {
 			continue
 		}
-		argv = append(argv, "-v", vol.Resolved())
+		v(vol.Resolved())
 	}
 
 	// --no-ports or policy: skip all -p mappings (user ports and GUI).
@@ -559,7 +567,7 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 			}
 		}
 		wgDir := filepath.Join(c.WorkspaceHome, ".wg")
-		argv = append(argv, "-v", wgDir+":/home/"+c.HostUser+"/.devcell/"+c.WorkspaceName+"/.wg:ro")
+		v(wgDir + ":/home/" + c.HostUser + "/.devcell/" + c.WorkspaceName + "/.wg:ro")
 	}
 
 	// In-memory secrets mount — Playwright MCP reads .secrets-playwright from here
@@ -604,6 +612,17 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	}
 
 	return argv
+}
+
+// volumeContainerPath extracts the container-side path from a docker -v
+// mount string ("src:dst" or "src:dst:opts"), cleaned for dedup comparison.
+func volumeContainerPath(mount string) string {
+	parts := strings.SplitN(mount, ":", 3)
+	p := parts[0]
+	if len(parts) >= 2 {
+		p = parts[1]
+	}
+	return filepath.Clean(p)
 }
 
 func isDeniedByPolicy(mount string, deniedPrefixes []string) bool {
@@ -847,7 +866,7 @@ func ImageMetadataFromContainer(ctx context.Context) ImageMetadata {
 	}
 
 	// Legacy fallback for older images without OCI labels — runtime read.
-	legacyOut, legacyErr := exec.CommandContext(ctx, "docker", "run", "--rm", "--entrypoint", "sh",
+	legacyOut, legacyErr := exec.CommandContext(ctx, "docker", "run", "--rm", "--entrypoint", "/bin/sh",
 		tag, "-c",
 		"cat /etc/devcell/metadata.json 2>/dev/null",
 	).Output()
@@ -933,7 +952,7 @@ func ImageVersions(ctx context.Context) (base, user string) {
 	if !ImageExists(ctx, tag) {
 		tag = UserImageTag()
 	}
-	out, err := exec.CommandContext(ctx, "docker", "run", "--rm", "--entrypoint", "sh",
+	out, err := exec.CommandContext(ctx, "docker", "run", "--rm", "--entrypoint", "/bin/sh",
 		tag, "-c",
 		"cat /etc/devcell/base-image-version 2>/dev/null; echo '---'; cat /etc/devcell/user-image-version 2>/dev/null",
 	).Output()
@@ -959,7 +978,7 @@ func UpdateFlakeLock(ctx context.Context, configDir string, lockOnly bool, verbo
 		"run", "--rm",
 		"-v", configDir + ":/work",
 		"-e", "NIX_CONFIG=experimental-features = nix-command flakes",
-		"--entrypoint", "sh",
+		"--entrypoint", "/bin/sh",
 		FlakeNixImage(),
 		"-c", "cd /work && " + nixCmd,
 	}

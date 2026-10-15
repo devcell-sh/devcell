@@ -17,7 +17,7 @@ import (
 // NixCoreImage is the default nix base image for thin builds.
 // Prefer cfg.DefaultNixImage for the canonical constant; this alias exists
 // for call sites inside the docker engine that don't take a config parameter.
-const NixCoreImage = "nixos/nix:2.34.7"
+const NixCoreImage = "docker.io/nixos/nix:2.34.9"
 
 // Resource ceiling for the thin-build container (CELL-359).
 //
@@ -346,6 +346,28 @@ if [ -n "$BASE_SYSTEM" ]; then
     fi
   done
 fi
+# Fallback: if /etc/passwd is still missing (empty volume, failed hydration,
+# or no base-system on the volume), create minimal files so the build can
+# create users and start nix-daemon.
+for f in /etc/passwd /etc/group /etc/shadow; do
+  if [ ! -e "$f" ]; then
+    rm -f "$f"
+    touch "$f"
+  fi
+done
+if [ ! -s /etc/passwd ]; then
+  echo "root:x:0:0:root:/root:/bin/sh" > /etc/passwd
+  echo "nobody:x:65534:65534:nobody:/nonexistent:/bin/false" >> /etc/passwd
+fi
+if [ ! -s /etc/group ]; then
+  echo "root:x:0:" > /etc/group
+  echo "nixbld:x:30000:" >> /etc/group
+fi
+if ! grep -q nixbld /etc/passwd 2>/dev/null; then
+  for i in $(seq 1 8); do
+    echo "nixbld${i}:x:$((30000+i)):30000:Nix build user ${i}:/var/empty:/bin/false" >> /etc/passwd
+  done
+fi
 
 # Save coreutils + nix + cacert store paths BEFORE anything else — they resolve
 # through the default profile which we delete later.
@@ -438,6 +460,16 @@ fi
 # Install system tools into a dedicated profile on the volume.
 # Separate from default profile (provides sh) and home-manager profile (user tools).
 # Skip if the profile already exists with core binaries (avoids GitHub API calls).
+#
+# Health check: a stale volume can have binaries with broken shared library
+# dependencies (e.g. jq missing libonig). If a critical tool is broken, wipe
+# the profile so it gets reinstalled with a consistent closure.
+if [ -x /nix/var/nix/profiles/devcell-tools/bin/jq ] && \
+   ! /nix/var/nix/profiles/devcell-tools/bin/jq --version >/dev/null 2>&1; then
+  echo "Stale devcell-tools profile (broken shared libraries), reinstalling..."
+  rm -f /nix/var/nix/profiles/devcell-tools /nix/var/nix/profiles/devcell-tools-*-link
+fi
+
 if [ -x /nix/var/nix/profiles/devcell-tools/bin/tini ]; then
   echo "System tools already installed on volume, skipping."
 else
@@ -460,7 +492,8 @@ else
       nixpkgs#cacert \
       nixpkgs#glibcLocales \
       'nixpkgs#fontconfig^out' \
-      nixpkgs#getent
+      nixpkgs#getent \
+      nixpkgs#jq
 fi
 
 # nix-ld as dynamic linker — all binaries are nix-built, no Debian ld conflict
@@ -684,7 +717,7 @@ echo "Done — thin image: %s"`,
 	}
 	args = append(args,
 		"-v", "/var/run/docker.sock:/var/run/docker.sock",
-		"--entrypoint", "sh",
+		"--entrypoint", "/bin/sh",
 		coreImage,
 		"-c", script,
 	)

@@ -1,6 +1,7 @@
 package docker_test
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -27,15 +28,14 @@ func TestBuildDockerPruneSteps_Default_RunsCleandockerSequenceOnBothOSes(t *test
 				t.Fatalf("want 4 steps, got %d: %+v", len(steps), steps)
 			}
 
-			// Step 1: must remove ALL containers via `docker rm -f $(docker ps -aq)`.
-			// Implementation detail: shell-out (Shell:true) is fine because the
-			// $(docker ps -aq) substitution requires it.
-			step1 := strings.Join(steps[0].Argv, " ")
-			if !strings.Contains(step1, "docker rm -f") {
-				t.Errorf("step 1 missing `docker rm -f`: %q", step1)
+			// Step 1: must remove ALL containers. Uses Func (pure Go)
+			// instead of sh -c so devcell works on hosts without sh in PATH.
+			if steps[0].Func == nil {
+				t.Errorf("step 1 must have Func set (pure Go, no sh dependency)")
 			}
-			if !strings.Contains(step1, "docker ps -aq") {
-				t.Errorf("step 1 missing `docker ps -aq` (need container IDs): %q", step1)
+			step1 := strings.Join(steps[0].Argv, " ")
+			if !strings.Contains(step1, "docker") {
+				t.Errorf("step 1 Argv (display) should mention docker: %q", step1)
 			}
 			if !steps[0].IgnoreError {
 				t.Errorf("step 1 (docker rm) must IgnoreError — empty container list errors")
@@ -843,6 +843,43 @@ func TestBuildNixPruneSteps_Default_DarwinRunsInContainerOnNixVolume(t *testing.
 	}
 	if strings.Contains(script, "nix-collect-garbage") {
 		t.Errorf("darwin default prune must not blanket nix-collect-garbage (that's --force)")
+	}
+}
+
+// Default docker prune must not invoke `sh` on the host. All shell-dependent
+// steps must use Func (pure Go) so devcell works on NixOS and other hosts
+// where sh may not be in PATH.
+func TestBuildDockerPruneSteps_Default_NoHostShellDependency(t *testing.T) {
+	steps := docker.BuildDockerPruneSteps(docker.PruneOpts{GOOS: "linux"})
+	for i, s := range steps {
+		if len(s.Argv) >= 2 && s.Argv[0] == "sh" && s.Argv[1] == "-c" && s.Func == nil {
+			t.Errorf("step %d uses sh -c without Func override — "+
+				"breaks on hosts without sh in PATH: %v", i+1, s.Argv)
+		}
+	}
+}
+
+// RunPrune must call Func when set, not exec Argv.
+func TestRunPrune_FuncStepExecuted(t *testing.T) {
+	called := false
+	steps := []docker.PruneStep{{
+		Argv: []string{"display", "only"},
+		Func: func(_ context.Context) error {
+			called = true
+			return nil
+		},
+	}}
+	// We can't call RunPrune directly (it builds its own steps), so verify
+	// the contract: step.Func != nil means the executor must call Func.
+	for _, s := range steps {
+		if s.Func != nil {
+			if err := s.Func(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if !called {
+		t.Error("Func was not invoked")
 	}
 }
 

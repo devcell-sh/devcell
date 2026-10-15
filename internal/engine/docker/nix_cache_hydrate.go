@@ -3,12 +3,17 @@ package docker
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"strings"
 
 	nixoci "github.com/devcell-sh/go-nixoci"
 
 	"github.com/devcell-sh/devcell/internal/ux"
 )
+
+func removeVolume(ctx context.Context, name string) {
+	_ = exec.CommandContext(ctx, "docker", "volume", "rm", "-f", name).Run()
+}
 
 // NixCacheDockerArch normalizes a nix-style arch ("aarch64", "x86_64") to
 // Docker convention ("arm64", "amd64").
@@ -62,6 +67,10 @@ func HydrateNixCache(ctx context.Context, volumeName, registry, arch string) err
 	if err := nixoci.PullToDockerVolume(ctx, resolved, volumeName, 1); err != nil {
 		sp.Warn(label + " — pull failed, building from scratch")
 		ux.Debugf("nix cache pull: %v", err)
+		// Remove the partially-populated volume so Docker auto-populates
+		// it from the core image on first mount, giving the thin builder
+		// a clean /nix with valid /etc symlinks.
+		removeVolume(ctx, volumeName)
 		return nil
 	}
 

@@ -160,9 +160,15 @@ echo "$SESSION_HOME" > "$S6_ENV/SESSION_HOME"
 echo "$DEVCELL_HOME" > "$S6_ENV/DEVCELL_HOME"
 
 # 2. Create session user (gosu prerequisite)
+# HOST_UID (from env) ensures the container user's UID matches the host user
+# that owns bind-mounted directories, preventing EACCES on traversal.
 if ! id "$HOST_USER" >/dev/null 2>&1; then
   chmod 644 /etc/passwd /etc/shadow /etc/group 2>/dev/null || true
-  useradd -m -s /bin/zsh "$HOST_USER" 2>/dev/null || true
+  _useradd_flags="-m -s /bin/zsh"
+  if [ -n "${HOST_UID:-}" ] && [ "$HOST_UID" -gt 0 ] 2>/dev/null; then
+    _useradd_flags="$_useradd_flags --uid $HOST_UID"
+  fi
+  useradd $_useradd_flags "$HOST_USER" 2>/dev/null || true
   echo "$HOST_USER ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 fi
 

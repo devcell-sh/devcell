@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -13,7 +14,7 @@ import (
 )
 
 func baseConfig() config.Config {
-	return config.Load("/home/bob/myproject", func(k string) string {
+	c := config.Load("/home/bob/myproject", func(k string) string {
 		m := map[string]string{
 			"DEVCELL_BUNK": "3",
 			"HOME":         "/home/bob",
@@ -22,6 +23,8 @@ func baseConfig() config.Config {
 		}
 		return m[k]
 	})
+	c.HostUID = os.Getuid()
+	return c
 }
 
 func noopFS() docker.FS {
@@ -268,6 +271,7 @@ func TestArgv_MandatoryEnvVars(t *testing.T) {
 		"CELL_NAME=myproject-3",
 		"APP_NAME=myproject-3",
 		"HOST_USER=bob",
+		"HOST_UID=" + strconv.Itoa(os.Getuid()),
 		"HOME=/home/bob",
 		"IS_SANDBOX=1",
 		"WORKSPACE=/myproject-3",
@@ -541,6 +545,50 @@ func TestArgv_CfgVolumes_DedupTrailingSlash(t *testing.T) {
 	}
 	if stdCount != baselineStd {
 		t.Errorf("standard mounts changed: got %d, want %d", stdCount, baselineStd)
+	}
+}
+
+func TestArgv_NoDuplicateWhenProjectIsHomeDir(t *testing.T) {
+	homeAsProject := config.Load("/home/bob", func(k string) string {
+		m := map[string]string{
+			"HOME": "/home/bob",
+			"USER": "bob",
+			"TERM": "xterm-256color",
+		}
+		return m[k]
+	})
+	spec := docker.RunSpec{
+		Config:       homeAsProject,
+		CellCfg:      cfg.CellConfig{},
+		Binary:       "claude",
+		DefaultFlags: []string{"--dangerously-skip-permissions"},
+	}
+	argv := docker.BuildArgv(spec, noopFS(), noopLookPath)
+
+	seen := map[string]int{}
+	// Track what source is mounted at /home/bob.
+	homeSource := ""
+	for i, a := range argv {
+		if a == "-v" && i+1 < len(argv) {
+			cp := strings.SplitN(argv[i+1], ":", 3)
+			if len(cp) >= 2 {
+				seen[cp[1]]++
+				if cp[1] == "/home/bob" && homeSource == "" {
+					homeSource = cp[0]
+				}
+			}
+		}
+	}
+	for cp, n := range seen {
+		if n > 1 {
+			t.Errorf("duplicate mount point %q appears %d times", cp, n)
+		}
+	}
+	// The workspace home must win at /home/bob, not the project dir.
+	// Otherwise the entrypoint's shell-rc overwrites host dotfiles.
+	wantHome := homeAsProject.WorkspaceHome
+	if homeSource != wantHome {
+		t.Errorf("/home/bob mounted from %q, want workspace home %q", homeSource, wantHome)
 	}
 }
 
@@ -990,6 +1038,7 @@ func withCleanImageState(t *testing.T) {
 	t.Setenv("DEVCELL_USER_IMAGE", "")
 	t.Setenv("DEVCELL_USER_IMAGE_PURE", "")
 	t.Setenv("DEVCELL_CELL_NAME", "")
+	t.Setenv("DEVCELL_WORKSPACE", "")
 	t.Setenv("TMUX_SESSION_NAME", "")
 	origStack := docker.Stack
 	origModules := docker.Modules
@@ -1007,7 +1056,7 @@ func withCleanImageState(t *testing.T) {
 func TestUserImageTag_DefaultStack(t *testing.T) {
 	withCleanImageState(t)
 	got := docker.UserImageTag()
-	if got != "devcell-user:base" {
+	if got != "localhost/devcell-user:base" {
 		t.Errorf("default stack: want devcell-user:base, got %q", got)
 	}
 }
@@ -1016,7 +1065,7 @@ func TestUserImageTag_UltimateStack(t *testing.T) {
 	withCleanImageState(t)
 	docker.Stack = "ultimate"
 	got := docker.UserImageTag()
-	if got != "devcell-user:ultimate" {
+	if got != "localhost/devcell-user:ultimate" {
 		t.Errorf("ultimate stack: want devcell-user:ultimate, got %q", got)
 	}
 }
@@ -1027,7 +1076,7 @@ func TestUserImageTag_StackWithModules(t *testing.T) {
 	docker.Modules = []string{"nixos", "electronics"}
 	got := docker.UserImageTag()
 	// Modules sorted: electronics, nixos
-	if !strings.HasPrefix(got, "devcell-user:ultimate-electronics-nixos-") {
+	if !strings.HasPrefix(got, "localhost/devcell-user:ultimate-electronics-nixos-") {
 		t.Errorf("stack+modules: want prefix devcell-user:ultimate-electronics-nixos-, got %q", got)
 	}
 	// sha8 suffix
@@ -1066,7 +1115,7 @@ func TestUserImageTag_PerSession_Default(t *testing.T) {
 	withCleanImageState(t)
 	docker.PerCellImage = true
 	got := docker.UserImageTag()
-	if got != "devcell-user:main" {
+	if got != "localhost/devcell-user:main" {
 		t.Errorf("per-session default: want devcell-user:main, got %q", got)
 	}
 }
@@ -1076,7 +1125,7 @@ func TestUserImageTag_PerSession_TmuxFallback(t *testing.T) {
 	docker.PerCellImage = true
 	t.Setenv("TMUX_SESSION_NAME", "CELL")
 	got := docker.UserImageTag()
-	if got != "devcell-user:CELL" {
+	if got != "localhost/devcell-user:CELL" {
 		t.Errorf("per-session tmux: want devcell-user:CELL, got %q", got)
 	}
 }
@@ -1087,7 +1136,7 @@ func TestUserImageTag_PerSession_ExplicitBeatssTmux(t *testing.T) {
 	t.Setenv("DEVCELL_CELL_NAME", "explicit")
 	t.Setenv("TMUX_SESSION_NAME", "tmux-session")
 	got := docker.UserImageTag()
-	if got != "devcell-user:explicit" {
+	if got != "localhost/devcell-user:explicit" {
 		t.Errorf("per-session precedence: want devcell-user:explicit, got %q", got)
 	}
 }
@@ -1104,7 +1153,7 @@ func TestUserImageTag_PerCell_AgreesWithConfig(t *testing.T) {
 		docker.PerCellImage = true
 		t.Setenv("DEVCELL_CELL_NAME", tc.cellName)
 		t.Setenv("TMUX_SESSION_NAME", tc.tmux)
-		want := "devcell-user:" + config.ResolveWorkspaceName(os.Getenv)
+		want := "localhost/devcell-user:" + config.ResolveWorkspaceName(os.Getenv)
 		if got := docker.UserImageTag(); got != want {
 			t.Errorf("DEVCELL_CELL_NAME=%q TMUX_SESSION_NAME=%q: UserImageTag = %q, want %q",
 				tc.cellName, tc.tmux, got, want)

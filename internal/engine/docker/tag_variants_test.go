@@ -21,22 +21,24 @@ import (
 
 func TestUserImageTag_BareTagUnchanged(t *testing.T) {
 	defer setEnv("DEVCELL_USER_IMAGE", "")()
+	defer setEnv("DEVCELL_WORKSPACE", "")()
 	defer setStack("ultimate")()
 
 	got := docker.UserImageTag()
-	if got != "devcell-user:ultimate" {
-		t.Errorf("UserImageTag = %q, want devcell-user:ultimate (unchanged across flip)", got)
+	if got != "localhost/devcell-user:ultimate" {
+		t.Errorf("UserImageTag = %q, want localhost/devcell-user:ultimate (unchanged across flip)", got)
 	}
 }
 
 func TestUserImageTagPure_HasPureSuffix(t *testing.T) {
 	defer setEnv("DEVCELL_USER_IMAGE", "")()
 	defer setEnv("DEVCELL_USER_IMAGE_PURE", "")()
+	defer setEnv("DEVCELL_WORKSPACE", "")()
 	defer setStack("ultimate")()
 
 	got := docker.UserImageTagPure()
-	if got != "devcell-user:ultimate-pure" {
-		t.Errorf("UserImageTagPure = %q, want devcell-user:ultimate-pure", got)
+	if got != "localhost/devcell-user:ultimate-pure" {
+		t.Errorf("UserImageTagPure = %q, want localhost/devcell-user:ultimate-pure", got)
 	}
 }
 
@@ -49,21 +51,23 @@ func TestUserImageTagPure_HasPureSuffix(t *testing.T) {
 func TestPickImageTag_DefaultIsPureTag(t *testing.T) {
 	defer setEnv("DEVCELL_USER_IMAGE", "")()
 	defer setEnv("DEVCELL_USER_IMAGE_PURE", "")()
+	defer setEnv("DEVCELL_WORKSPACE", "")()
 	defer setStack("ultimate")()
 
 	got := docker.PickImageTag(false)
-	if got != "devcell-user:ultimate-pure" {
-		t.Errorf("PickImageTag(false) = %q, want devcell-user:ultimate-pure (default after flip)", got)
+	if got != "localhost/devcell-user:ultimate-pure" {
+		t.Errorf("PickImageTag(false) = %q, want localhost/devcell-user:ultimate-pure (default after flip)", got)
 	}
 }
 
 func TestPickImageTag_ImpureTrueReturnsBareTag(t *testing.T) {
 	defer setEnv("DEVCELL_USER_IMAGE", "")()
+	defer setEnv("DEVCELL_WORKSPACE", "")()
 	defer setStack("ultimate")()
 
 	got := docker.PickImageTag(true)
-	if got != "devcell-user:ultimate" {
-		t.Errorf("PickImageTag(true) = %q, want devcell-user:ultimate (legacy bare tag, --impure path)", got)
+	if got != "localhost/devcell-user:ultimate" {
+		t.Errorf("PickImageTag(true) = %q, want localhost/devcell-user:ultimate (legacy bare tag, --impure path)", got)
 	}
 }
 
@@ -87,11 +91,12 @@ func TestUserImageTagPure_EnvOverridesFullTag(t *testing.T) {
 func TestUserImageTagThin_HasThinSuffix(t *testing.T) {
 	defer setEnv("DEVCELL_USER_IMAGE", "")()
 	defer setEnv("DEVCELL_USER_IMAGE_THIN", "")()
+	defer setEnv("DEVCELL_WORKSPACE", "")()
 	defer setStack("ultimate")()
 
 	got := docker.UserImageTagThin()
-	if got != "devcell-user:ultimate-thin" {
-		t.Errorf("UserImageTagThin = %q, want devcell-user:ultimate-thin", got)
+	if got != "localhost/devcell-user:ultimate-thin" {
+		t.Errorf("UserImageTagThin = %q, want localhost/devcell-user:ultimate-thin", got)
 	}
 }
 
@@ -122,13 +127,13 @@ func TestUserImageTagThin_UnifiedEnvOverride(t *testing.T) {
 // ── Custom build tag override (--image flag) ─────────────────────────────────
 
 func TestResolveBuildTag_EmptyCustomReturnsDerived(t *testing.T) {
-	if got := docker.ResolveBuildTag("", "devcell-user:ultimate-thin"); got != "devcell-user:ultimate-thin" {
+	if got := docker.ResolveBuildTag("", "localhost/devcell-user:ultimate-thin"); got != "localhost/devcell-user:ultimate-thin" {
 		t.Errorf("empty custom: got %q, want derived", got)
 	}
 }
 
 func TestResolveBuildTag_CustomOverrides(t *testing.T) {
-	if got := docker.ResolveBuildTag("myorg/devcell-test:dev-thin", "devcell-user:ultimate-thin"); got != "myorg/devcell-test:dev-thin" {
+	if got := docker.ResolveBuildTag("myorg/devcell-test:dev-thin", "localhost/devcell-user:ultimate-thin"); got != "myorg/devcell-test:dev-thin" {
 		t.Errorf("custom override ignored: got %q", got)
 	}
 }
@@ -142,11 +147,12 @@ func TestResolveBuildTag_CustomTrimsWhitespace(t *testing.T) {
 func TestPickImageTag_ThinReturnsThinTag(t *testing.T) {
 	defer setEnv("DEVCELL_USER_IMAGE", "")()
 	defer setEnv("DEVCELL_USER_IMAGE_THIN", "")()
+	defer setEnv("DEVCELL_WORKSPACE", "")()
 	defer setStack("ultimate")()
 
 	got := docker.PickImageTagThin()
-	if got != "devcell-user:ultimate-thin" {
-		t.Errorf("PickImageTagThin() = %q, want devcell-user:ultimate-thin", got)
+	if got != "localhost/devcell-user:ultimate-thin" {
+		t.Errorf("PickImageTagThin() = %q, want localhost/devcell-user:ultimate-thin", got)
 	}
 }
 

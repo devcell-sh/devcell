@@ -53,7 +53,7 @@ type VMDiskInfo struct {
 
 // CollectVMDisk probes the Docker VM filesystem size.
 func CollectVMDisk(ctx context.Context) (VMDiskInfo, error) {
-	out, err := exec.CommandContext(ctx, "docker", "run", "--rm", "alpine", "df", "-B1", "/").Output()
+	out, err := exec.CommandContext(ctx, "docker", "run", "--rm", "docker.io/library/alpine", "df", "-B1", "/").Output()
 	if err != nil {
 		return VMDiskInfo{}, err
 	}

@@ -42,7 +42,7 @@ func VolumeContainsArgv(volumeName, sentinelPath string) []string {
 	return []string{
 		"docker", "run", "--rm",
 		"-v", volumeName + ":/nix:ro",
-		"busybox:1.36",
+		"docker.io/library/busybox:1.36",
 		"test", "-e", sentinelPath,
 	}
 }

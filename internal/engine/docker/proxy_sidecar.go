@@ -14,7 +14,7 @@ import (
 	"github.com/devcell-sh/devcell/internal/ux"
 )
 
-const DefaultSquidImage = "ubuntu/squid:latest@sha256:6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029"
+const DefaultSquidImage = "docker.io/ubuntu/squid:latest@sha256:6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029"
 
 // ProxySidecarOpts holds everything needed to start a proxy sidecar.
 type ProxySidecarOpts struct {

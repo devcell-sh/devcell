@@ -34,7 +34,7 @@ func TestCrossArch_NixSeccompDisabled(t *testing.T) {
 			crossPlatform, strings.TrimSpace(string(out)), err)
 	}
 
-	coreImage := "nixos/nix:2.34.7"
+	coreImage := "docker.io/nixos/nix:2.34.7"
 
 	buildExpr := `derivation { name = "t"; builder = "/bin/sh"; args = ["-c" "echo ok > $out"]; system = "` + nativeSystem + `"; }`
 

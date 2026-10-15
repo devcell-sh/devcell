@@ -21,7 +21,7 @@ func KVMProbeArgv() []string {
 		"docker", "run", "--rm",
 		"--network=none",
 		"--device=/dev/kvm",
-		"busybox:1.36",
+		"docker.io/library/busybox:1.36",
 		"true",
 	}
 }

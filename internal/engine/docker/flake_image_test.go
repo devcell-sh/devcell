@@ -21,10 +21,10 @@ func TestFlakeNixImage_DecoupledFromBinaryVersion(t *testing.T) {
 }
 
 func TestFlakeNixImage_RespectsEnvOverride(t *testing.T) {
-	t.Setenv("DEVCELL_NIX_IMAGE", "nixos/nix:2.99.0")
+	t.Setenv("DEVCELL_NIX_IMAGE", "docker.io/nixos/nix:2.99.0")
 
 	got := docker.FlakeNixImage()
-	if got != "nixos/nix:2.99.0" {
-		t.Errorf("FlakeNixImage() = %q, want %q (DEVCELL_NIX_IMAGE override)", got, "nixos/nix:2.99.0")
+	if got != "docker.io/nixos/nix:2.99.0" {
+		t.Errorf("FlakeNixImage() = %q, want %q (DEVCELL_NIX_IMAGE override)", got, "docker.io/nixos/nix:2.99.0")
 	}
 }
