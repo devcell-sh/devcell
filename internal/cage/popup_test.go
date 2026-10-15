@@ -43,11 +43,11 @@ func TestPopupPreflight(t *testing.T) {
 		want          cage.Geometry
 		wantErr       string
 	}{
-		// height = groups + 4 chrome rows + 3 issue rows, clamped to rows-4
-		{"tmux 3.6a", "200 60", 4, cage.Geometry{Width: 76, Height: 11}, ""},
-		{"tmux 3.6a", "200 60", 5, cage.Geometry{Width: 76, Height: 12}, ""},
-		{"tmux 3.3a", "80 24", 4, cage.Geometry{Width: 76, Height: 11}, ""},
-		{"tmux 3.3", "60 16", 5, cage.Geometry{Width: 56, Height: 12}, ""},
+		// height = groups + 3 (border, rule) + 2 (hold line), clamped to rows-4
+		{"tmux 3.6a", "200 60", 4, cage.Geometry{Width: 76, Height: 9}, ""},
+		{"tmux 3.6a", "200 60", 5, cage.Geometry{Width: 76, Height: 10}, ""},
+		{"tmux 3.3a", "80 24", 4, cage.Geometry{Width: 76, Height: 9}, ""},
+		{"tmux 3.3", "60 16", 5, cage.Geometry{Width: 56, Height: 10}, ""},
 		{"tmux 3.3", "60 13", 5, cage.Geometry{Width: 56, Height: 9}, ""},
 		{"tmux 3.2a", "200 60", 4, cage.Geometry{}, "older than 3.3"},
 		{"tmux 2.9", "200 60", 4, cage.Geometry{}, "older than 3.3"},

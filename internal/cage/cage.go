@@ -6,7 +6,8 @@
 // Left: the workspace name, then the cell name (<project>-<cellID>), each
 // its own coloured element. Right: the status panel with clocks, joined with
 // the theme separator. The prefix key is None, so every keystroke reaches the agent;
-// the bar is display-only. Scrolling goes through tmux copy-mode (mouse on).
+// the bar is display-only. The mouse is not captured (mouse off): selection
+// and the wheel stay with the outer terminal or tmux.
 //
 // Opt in with --experimental=ui-cage, DEVCELL_EXPERIMENTAL=ui-cage or
 // [cell] experimental = ["ui-cage"] (see internal/experiments).

@@ -40,7 +40,7 @@ func helperWindow(args []string) int {
 	}
 	geom := cage.Geometry{Width: 56, Height: 10}
 	if strings.HasPrefix(mode, "size") { // docker-shaped panel, popup sized like cmd does
-		groups = dockerShapedGroups(mode == "size5")
+		groups = dockerShapedGroups(strings.HasPrefix(mode, "size5"))
 		geom = cage.Geometry{Width: 76, Height: cage.PopupHeight(len(groups), 24)}
 	}
 	spec := cage.PopupSpec{
@@ -71,7 +71,7 @@ func helperWindow(args []string) int {
 	}
 	bootErr := view.Phase("Network", func() error {
 		time.Sleep(400 * time.Millisecond)
-		if mode == "fail" {
+		if strings.HasSuffix(mode, "fail") { // "fail", "size4fail"
 			return errors.New("no route")
 		}
 		return nil
@@ -157,8 +157,8 @@ func dockerShapedGroups(gui bool) []ux.PanelGroup {
 }
 
 // The popup is sized from the group count (cage.PopupHeight). With the
-// docker-shaped panel the groups, the rule and the footer must all land
-// inside the border, with the issue rows left as slack below the footer.
+// docker-shaped panel the groups and the rule must land inside the border,
+// with exactly the hold-line rows left under the rule.
 func TestPopupE2E_PopupFitsDockerShapedPanel(t *testing.T) {
 	for _, tc := range []struct {
 		mode   string
@@ -207,8 +207,8 @@ func TestPopupE2E_PopupFitsDockerShapedPanel(t *testing.T) {
 				}
 			}
 			// The streak layout draws messages on the group rows, not on a
-			// footer line: under the groups come the rule, then the spare
-			// rows for boot-ui's hold line and warnings.
+			// footer line: under the groups come the rule, then only the rows
+			// boot-ui's hold line needs on failure.
 			rule := -1
 			for i := row(last) + 1; i < bottom; i++ {
 				if strings.Contains(lines[i], "────") && !strings.ContainsAny(lines[i], "┌╭└╰") {
@@ -221,7 +221,7 @@ func TestPopupE2E_PopupFitsDockerShapedPanel(t *testing.T) {
 			}
 			wantSpare := wantHeight - 2 - tc.groups - 1 // border, groups, rule
 			if spare := bottom - rule - 1; spare != wantSpare {
-				t.Errorf("%d spare rows under the rule, want %d (hold line + issue rows):\n%s", spare, wantSpare, screen)
+				t.Errorf("%d spare rows under the rule, want %d (hold line):\n%s", spare, wantSpare, screen)
 			}
 			t.Logf("%s popup %d rows:\n%s", tc.mode, bottom-top+1, screen)
 		})
@@ -278,4 +278,39 @@ func TestPopupE2E_WindowDeathEndsCage(t *testing.T) {
 	if s := term.Screen(); hasPopup(s) || strings.Contains(s, agentMarker) {
 		t.Errorf("popup or agent survived the window's death:\n%s", s)
 	}
+}
+
+// A failed boot prints the hold line under the rule. The popup has exactly
+// those rows: the line must be inside the border and nothing may scroll off
+// the top.
+func TestPopupE2E_FailedBootHoldLineFitsTightPopup(t *testing.T) {
+	screens, _ := runWindowUnderTmux(t, "size4fail", func(s string) bool { return strings.Contains(s, "press any key") })
+	screen := screens[len(screens)-1]
+	lines := strings.Split(screen, "\n")
+	top, bottom, hold, first := -1, -1, -1, -1
+	for i, l := range lines {
+		switch {
+		case strings.ContainsAny(l, "┌╭"):
+			top = i
+		case strings.ContainsAny(l, "└╰"):
+			bottom = i
+		case strings.Contains(l, "press any key"):
+			hold = i
+		case strings.Contains(l, "Prepare"):
+			first = i
+		}
+	}
+	if top < 0 || bottom < 0 || hold < 0 {
+		t.Fatalf("popup or hold line missing:\n%s", screen)
+	}
+	if want := cage.PopupHeight(4, 24); bottom-top+1 != want {
+		t.Errorf("popup is %d rows, want %d:\n%s", bottom-top+1, want, screen)
+	}
+	if first != top+1 {
+		t.Errorf("first group row at %d, want %d: the hold line scrolled the panel:\n%s", first, top+1, screen)
+	}
+	if hold >= bottom || hold != bottom-1 {
+		t.Errorf("hold line at row %d, want the last inner row %d:\n%s", hold, bottom-1, screen)
+	}
+	t.Logf("failed boot in a tight popup:\n%s", screen)
 }

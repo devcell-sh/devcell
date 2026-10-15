@@ -50,8 +50,8 @@ const (
 	popupMinCols       = 50
 	popupMinRows       = 12
 	popupMaxWidth      = 76
-	popupChromeRows    = 4 // top and bottom border, the rule under the groups, the footer line
-	popupIssueRows     = 3 // room for warnings listed under the rule before the popup clips
+	popupChromeRows    = 3 // top and bottom border, the rule under the groups
+	popupHoldRows      = 2 // a failed boot prints a blank row and the "press any key" line under the rule
 	popupConnectWindow = 1500 * time.Millisecond
 	popupAckTimeout    = 5 * time.Second
 )
@@ -59,10 +59,11 @@ const (
 var tmuxVersionRe = regexp.MustCompile(`tmux (\d+)\.(\d+)`)
 
 // PopupHeight is the popup height for a boot panel of groups rows: the
-// group rows plus chrome and room for a few issue lines, never taller than
-// the client minus a margin.
+// group rows, the border and rule, and the two rows a failed boot's hold
+// line takes, never taller than the client minus a margin. Step and warning
+// text is drawn on the group rows, so nothing else grows below the rule.
 func PopupHeight(groups, clientRows int) int {
-	return min(groups+popupChromeRows+popupIssueRows, clientRows-4)
+	return min(groups+popupChromeRows+popupHoldRows, clientRows-4)
 }
 
 // PopupPreflight decides whether a popup can be shown: tmux 3.3 or newer

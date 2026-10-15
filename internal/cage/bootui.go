@@ -163,7 +163,7 @@ func RunBootUI(ctx context.Context, o BootUIOptions) int {
 // The streak RowLayout shows row messages, not the finish footer, so the
 // reason and the hint live here.
 func holdLine(text string) {
-	fmt.Fprintf(os.Stderr, "\r\n %s %s %s\r\n", ux.StyleError.Render("✗"), text, ux.StyleMuted.Render("— press any key"))
+	fmt.Fprintf(os.Stderr, "\r\n %s %s %s", ux.StyleError.Render("✗"), text, ux.StyleMuted.Render("— press any key")) // no trailing newline: the popup has exactly these rows
 }
 
 func dialRetry(ctx context.Context, path string, timeout time.Duration) (net.Conn, error) {

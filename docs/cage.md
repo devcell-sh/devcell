@@ -12,7 +12,8 @@ Right: the status panel with clocks. The bar is a tmux status
 line. tmux runs on the host; devcell re-executes itself inside the tmux
 window, so the boot panel and then the agent both render under the bar. It is
 display-only: the tmux prefix key is `None`, every keystroke reaches the
-agent. Scrolling goes through tmux copy-mode (`mouse on`).
+agent. The mouse is not captured (`mouse off`): selection and the wheel
+stay with your terminal or outer tmux.
 
 ## Turning it on
 
@@ -55,11 +56,11 @@ bar already shows it.
 The popup is sized before the boot starts. Width is 76 columns, or the
 terminal minus a 4-column margin. Height is estimated from the panel the
 engine will draw: one row per group (docker draws four, five with the GUI
-on, see `docker.BootGroupCount`), plus four rows of chrome (border, rule,
-footer) and three rows reserved for warnings, clamped to the terminal minus
-four rows (`cage.PopupHeight`). `boot-ui` draws the same panel the inline
-path would, so the popup fits it exactly when nothing goes wrong and clips
-only when more than three warnings pile up.
+on, see `docker.BootGroupCount`), plus the two border rows, the rule under
+the groups, and two rows for the "press any key" line a failed boot prints
+under the rule, clamped to the terminal minus four rows
+(`cage.PopupHeight`). Step and warning text is drawn on the group rows by
+the streak layout, so nothing else grows below the rule.
 
 Sequencing is enforced by ownership and acknowledgements, not timing:
 
@@ -133,8 +134,9 @@ hyperlink and underline-style terminal features.
 
 ## Trade-offs
 
-- Scrollback moves into tmux: the terminal's own scrollback does not see the
-  output. Scroll with the mouse wheel or trackpad.
+- Scrollback: the cage runs full-screen, so the terminal's own scrollback
+  does not see the agent's output, and with no prefix key and no mouse the
+  cage's own history is not reachable either. Agents scroll their own views.
 - The agent's exit code is not propagated; tmux exits 0 once the session ends.
 - Running inside an outer tmux shows two status lines (the outer one and the
   cage). The inner prefix is `None`, so there is no key clash.

@@ -35,7 +35,7 @@ func TestTmuxConf_StatusLine(t *testing.T) {
 		`UTC #(TZ=UTC date +%%H:%%M)`,
 		`ET #(TZ='EST5EDT,M3.2.0,M11.1.0' date +%%H:%%M)`,
 		`set -g prefix None`,
-		`set -g mouse on`,
+		`set -g mouse off`,
 		`set -g allow-passthrough on`,
 		`set -g extended-keys on`,
 		`set -g set-clipboard on`,
