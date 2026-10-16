@@ -64,3 +64,6 @@ CLAUDE.local.md
 go.work
 go.work.sum
 .winkit
+# .product/ (product research + specs, see AGENTS.md) is tracked in this repo.
+# Some global gitignores exclude it; re-include explicitly so `git add` works everywhere.
+!.product/

@@ -1,0 +1,312 @@
+{
+  "verdicts": [
+    {
+      "surface": "community-forums",
+      "verdict": {
+        "findings": [
+          {
+            "signal": "secrets leak past sandbox denial",
+            "keep": false,
+            "reason": "The cited HN URL was inaccessible, and no Reddit URL was provided or opened; the claimed incident cannot be confirmed.",
+            "correctedStatus": "absent"
+          },
+          {
+            "signal": "permission prompt fatigue",
+            "keep": true,
+            "reason": "Issue #7275 explicitly describes repeated recommended-action prompts interrupting flow and a commenter calls the experience prompt fatigue, but it is a low-engagement request closed as not planned.",
+            "correctedStatus": "weak"
+          },
+          {
+            "signal": "silent sandbox bypass flag",
+            "keep": true,
+            "reason": "Issue #34315 contains a reproducible report, related duplicate issues, and multiple confirmations. The original behavior was later reported fixed, though a subsequent commenter said it still reproduced.",
+            "correctedStatus": "moderate"
+          },
+          {
+            "signal": "tool sprawl across sandbox products",
+            "keep": true,
+            "reason": "The HN thread contains the quoted joke and the stated security/speed/cost trade-off framing, but it has only 12 points and five comments.",
+            "correctedStatus": "weak"
+          },
+          {
+            "signal": "lethal trifecta framing",
+            "keep": false,
+            "reason": "No specific thread or URL was supplied, so the alleged wording and discussion cannot be confirmed from opened evidence.",
+            "correctedStatus": "absent"
+          },
+          {
+            "signal": "MCP servers punch holes in sandbox",
+            "keep": false,
+            "reason": "No cited HN thread URL or searchable matching comment was confirmed; the supplied quotation cannot be verified.",
+            "correctedStatus": null
+          },
+          {
+            "signal": "browser session persistence across runs",
+            "keep": true,
+            "reason": "The cited DEV post exists and explicitly contrasts Chrome DevTools MCP's separate profile with real-browser authentication/cookies for other tools. It is a single personal comparison, however, and does not substantiate the broader stealth-browser or recurring-community-demand claims.",
+            "correctedStatus": "weak"
+          },
+          {
+            "signal": "manual tmux/worktree orchestration for parallel agents",
+            "keep": true,
+            "reason": "The DoltHub write-up exists and documents parallel-agent file/resource conflicts and a container-plus-tmux isolation workaround. The confirmed evidence is one company blog, not enough to establish the claimed multiple independent community sources or strong demand.",
+            "correctedStatus": "weak"
+          },
+          {
+            "signal": "snapshot and restore",
+            "keep": false,
+            "reason": "The finding is an unverified assertion about search absence and unnamed competitor blogs, rather than opened evidence demonstrating a community-forum signal.",
+            "correctedStatus": null
+          },
+          {
+            "signal": "devcell-specific forum discussion",
+            "keep": false,
+            "reason": "The claimed absence of external discussion cannot be confirmed from the supplied search summary; no reproducible search evidence or forum pages were cited.",
+            "correctedStatus": null
+          },
+          {
+            "signal": "burnout from always-on agent loops",
+            "keep": false,
+            "reason": "Search of the cited Substack did not locate a post titled “Interns with chainsaws” or confirm the claimed “token anxiety”/Tailscale account. The available posts concern other agent-workflow topics, so this specific evidence cannot be verified; it is also a single blog account rather than community-forum demand evidence.",
+            "correctedStatus": null
+          }
+        ]
+      },
+      "unverified": []
+    },
+    {
+      "surface": "github-issues",
+      "verdict": {
+        "findings": [
+          {
+            "signal": "network egress allowlist",
+            "keep": true,
+            "reason": "The cited microsandbox, Daytona, and Claude Code issues exist and substantively describe egress allowlist configuration or enforcement. The evidence does not establish high engagement or a strong industry-wide demand level.",
+            "correctedStatus": "moderate"
+          },
+          {
+            "signal": "read-only or external volume mounts",
+            "keep": true,
+            "reason": "The cited Daytona and microsandbox feature requests exist and support demand for mount modes, external storage, and filesystem lifecycle separation. The stated moderate status is supportable from multiple requests.",
+            "correctedStatus": "moderate"
+          },
+          {
+            "signal": "GPU support",
+            "keep": true,
+            "reason": "The microsandbox GPU request and Daytona resource-override request exist, but the directly confirmed microsandbox request is a low-engagement single issue. The cited changelog was not established by the provided GitHub-issue evidence.",
+            "correctedStatus": "weak"
+          },
+          {
+            "signal": "baked-in MCP servers and MCP gateway correctness",
+            "keep": true,
+            "reason": "E2B issue #1900 and Daytona issue #3859 exist and report MCP gateway/tool-listing problems, but the available evidence does not substantiate broad recurring demand or meaningful engagement; #3859 itself says the reporter is unsure whether the issue is real.",
+            "correctedStatus": "weak"
+          },
+          {
+            "signal": "credential and secrets brokering",
+            "keep": true,
+            "reason": "The E2B, microsandbox, and Anthropic sandbox-runtime issues exist and request credential or secret handling that avoids plaintext exposure. The evidence supports recurring interest, but not the claimed common proxy-layer implementation or engagement level.",
+            "correctedStatus": "weak"
+          },
+          {
+            "signal": "local-first / offline development environment",
+            "keep": true,
+            "reason": "Coder #6815 exists, is open, and explicitly requests syncing work locally for offline use and back to a Coder workspace. The claimed reaction count and “top-reaction” ranking were not verifiable from the opened page; one issue alone does not support strong status.",
+            "correctedStatus": "moderate"
+          },
+          {
+            "signal": "auto-approve / permission-prompt friction",
+            "keep": true,
+            "reason": "The cited Claude Code, Codex, and DeepAgents issues are real and request more permissive or granular tool approval. However, the Claude and Codex issues are closed, DeepAgents is labeled backlog, and engagement counts were unavailable; strong status is unsupported.",
+            "correctedStatus": "moderate"
+          },
+          {
+            "signal": "windows guest support",
+            "keep": false,
+            "reason": "Microsandbox #47 exists, but requests native Windows host support without WSL, not a Windows guest OS. The claimed additional E2B and Daytona evidence was not captured, so cross-repo demand for Windows guests is unconfirmed.",
+            "correctedStatus": null
+          },
+          {
+            "signal": "stealth/anti-detection browser automation",
+            "keep": false,
+            "reason": "The primary Agent Browser issue could not be opened successfully. The listed standalone repositories demonstrate supply/ecosystem activity, not verified user demand, and no cited sandbox-repository issue confirms the stated cross-repo theme.",
+            "correctedStatus": null
+          },
+          {
+            "signal": "K8s / self-hosted deployment",
+            "keep": true,
+            "reason": "Daytona #4232 exists and documents a broken self-hosted Kubernetes/containerd deployment. It is an operational bug report rather than a feature request; the E2B issue and both stated reaction counts could not be confirmed, so moderate recurring demand is unsupported.",
+            "correctedStatus": "weak"
+          },
+          {
+            "signal": "predictable / reusable sandbox resource management",
+            "keep": false,
+            "reason": "Both cited Daytona issues exist and are open feature requests, but #2909 requests CLI profiles for multiple Daytona installations, while #3309 requests local-to-sandbox live file synchronization. Neither establishes demand for predictable or reusable sandbox resource management. The claimed three reactions on each could not be confirmed because GitHub did not expose reactions in the opened pages; #3309 also has no comments or assignee.",
+            "correctedStatus": null
+          }
+        ]
+      },
+      "unverified": []
+    },
+    {
+      "surface": "competitor-features",
+      "verdict": {
+        "findings": [
+          {
+            "signal": "cloud-hosted agent execution beyond laptop",
+            "keep": true,
+            "reason": "Forkast confirms Docker launched Cloud Sandboxes for unattended cloud execution after a laptop closes, with microVM isolation, credential/network controls, and MCP gateway support. The cited press-release URL was inaccessible and the accessible article does not confirm the stated price.",
+            "correctedStatus": "moderate"
+          },
+          {
+            "signal": "agent-framework SDK integrations",
+            "keep": false,
+            "reason": "E2B’s own announcement confirms OpenAI Agents SDK support, but this is circular competitor marketing rather than demand evidence. The cited Medium post is from 2023 and discusses LangChain and Superagent, not the claimed June 2026 Stripe Projects integration.",
+            "correctedStatus": null
+          },
+          {
+            "signal": "GPU-backed sandboxes",
+            "keep": false,
+            "reason": "The supplied sources do not substantiate Daytona’s claimed H100/RTX PRO 6000 support. Morph instead says Daytona is CPU-only, while Modal’s article says Daytona GPU support is available but requires verification of types and availability; the evidence is contradictory.",
+            "correctedStatus": null
+          },
+          {
+            "signal": "self-hosted BYOC deployment",
+            "keep": true,
+            "reason": "Agenticwire reports a current E2B Compose-based Embed/self-hosting path and says BYOC is an Enterprise option; it also links to official E2B materials. However, the evidence is secondary and does not establish the exact Apache-2.0 assertion or demonstrate demand.",
+            "correctedStatus": "moderate"
+          },
+          {
+            "signal": "per-second usage billing",
+            "keep": false,
+            "reason": "Morph states E2B uses per-second billing, but its plan figures conflict with the other cited secondary source, and the Docker press-release URL containing the claimed $0.07/hr figure was inaccessible. The exact combined pricing claim is therefore not confirmed.",
+            "correctedStatus": null
+          },
+          {
+            "signal": "OCI-based agent packaging format",
+            "keep": true,
+            "reason": "The cited Help Net Security article exists and explicitly says Docker's Kits package an agentic sandbox, its agent, tools, and access rules as a shareable artifact built as standard OCI images.",
+            "correctedStatus": "moderate"
+          },
+          {
+            "signal": "terminal agent pre-integration in cloud workspace",
+            "keep": false,
+            "reason": "The Coder changelogs confirm the described features, but they are the competitor's own product claims and do not evidence feature demand; the claimed strong status is unsupported.",
+            "correctedStatus": "weak"
+          },
+          {
+            "signal": "open-source license retrenchment",
+            "keep": false,
+            "reason": "One cited page was inaccessible; the accessible Morph comparison is dated April 2026 and does not support the asserted June 2026 closed-source change or resulting migration narrative.",
+            "correctedStatus": null
+          },
+          {
+            "signal": "native macOS/Windows guest engine for agents",
+            "keep": false,
+            "reason": "This is an absence claim based on unspecified searches and comparison roundups, without citable opened evidence covering all named competitors. It cannot be confirmed.",
+            "correctedStatus": null
+          },
+          {
+            "signal": "local-first laptop-run sandbox with cloud parity",
+            "keep": false,
+            "reason": "The cited GlobeNewswire URL was inaccessible. Although a separate opened article supports Docker local/cloud parity, it does not establish the broader claim that no competitor treats local-first as a primary design goal.",
+            "correctedStatus": null
+          },
+          {
+            "signal": "bundled MCP server catalog in base image",
+            "keep": false,
+            "reason": "The Coder page exists and confirms template-level golden-path MCP configurations, but it does not establish an exhaustive absence of pre-baked MCP catalogs across the other competitors. It is also vendor product marketing, not evidence of user demand.",
+            "correctedStatus": null
+          },
+          {
+            "signal": "stealth/undetected browser automation for agents",
+            "keep": false,
+            "reason": "No specific opened competitor pages or statements are cited for this negative claim, so the asserted absence cannot be confirmed.",
+            "correctedStatus": null
+          },
+          {
+            "signal": "AI credential/payment auto-provisioning for agents",
+            "keep": false,
+            "reason": "The cited Medium URL exists but is an October 2023 update about LangChain and Superagent integrations; it contains no Stripe Projects integration or June 2026 claim.",
+            "correctedStatus": null
+          }
+        ]
+      },
+      "unverified": []
+    },
+    {
+      "surface": "analyst-reports",
+      "verdict": {
+        "findings": [
+          {
+            "signal": "microVM isolation over shared-kernel containers",
+            "keep": false,
+            "reason": "The pages exist and advocate stronger isolation, but the Substack post has only 10 reactions and 1 comment, while Firecrawl is a vendor blog. Neither independently establishes an industry consensus or verifies the claimed hyperscaler migrations.",
+            "correctedStatus": "weak"
+          },
+          {
+            "signal": "sandbox-as-a-service category formation",
+            "keep": false,
+            "reason": "The Medium article exists but is a member-only, single-author post with 1 reaction and 1 response. Its visible text asserts category formation, but does not substantiate the listed vendor launches or Gartner projection.",
+            "correctedStatus": "weak"
+          },
+          {
+            "signal": "developer trust in agent autonomy remains low",
+            "keep": true,
+            "reason": "Stack Overflow's official pulse-survey article directly reports 1,100 late-April respondents, 63% rarely or never allowing full autopilot, 60% blocking unapproved changes, and 68% preferring single-agent setups. The official annual survey also supports conditional trust and human-in-the-loop use.",
+            "correctedStatus": "strong"
+          },
+          {
+            "signal": "sandbox infrastructure funding surge",
+            "keep": false,
+            "reason": "The Bex post states several figures but is a single synthesized vendor-blog source. The cited Coder page is from June 2024 and says $35M added to its Series B, contradicting the claimed 2026 $90M Series C. Several other detailed funding and usage claims are not supported by the cited pages.",
+            "correctedStatus": "weak"
+          },
+          {
+            "signal": "acquisition activity in agent sandbox space",
+            "keep": false,
+            "reason": "The stated evidence is only a search-query description and an unattributed synthesis, not an opened source capable of proving that no acquisitions occurred. Absence of search results is not confirmatory evidence.",
+            "correctedStatus": "absent"
+          },
+          {
+            "signal": "MCP servers pre-baked into sandbox images",
+            "keep": false,
+            "reason": "CubeSandbox documentation confirms its example template pre-installs MCP servers because first-start downloads may exceed its 55-second allowance, but this is vendor documentation of an implementation constraint—not evidence of feature demand. The additional Docker Desktop and Microsandbox claims are not supported by the cited URLs.",
+            "correctedStatus": "absent"
+          },
+          {
+            "signal": "incident-driven demand for sandboxing",
+            "keep": false,
+            "reason": "The cited Upstash page contains no mention of the claimed December 2025 rm -rf incident. It therefore cannot substantiate either the incident or demand driven by it.",
+            "correctedStatus": "absent"
+          },
+          {
+            "signal": "sandboxes solve containment, not governance/audit",
+            "keep": false,
+            "reason": "MintMCP does state the quoted governance/audit gap, but it is a vendor blog's own framing, not independent research or demand evidence. This is circular and does not establish the claimed market signal.",
+            "correctedStatus": "absent"
+          },
+          {
+            "signal": "stateful/persistent sandbox checkpoint performance research",
+            "keep": true,
+            "reason": "The DeltaBox paper exists and reports approximately 10.83 ms checkpoint work and 1.86 ms fast-path rollback for a Firecracker-based agent sandbox. Academic-only evidence supports a weak directional signal.",
+            "correctedStatus": "weak"
+          },
+          {
+            "signal": "multi-agent safety benchmarks underdeveloped",
+            "keep": true,
+            "reason": "The cited taxonomy paper exists and explicitly reports nine multi-agent benchmarks, all sandboxed with constrained tools, with none in containerized/live open-authority environments and none testing cascading inter-agent failures in production deployments.",
+            "correctedStatus": "weak"
+          },
+          {
+            "signal": "Windows/winkit guest support for agent sandboxes",
+            "keep": false,
+            "reason": "No citable URL, report, thread, or issue was provided or opened to confirm the claimed ten-search coverage or its conclusion.",
+            "correctedStatus": null
+          }
+        ]
+      },
+      "unverified": []
+    }
+  ]
+}

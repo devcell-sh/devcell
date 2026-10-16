@@ -1,0 +1,51 @@
+{
+  "type": "object",
+  "required": [
+    "findings"
+  ],
+  "properties": {
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "signal",
+          "keep",
+          "reason",
+          "correctedStatus"
+        ],
+        "properties": {
+          "signal": {
+            "type": "string",
+            "description": "the finding signal, verbatim"
+          },
+          "keep": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "description": "why kept or refuted"
+          },
+          "correctedStatus": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "strong",
+                  "moderate",
+                  "weak",
+                  "absent"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

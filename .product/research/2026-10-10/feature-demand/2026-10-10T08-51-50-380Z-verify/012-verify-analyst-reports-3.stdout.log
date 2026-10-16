@@ -1,0 +1,1 @@
+{"findings":[{"signal":"Windows/winkit guest support for agent sandboxes","keep":false,"reason":"No citable URL, report, thread, or issue was provided or opened to confirm the claimed ten-search coverage or its conclusion.","correctedStatus":null}]}

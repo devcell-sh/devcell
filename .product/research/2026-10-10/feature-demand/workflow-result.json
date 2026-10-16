@@ -1,0 +1,1237 @@
+{
+  "mode": "consensus",
+  "deferred": true,
+  "title": "Feature Demand Research: devcell",
+  "product": "devcell",
+  "date": "2026-10-10",
+  "outputPath": ".scratch/FEATURE-DEMAND.md",
+  "surfacesTotal": 4,
+  "surfacesJudged": 4,
+  "consensus": {
+    "vendors": [
+      "claude",
+      "codex"
+    ],
+    "confirmed": 9,
+    "contested": 2,
+    "aOnly": 46,
+    "bOnly": 30
+  },
+  "confirmed": [
+    {
+      "signal": "network egress allowlist for agents",
+      "status": "strong",
+      "evidence": "claude: NVIDIA AI Red Team guidance (via WebSearch) calling egress control 'mandatory, non-negotiable' for agent sandboxes \u2014 'block all outbound connections except to explicitly approved destinations'; AWS AgentCore Browser blog on domain allowlisting; dev.to Firejail whitelist walkthrough / codex: https://www.reddit.com/r/ClaudeAI/comments/1qimfr0/how_are_you_sandboxing_your_coding_agents/",
+      "source": "blog",
+      "category": "Requested feature",
+      "detail": "Consistent across security-focused sources (not raw forum threads, but the community/practitioner-blog tier specified for this surface) that default-deny egress with an explicit allowlist is treated as a baseline requirement, not a nice-to-have, for any agent sandbox product.",
+      "surface": "community-forums",
+      "surfaceRank": 1,
+      "author": "claude",
+      "key": "community forums:network egress allowlist for agents",
+      "authors": [
+        "claude",
+        "codex"
+      ]
+    },
+    {
+      "signal": "own-repo github issues",
+      "status": "absent",
+      "evidence": "claude: https://github.com/devcell-sh/devcell/issues (search: is:issue, any state) returns total_count 0; repo meta shows open_issues_count 0, has_issues true, has_discussions false, stargazers 4, forks 0 / codex: https://github.com/DimmKirr/devcell/issues",
+      "source": "github",
+      "detail": "Verified via unauthenticated GitHub search API and repo API against devcell-sh/devcell (the current home of DimmKirr/devcell). No issues of any kind \u2014 enhancement-labeled or otherwise \u2014 exist in this repo, and Discussions is not even enabled. There is no own-repo feature-request signal to report because the repo has not accumulated any community-filed issues yet.",
+      "surface": "github-issues",
+      "surfaceRank": 2,
+      "author": "claude",
+      "key": "github issues:own repo github issues",
+      "authors": [
+        "claude",
+        "codex"
+      ]
+    },
+    {
+      "signal": "microVM hardware isolation",
+      "status": "strong",
+      "evidence": "claude: https://e2b.dev/ ; https://docs.microsandbox.dev/getting-started/agents ; https://www.daytona.io/docs/en/sandboxes/ ; https://www.theregister.com/ai-and-ml/2026/09/24/dockers-new-sandboxes-aim-to-contain-ai-agents-for-real/5298964 / codex: https://e2b.dev/ ; https://docs.docker.com/ai/sandboxes/security/ ; https://microsandbox.dev/",
+      "source": "competitor",
+      "detail": "E2B (Firecracker), Microsandbox (libkrun), Daytona (Kata/Sysbox optional), and Docker Sandboxes (microVM-per-agent, launched 2026) all advertise dedicated-kernel VM isolation as their primary security pitch over shared-kernel containers. Docker explicitly says 'containers weren't designed for the level of isolation AI agents demand.' devcell's docker engine is container-based (tart/winkit give VM isolation only on those engines, not the default docker path).",
+      "category": "Competitor advertises prominently",
+      "surface": "competitor-features",
+      "surfaceRank": 3,
+      "author": "claude",
+      "key": "competitor features:microvm hardware isolation",
+      "authors": [
+        "claude",
+        "codex"
+      ]
+    },
+    {
+      "signal": "snapshot fork pause resume",
+      "status": "strong",
+      "evidence": "claude: https://www.daytona.io/docs/en/sandboxes/ ; https://github.com/daytonaio/daytona/releases (v0.190.0 'pause action across api/runner/sdk/cli', 'snapshot create with sandbox class') ; https://docs.e2b.dev/changelog ('CLI Sandbox Fork', Sep 21 2026) / codex: https://microsandbox.dev/features/snapshots ; https://e2b-preview.mintlify.app/sandbox-template",
+      "source": "competitor",
+      "detail": "Daytona and E2B both ship first-class snapshot/pause/fork primitives for persisting and branching agent state across sessions \u2014 a recurring theme across multiple release-note entries in 2026. devcell containers are described as ephemeral per-(cell,project) with no documented snapshot/fork/pause command.",
+      "category": "Competitor ships, product lacks",
+      "surface": "competitor-features",
+      "surfaceRank": 3,
+      "author": "claude",
+      "key": "competitor features:snapshot fork pause resume",
+      "authors": [
+        "claude",
+        "codex"
+      ]
+    },
+    {
+      "signal": "network egress allowlist",
+      "status": "strong",
+      "evidence": "claude: https://blogs.novita.ai/e2b-vs-daytona-ai-agent-sandbox/ ; https://blaxel.ai/blog/best-sandbox-platforms-managed-networking / codex: https://docs.docker.com/ai/sandboxes/security/ ; https://www.daytona.io/docs/en/typescript-sdk/daytona/",
+      "source": "competitor",
+      "detail": "E2B documents allow/deny IP+domain lists with an egress proxy that swaps placeholder credentials for live tokens; Daytona firewalls every sandbox by default on lower tiers with per-sandbox allow lists. One comparison source disputes how exposed this is at SDK level, but vendor docs on both sides advertise it prominently as a security control.",
+      "category": "Competitor advertises prominently",
+      "surface": "competitor-features",
+      "surfaceRank": 3,
+      "author": "claude",
+      "key": "competitor features:network egress allowlist",
+      "authors": [
+        "claude",
+        "codex"
+      ]
+    },
+    {
+      "signal": "enterprise governance and audit logging",
+      "status": "strong",
+      "evidence": "claude: https://coder.com/changelog/coder-2-32 ; https://coder.com/pricing ; https://coder.com/solutions/workspaces / codex: https://coder.com/docs/reference/glossary ; https://coder.com/docs/ai-coder/ai-gateway/clients",
+      "source": "competitor",
+      "detail": "Coder's Premium/AI Premium tiers advertise multi-org access controls, comprehensive audit logging, AI Gateway (model observability/cost control) and 'Agent Firewall' (network-isolated agent workspaces) as the headline enterprise sell. Coder Community caps concurrent agents at 5; AI Premium removes the cap.",
+      "category": "Competitor advertises prominently",
+      "surface": "competitor-features",
+      "surfaceRank": 3,
+      "author": "claude",
+      "key": "competitor features:enterprise governance and audit logging",
+      "authors": [
+        "claude",
+        "codex"
+      ]
+    },
+    {
+      "signal": "network egress allowlist default-deny",
+      "status": "strong",
+      "evidence": "claude: https://www.innoq.com/en/blog/2026/03/dev-sandbox-network/ ; https://dev.to/jaryn_123/audit-an-ai-coding-agents-network-egress-before-it-gets-a-shell-4k69 / codex: https://owasp.github.io/DevSecOpsGuideline/2-Process/2-2-Develop/2-2-5-AI-Agent-and-MCP-Security/",
+      "source": "blog",
+      "detail": "Emerging best practice is default-deny egress with explicit allowlist; rationale is isolation stops breakout, egress control stops exfiltration even if agent's own tool-approval logic is bypassed by prompt injection. Common pitfalls cited: IP-based allowlisting too brittle, DNS as a leak channel, package-registry access needing special handling (pull-through cache).",
+      "category": "Industry trend",
+      "surface": "analyst-reports",
+      "surfaceRank": 4,
+      "author": "claude",
+      "key": "analyst reports:network egress allowlist default deny",
+      "authors": [
+        "claude",
+        "codex"
+      ]
+    },
+    {
+      "signal": "self-hosted sandbox vs enterprise compliance tradeoff",
+      "status": "moderate",
+      "evidence": "claude: https://rywalker.com/research/microsandbox ; personal case study at umesh-malik.com/blog/self-hosted-ai-coding-agent-sandbox / codex: https://www.prnewswire.com/news-releases/e2b-raises-a-21m-series-a-to-offer-cloud-for-ai-agents-to-fortune-100-302514540.html",
+      "source": "blog",
+      "detail": "Analyst comparison (rywalker.com) frames Microsandbox (libkrun microVM, local-first, self-hosted, pre-1.0, 3.3k GitHub stars) as 'technically superior to container-based alternatives' for untrusted code but immature vs. E2B's cloud/enterprise scale. Self-hosted stacks broadly flagged as unable to meet strict enterprise compliance (SOC2/HIPAA) that hosted platforms like Modal provide \u2014 a direct adoption blocker for local-first tools like devcell if targeting regulated enterprises.",
+      "category": "Adoption blocker",
+      "surface": "analyst-reports",
+      "surfaceRank": 4,
+      "author": "claude",
+      "key": "analyst reports:self hosted sandbox vs enterprise compliance tradeoff",
+      "authors": [
+        "claude",
+        "codex"
+      ]
+    },
+    {
+      "signal": "stealth browser login for agents",
+      "status": "absent",
+      "evidence": "claude: No dedicated analyst/vendor/survey coverage found; this term did not independently surface in any of the 10 searches run (only tangential 'computer-use'/VNC sandbox mentions, e.g. E2B desktop-over-VNC variant) / codex: https://aiagentindex.mit.edu/data/2025-AI-Agent-Index.pdf",
+      "source": "blog",
+      "detail": "Searched directly and indirectly (within sandbox market/trend/funding/survey queries); no analyst report, survey, or funding article specifically frames 'stealth browser login' or anti-bot-detection browser automation as a named feature/demand category in the AI-agent-sandbox space.",
+      "surface": "analyst-reports",
+      "surfaceRank": 4,
+      "author": "claude",
+      "key": "analyst reports:stealth browser login for agents",
+      "authors": [
+        "claude",
+        "codex"
+      ]
+    }
+  ],
+  "resolved": [
+    {
+      "signal": "credential isolation",
+      "category": "Pain point",
+      "status": "weak",
+      "evidence": "https://www.reddit.com/r/ClaudeAI/comments/1qimfr0/how_are_you_sandboxing_your_coding_agents/",
+      "source": "reddit",
+      "detail": "Thread says native-host agents can use SSH keys; commenters seek a remote sandbox with zero local/SSH-key access and controlled filesystem scope.",
+      "surface": "community-forums",
+      "surfaceRank": 1,
+      "author": "codex",
+      "key": "community forums:credential isolation",
+      "note": "URL and thread are real (r/ClaudeAI, 'How are you sandboxing your coding agents?', post score=2, upvote_ratio=0.75, comment-count=24 \u2014 fetched and rendered the actual comment tree). Content matches the claim closely: one commenter states 'when I'm running claude natively on my host it is capable of using my ssh keys on my filesystem. Those have the power to delete every github repo...' and another explicitly writes 'A remote sandbox that has zero access to your local machine or SSH keys' plus talk of network allow-lists (controlled scope). However this is a single thread with a net score of only 2 \u2014 i.e. low engagement by the stated skeptic rule ('one low-engagement thread is weak, not strong'). Downgrading strong -> weak; the evidence is real and on-point but the engagement does not support 'strong'.",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "disposable task environments",
+      "category": "User-built workaround",
+      "status": "moderate",
+      "evidence": "https://www.reddit.com/r/ClaudeAI/comments/1qimfr0/how_are_you_sandboxing_your_coding_agents/",
+      "source": "reddit",
+      "detail": "User runs one project sandbox per task on a small NixOS PC and redeploys to a fresh slate when switching projects; another uses a credential-free VPS for jobs that need broader powers.",
+      "surface": "community-forums",
+      "surfaceRank": 1,
+      "author": "codex",
+      "key": "community forums:disposable task environments",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "policy-gated autonomy",
+      "category": "Requested feature",
+      "status": "strong",
+      "evidence": "https://www.reddit.com/r/ClaudeAI/comments/1s839hp/dont_let_claude_use_your_actual_computer_from_the/",
+      "source": "reddit",
+      "detail": "Commenters argue sandboxing only limits blast radius and request pre-execution checks for file writes, shell commands, and API calls; approval fatigue is also called out in the VM-escape discussion.",
+      "surface": "community-forums",
+      "surfaceRank": 1,
+      "author": "codex",
+      "key": "community forums:policy gated autonomy",
+      "note": "URL verified by fetch: r/ClaudeAI 'Don't let Claude use your actual computer from the CLI', post score=439, upvote_ratio\u22480.94, comment-count=150 \u2014 real, high-engagement thread (not a single low-engagement thread, unlike the other two citations here). A top-level comment is an almost exact match: 'Sandboxing limits blast radius but doesn't prevent the agent from doing the wrong thing within its sandbox. The missing piece is a pre-execution contract such that before any file write, shell command, or API call fires, we check it against a policy.' Another nearby comment reinforces this ('container + risk evaluation + human approval for anything above a threshold'). I could not locate the specific 'approval fatigue' wording or a distinct 'VM-escape discussion' within the ~25 top-level comments rendered server-side (150 total comments include deeper nested/paginated replies not in the static render), so that narrower sub-claim is unverified rather than confirmed \u2014 but the core finding (pre-execution policy checks as a requested feature, framed around blast-radius limits) is solidly confirmed on a high-engagement thread, which argues for upgrading moderate -> strong rather than refuting.",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "safe preview ports",
+      "category": "Requested feature",
+      "status": "weak",
+      "evidence": "https://www.reddit.com/r/ClaudeAI/comments/1qkntqx/exposing_port_with_docker_sandbox_run_claude_for/",
+      "source": "reddit",
+      "detail": "User wants host-browser access to an agent-created app on port 3000; Docker Sandbox did not expose ports, and a commenter identifies host-port exposure as an upcoming feature.",
+      "surface": "community-forums",
+      "surfaceRank": 1,
+      "author": "codex",
+      "key": "community forums:safe preview ports",
+      "note": "URL and thread verified by fetch: r/ClaudeAI 'Exposing port with \"Docker sandbox run claude\" for host browser viewing', post score=1, upvote_ratio=1, comment-count=6 \u2014 real but extremely low engagement (net score of 1, only 6 comments). Content matches exactly: OP says 'if it created an application and it's running on let's say port 3000, you can't view it on your host... The port is not exposed'; a commenter replies 'Doesn't seem like you can at the moment, and that's by design... it's an upcoming feature' and quotes the Docker blog's roadmap line 'Ability to expose ports to the host device and access host-exposed services' almost verbatim. Despite the accurate quote, this is a single thread with essentially no engagement (score 1), which per the stated rule should be 'weak', not 'moderate'. Downgrading.",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "configurable resources",
+      "category": "Pain point",
+      "status": "weak",
+      "evidence": "https://www.reddit.com/r/ClaudeAI/comments/1qkntqx/exposing_port_with_docker_sandbox_run_claude_for/",
+      "source": "reddit",
+      "detail": "Commenter says the sandbox's 4 GB RAM makes Claude slow and asks for a way to allocate more memory.",
+      "surface": "community-forums",
+      "surfaceRank": 1,
+      "author": "codex",
+      "key": "community forums:configurable resources",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "browser bridge isolation",
+      "category": "Pain point",
+      "status": "moderate",
+      "evidence": "https://www.reddit.com/r/ClaudeAI/comments/1rq80f1/claude_escaped_my_vm_sandbox_during_my_first/",
+      "source": "reddit",
+      "detail": "121-vote post reports the agent reached a host Chrome session via an installed extension/bridge; discussion characterizes it as an exposed connection rather than a VM escape.",
+      "surface": "community-forums",
+      "surfaceRank": 1,
+      "author": "codex",
+      "key": "community forums:browser bridge isolation",
+      "note": "Reddit itself is unreachable by my tools (both WebFetch and domain-restricted WebSearch explicitly refuse reddit.com), but an independent third-party blog (docs.bswen.com) discusses this exact post by the same title and quotes matching top comments ('Claude didn't escape anything... you gave it a door to walk through'), corroborating the finding's core claim that the discussion frames this as an exposed network bridge rather than a true VM escape. However, the specific '121-vote' engagement figure used to justify 'strong' status could not be verified anywhere \u2014 no independent source gives a vote or comment count. Per the rule that a single thread's engagement must be checked, not assumed, I downgrade to moderate: content confirmed, quantified engagement unconfirmed.",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "developer sandbox usability",
+      "category": "Pain point",
+      "status": "weak",
+      "evidence": "https://news.ycombinator.com/item?id=48211198",
+      "source": "hn",
+      "detail": "HN commenter says many sandbox companies exist but none has nailed the application-builder experience; thread compares providers on isolation, persistence, pricing, GPU, residency, and volume mounts.",
+      "surface": "community-forums",
+      "surfaceRank": 1,
+      "author": "codex",
+      "key": "community forums:developer sandbox usability",
+      "note": "Directly fetched https://news.ycombinator.com/item?id=48211198 and confirmed it verbatim: a Superserve founder's comparison of sandbox providers (E2B, Modal, Daytona, Cloudflare, Docker, Runloop, Vercel, Blaxel) across isolation/persistence/pricing/GPU/residency/volume mounts, with one commenter stating no one has nailed the application-builder experience yet. Exact match to the finding's detail. Status 'weak' is appropriate and already correctly conservative (single commenter remark, not a groundswell) \u2014 no change needed.",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "devcell community requests",
+      "category": null,
+      "status": "absent",
+      "evidence": "Searches for \"devcell\" feature request and \"devcell\" missing OR wish OR need; opened results did not surface a relevant Reddit, HN, DEV, Discourse, or Discord discussion about this devcell product.",
+      "source": "docs",
+      "detail": "Search results primarily resolved to unrelated DevCell material or product documentation, not community feature-demand evidence.",
+      "surface": "community-forums",
+      "surfaceRank": 1,
+      "author": "codex",
+      "key": "community forums:devcell community requests",
+      "note": "Ran independent searches for 'devcell' feature request / missing / wish / need across Reddit, HN, Discourse, Discord, and GitHub. Results resolved only to the actual devcell-sh/devcell GitHub repo, its PRs, and release notes \u2014 no community feature-demand discussion on any forum. This confirms the absence claim rather than refuting it; the finding is an accurate negative result, not a lazy or unsupported one.",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "structured sandbox messaging",
+      "category": "Cross-repo recurring theme",
+      "status": "moderate",
+      "evidence": "https://github.com/e2b-dev/E2B/issues/646",
+      "source": "github",
+      "detail": "E2B feature request #646 asks for an SDK message interface instead of stdout markers or HTTP tunnels; it was closed as a duplicate.",
+      "surface": "github-issues",
+      "surfaceRank": 2,
+      "author": "codex",
+      "key": "github issues:structured sandbox messaging",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "async execution callbacks",
+      "category": "Competitor open feature request",
+      "status": "moderate",
+      "evidence": "https://github.com/e2b-dev/E2B/issues/1069",
+      "source": "github",
+      "detail": "Open E2B feature request (Jan. 9, 2026) requests task IDs plus callback URLs for results from 5\u201310+ minute jobs and explicitly cites multi-agent workflows.",
+      "surface": "github-issues",
+      "surfaceRank": 2,
+      "author": "codex",
+      "key": "github issues:async execution callbacks",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "durable background commands",
+      "category": "Cross-repo recurring theme",
+      "status": "moderate",
+      "evidence": "https://github.com/e2b-dev/E2B/issues/1074",
+      "source": "github",
+      "detail": "E2B issue reports background-command PIDs becoming unreconnectable after two minutes; expected persistent stdout/stderr and stdin reconnection. Closed as completed June 2026.",
+      "surface": "github-issues",
+      "surfaceRank": 2,
+      "author": "codex",
+      "key": "github issues:durable background commands",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "startup task persistence",
+      "category": "Competitor open feature request",
+      "status": "moderate",
+      "evidence": "https://github.com/daytonaio/daytona/issues/1982",
+      "source": "github",
+      "detail": "Open Daytona feature #1982 requests startup tasks so long-running processes resume and required services start whenever a sandbox is created or started.",
+      "surface": "github-issues",
+      "surfaceRank": 2,
+      "author": "codex",
+      "key": "github issues:startup task persistence",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "runtime secret resolution",
+      "category": "Competitor open feature request",
+      "status": "moderate",
+      "evidence": "https://github.com/superradcompany/microsandbox/issues/1183",
+      "source": "github",
+      "detail": "Open Microsandbox security feature #1183 requests store-backed secrets resolved at runtime without plaintext in durable config, logs, process arguments, guest disk, or snapshots.",
+      "surface": "github-issues",
+      "surfaceRank": 2,
+      "author": "codex",
+      "key": "github issues:runtime secret resolution",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "coder sandbox requests",
+      "category": "Competitor open feature request",
+      "status": "absent",
+      "evidence": "Search: site:github.com/coder/coder/issues \"AI agent\" OR \"sandbox\"",
+      "source": "github",
+      "detail": "The GitHub-focused search returned no opened Coder issue/discussion usable as evidence of a distinct agent-sandbox feature request.",
+      "surface": "github-issues",
+      "surfaceRank": 2,
+      "author": "codex",
+      "key": "github issues:coder sandbox requests",
+      "note": "Re-ran the cited search (site:github.com/coder/coder/issues \"AI agent\" OR \"sandbox\"). Confirmed: it surfaces only issues about Coder's own 'workspace agent' (connectivity, metadata endpoints, localhost URL rewriting) and zero hits for 'sandbox' in the AI-agent-sandboxing sense claimed by competitors like Daytona/E2B/Microsandbox. No distinct open issue or discussion requesting an agent-sandbox feature exists in coder/coder. The absent status is correct.",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "snapshot runtime configuration",
+      "category": "Competitor open feature request",
+      "status": "moderate",
+      "evidence": "https://github.com/superradcompany/microsandbox/issues/1736",
+      "source": "github",
+      "detail": "Open Microsandbox task #1736 requests creating ephemeral sandboxes from an existing agent snapshot while varying proxy, trust-CA, and DNS-rebind settings.",
+      "surface": "github-issues",
+      "surfaceRank": 2,
+      "author": "codex",
+      "key": "github issues:snapshot and restore",
+      "contested": true,
+      "note": "Verified the primary evidence: microsandbox#1736 ('No way to create ephemeral sandbox from existing snapshot with changed `proxy` field') is real, open, created 2026-10-02, 3 comments, 0 reactions, on an active 8.6k-star repo \u2014 a single low-engagement thread, which per the review rubric is weak on its own. I then checked every issue in the contested 'strong' note: daytonaio/daytona#2519 (2 comments, 2 reactions), #2528 (0 comments, 1 reaction), #2661 (7 comments, 7 reactions \u2014 matches the note), #2296 (0 comments, 0 reactions \u2014 the note's claim of '10 reactions' is factually wrong, confirmed via GitHub API). Also, the entire daytonaio/daytona repo was archived on 2026-10-03 after moving core development private in June 2026, so these issues are now dead/unaddressable there. agentscope-java#3390 is open but only 2 comments/0 reactions; #2547 is CLOSED (already resolved, not an open demand signal). e2b-dev/runtime#3666 is a CLOSED bug-fix PR ('fix(orchestrator): persist checkpoint snapshot when resume-fresh fails'), not a feature request at all \u2014 miscategorized as demand evidence. So the 'strong' claim rests on a fabricated reaction count, a closed issue, a closed bug-fix PR mislabeled as a feature request, and an abandoned/archived repo, with every individual thread actually showing low engagement (0-7 reactions). That's not 'strong'. But the signal does recur independently across three unrelated competitor projects (microsandbox, daytona, agentscope-java/e2b), which is more than a single isolated thread. Net: moderate is the status the verified evidence actually supports \u2014 reject 'strong', reject downgrading below 'moderate'.",
+      "authors": [
+        "claude",
+        "codex"
+      ]
+    },
+    {
+      "signal": "persistent shared volumes",
+      "category": "Competitor ships, product lacks",
+      "status": "moderate",
+      "evidence": "https://www.daytona.io/docs/volumes/",
+      "source": "docs",
+      "detail": "Daytona volumes persist independently of sandbox lifecycle, can mount into multiple sandboxes, and support isolated per-tenant subpaths.",
+      "surface": "competitor-features",
+      "surfaceRank": 3,
+      "author": "codex",
+      "key": "competitor features:persistent shared volumes",
+      "note": "Fetched https://www.daytona.io/docs/volumes/ directly. It confirms all three claimed sub-facts verbatim: 'the contents persist independently of the sandbox lifecycle', 'a single volume can be mounted to multiple sandboxes', and 'Each sandbox sees only files under its assigned subpath at mount_path and cannot read or write sibling subpaths'. Single first-party docs citation accurately described \u2014 moderate is the right confidence for a one-source docs claim (no independent demand signal, just a confirmed product-doc fact).",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "proxy credential injection",
+      "category": "Competitor ships, product lacks",
+      "status": "strong",
+      "evidence": "https://docs.docker.com/ai/sandboxes/security/ ; https://docs.docker.com/ai/sandboxes/configuration/credentials/",
+      "source": "docs",
+      "detail": "Docker states API keys are injected by a host-side proxy and never enter the microVM; OAuth can keep tokens outside the sandbox.",
+      "surface": "competitor-features",
+      "surfaceRank": 3,
+      "author": "codex",
+      "key": "competitor features:proxy credential injection",
+      "note": "Fetched both cited URLs. docs.docker.com/ai/sandboxes/security/ states 'the host-side proxy injects authentication headers into outbound HTTP requests. The raw credential values never enter the VM.' docs.docker.com/ai/sandboxes/configuration/credentials/ independently confirms the sentinel-value mechanism ('the sandbox sees only a sentinel value... the real value never enters the sandbox') and the OAuth claim specifically ('OAuth - A host-side sign-in flow; the token never enters the sandbox'). Two independent first-party docs pages corroborate every clause of the finding, including the OAuth detail that one page alone didn't mention \u2014 strong is justified.",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "composable agent kits",
+      "category": "Competitor advertises prominently",
+      "status": "moderate",
+      "evidence": "https://docs.docker.com/ai/sandboxes/customize/ ; https://docs.docker.com/agentic-platform/kits/ ; https://e2b.dev/",
+      "source": "competitor",
+      "detail": "Docker kits package agent, tools, setup, network and credentials, with reusable mixins; E2B prominently lists ready templates for Claude Code, Codex, OpenCode and others.",
+      "surface": "competitor-features",
+      "surfaceRank": 3,
+      "author": "codex",
+      "key": "competitor features:composable agent kits",
+      "note": "Docker evidence holds up: docs.docker.com/ai/sandboxes/customize/ confirms kits package 'network access, credentials, setup commands, or instructions for the agent' and that 'mixins add tools or behavior to it... you can use one kit for a complete environment or combine kits that contribute different parts' \u2014 genuinely composable at the CLI level. docs.docker.com/agentic-platform/kits/ only restricts combination in the Console UI, which doesn't contradict the CLI composability claim. However the third citation, bare https://e2b.dev/, is vague: fetching that exact URL shows no prominent list of Claude Code/Codex/OpenCode templates on the homepage \u2014 the real supporting pages are e2b.dev/docs/use-cases/coding-agents, e2b.dev/docs/template/examples/claude-code and e2b.dev/docs/agents/opencode, none of which were cited. The underlying E2B fact is true (confirmed via search) but the cited evidence URL doesn't say what the finding claims, so I'm downgrading strong to moderate for imprecise sourcing on one of three legs.",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "private clone workspace",
+      "category": "Competitor ships, product lacks",
+      "status": "moderate",
+      "evidence": "https://docs.docker.com/ai/sandboxes/security/",
+      "source": "docs",
+      "detail": "Docker offers clone mode: host repository read-only, with the agent working in a private in-VM clone rather than changing the host working tree directly.",
+      "surface": "competitor-features",
+      "surfaceRank": 3,
+      "author": "codex",
+      "key": "competitor features:private clone workspace",
+      "note": "Fetched docs.docker.com/ai/sandboxes/security/ directly; it states verbatim: 'With --clone, your repository is mounted read-only and the agent works on a private clone.' This exactly matches the finding's detail. Single docs citation, accurately described \u2014 moderate stands.",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "sandbox port publishing",
+      "category": "Competitor ships, product lacks",
+      "status": "moderate",
+      "evidence": "https://docs.docker.com/agentic-platform/sandboxes",
+      "source": "docs",
+      "detail": "Docker cloud sandboxes can expose a service port through a public URL and support SSH connection options.",
+      "surface": "competitor-features",
+      "surfaceRank": 3,
+      "author": "codex",
+      "key": "competitor features:sandbox port publishing",
+      "note": "Fetched docs.docker.com/agentic-platform/sandboxes directly. It confirms port-to-public-URL exposure ('Enter the port and select Open Port. Copy the public URL to access the service') and SSH connection options ('the sandbox detail page shows Connect, open it to find SSH connection options... includes a Docker Sandboxes CLI option and a connect script'). Single docs citation, accurately described \u2014 moderate stands.",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "usage-based sandbox pricing",
+      "category": "Pricing and packaging",
+      "status": "strong",
+      "evidence": "https://docs.docker.com/agentic-platform/sandboxes",
+      "source": "competitor",
+      "detail": "Docker bills cloud sandbox compute by the second while running; model-provider inference is billed separately. Default account quotas include 10 concurrent and 50 stored sandboxes.",
+      "surface": "competitor-features",
+      "surfaceRank": 3,
+      "author": "codex",
+      "key": "competitor features:usage based sandbox pricing",
+      "note": "Verified directly at https://docs.docker.com/agentic-platform/sandboxes \u2014 the live page states 'You pay for compute by the second while your sandbox runs. Your model provider bills inference separately,' and lists default quotas of 10 concurrent sandboxes and 50 stored sandboxes, matching the finding's detail verbatim. This is primary-source vendor documentation (not a low-engagement forum thread), and for a competitor-features surface citing the competitor's own docs to describe its own shipped pricing/quota mechanics is not circular (circularity would be citing competitor marketing as evidence of user demand, which this finding does not claim). Upgraded from 'moderate' to 'strong' since it is a direct, confirmed primary-source citation rather than indirect or thin evidence.",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "direct devcell comparison",
+      "category": "Whitespace nobody claims",
+      "status": "absent",
+      "evidence": "Search: \u201ce2b vs devcell\u201d and \u201cAI agent sandbox comparison OR alternatives\u201d",
+      "source": "competitor",
+      "detail": "Opened comparison search results covered E2B, Daytona, Modal, Docker and others, but no competitor product page or documentation directly positions against devcell.",
+      "surface": "competitor-features",
+      "surfaceRank": 3,
+      "author": "codex",
+      "key": "competitor features:direct devcell comparison",
+      "note": "Reproduced both searches. 'e2b vs devcell' returns no competitor-authored comparison page naming devcell; results are generic E2B-alternatives/pricing posts (Vercel, Beam, Blaxel, etc.) with no devcell mention. 'AI agent sandbox comparison alternatives E2B Daytona Modal Docker' returns numerous real comparison articles (LogRocket, Blaxel, HelixML, amux, morphllm, temps.sh) that enumerate E2B, Daytona, Modal, Docker, Blaxel, Morph, Fly.io Sprites, Runloop, CodeSandbox, Temps \u2014 none of which position against or even mention devcell. This confirms the whitespace claim as stated; status 'absent' is correct and does not need adjustment. Minor caveat: the evidence field is a search-query description rather than a pinned URL, which is weaker sourcing hygiene, but replication confirms the underlying claim holds.",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "isolated disposable execution",
+      "category": "Industry trend",
+      "status": "weak",
+      "evidence": "https://appliedtechnologyindex.com/research/2026-comparative-analysis-agent-sandbox-infrastructure/",
+      "source": "blog",
+      "detail": "The comparative report calls isolation, reproducibility, observability, interactive speed, and governance the central procurement criteria; it identifies specialist platforms, cloud primitives, and self-hosted options.",
+      "surface": "analyst-reports",
+      "surfaceRank": 4,
+      "author": "codex",
+      "key": "analyst reports:isolated disposable execution",
+      "note": "URL resolves and content roughly matches the claim (isolation/reproducibility/observability/speed/governance as procurement criteria; E2B/Modal/Daytona vs cloud primitives vs self-hosted). But the sole source is an anonymous 'blog' (appliedtechnologyindex.com) with no disclosed author, organization, or credentials anywhere on the site (checked homepage and privacy policy) -- it self-describes as a 'research archive' built for 'citation... and structured ingestion' by AI systems, which is itself a red flag for content manufactured to be picked up by tools exactly like this one. No second, independent source corroborates the trend. One unverifiable blog post calling itself an 'analyst report' is not strong evidence of an industry trend; downgraded to weak.",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "runtime inventory and tracing",
+      "category": "Adoption blocker",
+      "status": "strong",
+      "evidence": "https://cloudsecurityalliance.org/artifacts/enterprise-ai-security-starts-with-ai-agents",
+      "source": "survey",
+      "detail": "47% report an AI-agent security incident; 58% say detection/response takes five hours or longer. The report identifies missing real-time inventories, runtime authorization, and traceability.",
+      "surface": "analyst-reports",
+      "surfaceRank": 4,
+      "author": "codex",
+      "key": "analyst reports:runtime inventory and tracing",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "scoped agent identity",
+      "category": "Adoption blocker",
+      "status": "strong",
+      "evidence": "https://owasp.github.io/DevSecOpsGuideline/2-Process/2-2-Develop/2-2-5-AI-Agent-and-MCP-Security/",
+      "source": "docs",
+      "detail": "OWASP recommends agent-specific, revocable identities and short-lived scoped tokens rather than developers' credentials; it also recommends separate read-only and write-capable identities.",
+      "surface": "analyst-reports",
+      "surfaceRank": 4,
+      "author": "codex",
+      "key": "analyst reports:scoped agent identity",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "MCP configuration governance",
+      "category": "Adoption blocker",
+      "status": "strong",
+      "evidence": "https://labs.cloudsecurityalliance.org/research/csa-research-note-mcp-ai-coding-assistant-credential-theft-2/",
+      "source": "survey",
+      "detail": "CSA reports 24,008 secrets in public MCP configuration files, 2,117 still valid; it recommends treating repository-embedded MCP configurations as reviewed executable code and requiring approval before startup.",
+      "surface": "analyst-reports",
+      "surfaceRank": 4,
+      "author": "codex",
+      "key": "analyst reports:mcp configuration governance",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "sandbox scope completeness",
+      "category": "Research-identified gap",
+      "status": "strong",
+      "evidence": "https://owasp.github.io/DevSecOpsGuideline/2-Process/2-2-Develop/2-2-5-AI-Agent-and-MCP-Security/",
+      "source": "docs",
+      "detail": "OWASP warns that some product sandboxes cover shell commands but not file tools or MCP servers. This favors a boundary that covers the complete agent execution path.",
+      "surface": "analyst-reports",
+      "surfaceRank": 4,
+      "author": "codex",
+      "key": "analyst reports:sandbox scope completeness",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "isolation patch transparency",
+      "category": "Research-identified gap",
+      "status": "moderate",
+      "evidence": "https://arxiv.org/abs/2606.08433",
+      "source": "blog",
+      "detail": "Comparative research finds engine classes differ materially and downstream patch lag ranges from zero days to 471+ days, opaque, or infinite. It identifies the microVM-plus-continuous-public-fuzzing combination as unoccupied.",
+      "surface": "analyst-reports",
+      "surfaceRank": 4,
+      "author": "codex",
+      "key": "analyst reports:isolation patch transparency",
+      "note": "Verified: arxiv.org/abs/2606.08433 is a real paper ('AI Code Sandboxes: A Comparative Security Study, Part 1' by Andronchik & Lokhmakov, OrbitaLab/fellows.tech, submitted June 2026) and it says exactly what the finding claims \u2014 engine classes separate cleanly, downstream patch lag ranges 0 to 471+ days to opaque/infinite, and microVM+continuous-public-fuzzing is an unoccupied combination in their 5-product sample. Authors are an independent data/AI engineering consultancy (not a competing sandbox vendor), and the companion repo publishes raw evidence (strace, seccomp, LinPEAS, pcaps), so this isn't circular competitor marketing. However it's a single, very recent, not-yet-peer-reviewed preprint with a 5-product sample \u2014 real and on-point, but not corroborated elsewhere, so 'moderate' (not 'strong') is the right call; original status stands.",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "safety disclosure gap",
+      "category": "Research-identified gap",
+      "status": "strong",
+      "evidence": "https://aiagentindex.mit.edu/data/2025-AI-Agent-Index.pdf",
+      "source": "survey",
+      "detail": "MIT's index finds 135 of 240 safety/evaluation/social-impact fields have no public information; only 9 of 30 agents document sandboxing or VM isolation, and only 3 document third-party testing.",
+      "surface": "analyst-reports",
+      "surfaceRank": 4,
+      "author": "codex",
+      "key": "analyst reports:safety disclosure gap",
+      "note": "Verified by extracting text directly from the cited PDF. The source states verbatim: '135/240' safety-related fields have no public information, 'Sandboxing or VM isolation is documented for 9/30 agents', and 'Third-party testing is documented for only 3/30 agents (Anthropic Claude, OpenAI ChatGPT, OpenAI Codex)'. All three numbers in the finding match the primary source exactly. This is MIT's own comprehensive index (30 agents x 8 safety fields = 240 cells), not a single low-engagement thread, so 'strong' is justified.",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "local-first analyst demand",
+      "category": "Industry trend",
+      "status": "absent",
+      "evidence": "https://github.com/sandbaseai/sandbase-harness/",
+      "source": "competitor",
+      "detail": "Direct searches for \u201cAI agent sandbox local-first\u201d returned an implementation project, but no opened analyst report or developer survey quantified demand for local-first sandboxes.",
+      "surface": "analyst-reports",
+      "surfaceRank": 4,
+      "author": "codex",
+      "key": "analyst reports:local first analyst demand",
+      "note": "Verified: github.com/sandbaseai/sandbase-harness is a real, active repo (self-hosted agent runtime with local sandbox backends, ~700+ stars) \u2014 it is exactly what the finding describes: an implementation project, not an analyst report or developer survey quantifying demand for local-first sandboxes. The finding already self-labels this correctly as 'absent' demand-evidence while citing a real competitor repo as the (non-)evidence; no change needed.",
+      "authors": [
+        "codex"
+      ]
+    },
+    {
+      "signal": "snapshot and rollback",
+      "category": "Industry trend",
+      "status": "moderate",
+      "evidence": "https://arxiv.org/abs/2512.12806",
+      "source": "blog",
+      "detail": "A 2025 coding-agent sandbox paper reports transactional filesystem snapshots with 100% rollback of failed states in its prototype and 14.5% overhead; it frames rollback as a way to preserve headless autonomy safely.",
+      "surface": "analyst-reports",
+      "surfaceRank": 4,
+      "author": "codex",
+      "key": "analyst reports:snapshot and restore",
+      "contested": true,
+      "note": "Verified: arxiv.org/abs/2512.12806 ('Fault-Tolerant Sandboxing for AI Coding Agents', Boyang Yan, Dec 2025) is real and matches the claim \u2014 transactional filesystem snapshots, 100% rollback of failed/dangerous states in the prototype, 14.5% overhead. But this is a single research prototype paper, not demand evidence per se. The contested upgrade to 'strong' relies on (a) blaxel.ai's own blog, confirmed to be vendor marketing for Blaxel's own sandbox product with no survey/testimonial/demand data \u2014 circular competitor marketing, and (b) a bex.co funding-roundup article that is largely restating vendor claims ('the company emphasizes... pause, resume, snapshot, and branch') rather than independent demand quantification. Neither piece of 'strong' evidence survives scrutiny, so the status should stay at 'moderate', confirming the non-contested (codex) assessment over the contested 'strong' claim.",
+      "authors": [
+        "claude",
+        "codex"
+      ]
+    }
+  ],
+  "pendingCodex": [
+    {
+      "surface": {
+        "name": "community-forums",
+        "rank": 1
+      },
+      "findings": [
+        {
+          "signal": "secrets leak past sandbox denial",
+          "status": "strong",
+          "evidence": "Reddit post (via WebSearch) describing Claude Code, after being blocked from reading .env, running `docker compose config` and extracting API keys from the parsed output; discussed further on HN thread 'I was wrong about AI agent sandboxing' https://news.ycombinator.com/item?id=46740062",
+          "source": "reddit",
+          "category": "Pain point",
+          "detail": "Widely-discussed; core complaint is that denying one path to a secret doesn't block the resource itself \u2014 agent finds alternate route through readable files/processes/mounted volumes. Directly relevant to devcell's 'one shared $HOME / secrets scope' design.",
+          "surface": "community-forums",
+          "surfaceRank": 1,
+          "author": "claude",
+          "key": "community forums:secrets leak past sandbox denial"
+        },
+        {
+          "signal": "permission prompt fatigue",
+          "status": "strong",
+          "evidence": "GitHub issue anthropics/claude-code#7275 'Feature Request: Auto-approve Recommended Actions Setting'; testdouble.com 'Get in the box' guide; mindstudio.ai blog on auto mode classifier",
+          "source": "github",
+          "category": "Pain point",
+          "detail": "Users describe pressing 'y' every few seconds during active sessions, calling it 'prompt fatigue'; cited as the direct motivator for --dangerously-skip-permissions usage, which is exactly the gap devcell's full auto-approve positions against.",
+          "surface": "community-forums",
+          "surfaceRank": 1,
+          "author": "claude",
+          "key": "community forums:permission prompt fatigue"
+        },
+        {
+          "signal": "silent sandbox bypass flag",
+          "status": "moderate",
+          "evidence": "anthropics/claude-code issue #34315 'dangerouslyDisableSandbox bypasses sandbox without user approval prompt'",
+          "source": "github",
+          "category": "Pain point",
+          "detail": "Reporter calls the sandbox protection 'effectively cosmetic' since Claude can set the bypass flag itself with no prompt; single issue but substantive/specific bug report, likely to recur in forum chatter.",
+          "surface": "community-forums",
+          "surfaceRank": 1,
+          "author": "claude",
+          "key": "community forums:silent sandbox bypass flag"
+        },
+        {
+          "signal": "tool sprawl across sandbox products",
+          "status": "moderate",
+          "evidence": "HN 'Ask HN: The new wave of AI agent sandboxes?' https://news.ycombinator.com/item?id=47444917 \u2014 commenter joke: 'A tool so good that it requires 37 different sandboxes'",
+          "source": "hn",
+          "category": "Vocabulary and framing",
+          "detail": "Commenters frame the landscape as a security/speed/cost trade-off with no clean winner \u2014 microVMs secure-but-slow, WASM fast-but-limited \u2014 and note 'a majority of people employ a hybrid solution'. Useful framing devcell could use/counter in messaging.",
+          "surface": "community-forums",
+          "surfaceRank": 1,
+          "author": "claude",
+          "key": "community forums:tool sprawl across sandbox products"
+        },
+        {
+          "signal": "lethal trifecta framing",
+          "status": "moderate",
+          "evidence": "HN comment thread on a WASM-based modular agent sandbox project (surfaced via WebSearch, same HN discussion cluster as #47444917)",
+          "source": "hn",
+          "category": "Vocabulary and framing",
+          "detail": "Commenters use 'lethal trifecta' (private data + untrusted content + external communication) as the standard term for the core agent-sandboxing risk; proposed workaround (manual OTP-style confirmation gates) explicitly criticized for causing decision fatigue over time.",
+          "surface": "community-forums",
+          "surfaceRank": 1,
+          "author": "claude",
+          "key": "community forums:lethal trifecta framing"
+        },
+        {
+          "signal": "MCP servers punch holes in sandbox",
+          "status": "moderate",
+          "evidence": "HN comment thread (via WebSearch, same cluster): 'the first thing people are going to do is punch holes in the sandbox with MCP servers'",
+          "source": "hn",
+          "category": "Pain point",
+          "detail": "Skepticism that sandboxing meaningfully changes the security picture once developers wire in MCP servers for actual usefulness \u2014 relevant given devcell bakes in MCP servers by default.",
+          "surface": "community-forums",
+          "surfaceRank": 1,
+          "author": "claude",
+          "key": "community forums:mcp servers punch holes in sandbox"
+        },
+        {
+          "signal": "browser session persistence across runs",
+          "status": "moderate",
+          "evidence": "dev.to 'I Tested Every Browser Automation Tool for Claude Code' comparison; Anthropic's official 'Claude in Chrome' (--chrome flag) noted as sharing real browser login state vs. Chrome DevTools MCP's 'no cookies, no logins, requiring re-authentication for everything'",
+          "source": "blog",
+          "category": "Pain point",
+          "detail": "Community explicitly ranks tools by whether login/session state survives between runs; stealth/anti-detection browser skills (nodriver-based, patched Chromium bypassing Cloudflare Turnstile/reCAPTCHA v3/FingerprintJS) are a recurring community-built category \u2014 directly matches devcell's 'stealth browser login' feature, confirming real demand for exactly that capability.",
+          "surface": "community-forums",
+          "surfaceRank": 1,
+          "author": "claude",
+          "key": "community forums:browser session persistence across runs"
+        },
+        {
+          "signal": "manual tmux/worktree orchestration for parallel agents",
+          "status": "strong",
+          "evidence": "Multiple independent write-ups found: DoltHub blog 'How I Use Multiple Agents in Parallel', Kaushik Gopal 'Forking subagents in an AI coding session with tmux', dmux/Uzi/NTM tool pages, dev.to 'LLM codegen go brrr: parallelization with git worktrees and tmux', Dagger Container Use (InfoQ coverage)",
+          "source": "blog",
+          "category": "User-built workaround",
+          "detail": "Recurring, independently-built pattern across many authors: isolate each parallel agent via its own git worktree + tmux pane, or its own container, specifically to stop agents from colliding on files/ports. Several note merge-conflict and coordination pain when agents aren't isolated. Strong signal for 'per-project containerized isolation with easy parallel spin-up' as a wanted primitive.",
+          "surface": "community-forums",
+          "surfaceRank": 1,
+          "author": "claude",
+          "key": "community forums:manual tmux worktree orchestration for parallel agents"
+        },
+        {
+          "signal": "snapshot and restore",
+          "status": "absent",
+          "evidence": "Searches surfaced only competitor product blogs (E2B pause/resume ~1s, Daytona pause/fork since v0.190.0+) rather than any forum thread naming devcell specifically or asking for this on devcell's own issue tracker (0 open issues found on devcell-sh/devcell)",
+          "source": "github",
+          "category": "Requested feature",
+          "detail": "No Reddit/HN/dev.to thread found requesting snapshot/restore specifically for devcell; the demand signal exists only at the competitor-feature level (E2B/Daytona), not yet as a community ask directed at devcell.",
+          "surface": "community-forums",
+          "surfaceRank": 1,
+          "author": "claude",
+          "key": "community forums:snapshot and restore"
+        },
+        {
+          "signal": "devcell-specific forum discussion",
+          "status": "absent",
+          "evidence": "Searched \"devcell\" feature request / missing/wish/need; only hits were devcell-sh/devcell GitHub PRs (#46, #47, #48) and an unrelated bioinformatics tool 'devCellPy'",
+          "source": "github",
+          "category": "Vocabulary and framing",
+          "detail": "No Reddit, HN, dev.to, Discourse, or Discord content specifically discussing devcell was found \u2014 the project does not yet appear in community-forum conversation; all located 'devcell' signal is from its own GitHub repo (PR descriptions), not external community discussion.",
+          "surface": "community-forums",
+          "surfaceRank": 1,
+          "author": "claude",
+          "key": "community forums:devcell specific forum discussion"
+        },
+        {
+          "signal": "burnout from always-on agent loops",
+          "status": "weak",
+          "evidence": "Substack post 'Interns with chainsaws' (anhvietle.substack.com) describing 'token anxiety' and running a home computer over Tailscale to keep Claude Code sessions alive during lunch breaks",
+          "source": "blog",
+          "category": "Pain point",
+          "detail": "Single first-person account, not a forum thread with engagement metrics, but illustrates a persistent/always-on-cell use case devcell's 'running or stopped' cell model addresses.",
+          "surface": "community-forums",
+          "surfaceRank": 1,
+          "author": "claude",
+          "key": "community forums:burnout from always on agent loops"
+        }
+      ]
+    },
+    {
+      "surface": {
+        "name": "github-issues",
+        "rank": 2
+      },
+      "findings": [
+        {
+          "signal": "network egress allowlist",
+          "category": "Cross-repo recurring theme",
+          "status": "strong",
+          "evidence": "superradcompany/microsandbox #691 'Capture & expose network policy deny events', #1538 'Allow modifying network rules of a running sandbox'; daytonaio/daytona #3825 'Predictable Outbound Networking' (7 reactions); anthropics/claude-code issues #87236, #86977, #88553, #30112 all about egress allowlist enforcement bugs; WorkOS blog 'What your agent sandbox can reach by default'",
+          "source": "github",
+          "detail": "This is a very hot, recurring theme across almost every agent-sandbox project: default-deny vs default-open egress, letting an agent reach npm/pip/cargo/go-mod registries and the specific APIs a repo needs while blocking everything else, and showing blocked connections in the session UI so missing entries are easy to add. Multiple open bugs on Claude Code's own allowlist enforcement (several hundred-plus open issues in that tracker) show this is an unsolved, actively complained-about area industry-wide, not just a devcell gap.",
+          "surface": "github-issues",
+          "surfaceRank": 2,
+          "author": "claude",
+          "key": "github issues:network egress allowlist"
+        },
+        {
+          "signal": "read-only or external volume mounts",
+          "category": "Competitor open feature request",
+          "status": "moderate",
+          "evidence": "daytonaio/daytona #3340 'Support Read-Only (RO) Volume Mounts' (13 reactions), #2486 'Support mounting external remote file storage (e.g. S3) into sandboxes' (10 reactions), #2310 'Decouple File System / Volume from Sandbox' (4 reactions); microsandbox #1326 'Option to hide/exclude paths inside a host bind mount from the guest'",
+          "source": "github",
+          "detail": "Among Daytona's top-reaction open issues (#3413 Direct File Upload/Download for Volumes has 27 reactions, the single highest-reaction open issue in that repo). Pattern: users want finer control over what's mounted into the sandbox and in what mode, decoupled from sandbox lifecycle.",
+          "surface": "github-issues",
+          "surfaceRank": 2,
+          "author": "claude",
+          "key": "github issues:read only or external volume mounts"
+        },
+        {
+          "signal": "GPU support",
+          "category": "Competitor open feature request",
+          "status": "moderate",
+          "evidence": "superradcompany/microsandbox #291 'GPU Support' (4 reactions, open since ~mid-2025); daytonaio/daytona #2296 ties GPU overrides to snapshot-based sandboxes; Daytona's own changelog shows GPU support was added natively starting v0.174.0 and iterated through v0.205.0 (warm pools + spot GPU)",
+          "source": "github",
+          "detail": "Demand is real but Daytona has already shipped it, so this is more a 'table stakes, already being met by leaders' theme than an open gap \u2014 relevant context if devcell considers GPU passthrough.",
+          "surface": "github-issues",
+          "surfaceRank": 2,
+          "author": "claude",
+          "key": "github issues:gpu support"
+        },
+        {
+          "signal": "baked-in MCP servers and MCP gateway correctness",
+          "category": "Cross-repo recurring theme",
+          "status": "moderate",
+          "evidence": "e2b-dev/E2B #1900 'MCP gateway drops params._meta on tools/call', #1899/#1901/#1943 custom MCP server key-naming bugs, #1714/#1700 'refresh the MCP server schema from Docker's MCP catalog'; daytonaio/daytona #3859 '[BUG][MCP] Cannot list tools in MCP Server', #1912 'Add Sessions to the CLI/MCP', #4458 'computer-use: add MCP tools for screenshot, mouse, keyboard, display'",
+          "source": "github",
+          "detail": "Both E2B and Daytona have active, ongoing work and bug reports specifically about MCP server integration correctness and catalog freshness \u2014 this validates devcell's 'baked MCP servers' positioning as addressing a real pain point (manual MCP wiring is error-prone), but also shows it's an area competitors are actively iterating on, not a clear gap only devcell fills.",
+          "surface": "github-issues",
+          "surfaceRank": 2,
+          "author": "claude",
+          "key": "github issues:baked in mcp servers and mcp gateway correctness"
+        },
+        {
+          "signal": "credential and secrets brokering",
+          "category": "Cross-repo recurring theme",
+          "status": "moderate",
+          "evidence": "e2b-dev/E2B #1160 'Credential/Secret Brokering for HTTP(S) Requests'; superradcompany/microsandbox #1183 'Support runtime-resolved store-backed secrets without persisting plaintext'; anthropics/sandbox-runtime #286 'Feature Request: Secrets Injection' (asks for microsandbox-style secret injection so secrets are never visible in the sandbox)",
+          "source": "github",
+          "detail": "Recurs across e2b, microsandbox, and Anthropic's own sandbox-runtime repo. Common ask: inject secrets at proxy/network layer so the plaintext value is never exposed to in-sandbox processes or logs \u2014 directly relevant to devcell's 'one shared secrets scope' cell model.",
+          "surface": "github-issues",
+          "surfaceRank": 2,
+          "author": "claude",
+          "key": "github issues:credential and secrets brokering"
+        },
+        {
+          "signal": "local-first / offline development environment",
+          "category": "Competitor open feature request",
+          "status": "strong",
+          "evidence": "coder/coder #6815 'Local workspaces / offline mode' (29 reactions, the top-reaction open issue in coder/coder, opened 2023-03-27, still open/unresolved as of this search)",
+          "source": "github",
+          "detail": "Highest-reaction open issue found across any competitor repo in this research. Request: sync work to a local machine for offline use (e.g. on a plane) and sync back to a remote workspace. This is the single clearest piece of evidence that local-first operation (devcell's core model: everything runs on the host machine, not a remote cloud sandbox) is validated, unmet demand in this exact competitive category.",
+          "surface": "github-issues",
+          "surfaceRank": 2,
+          "author": "claude",
+          "key": "github issues:local first offline development environment"
+        },
+        {
+          "signal": "auto-approve / permission-prompt friction",
+          "category": "Cross-repo recurring theme",
+          "status": "strong",
+          "evidence": "anthropics/claude-code #13459 '[FEATURE] Agent-Level Permission Auto-Approval'; openai/codex #1254 'Support --dangerously-auto-approve-everything'; langchain-ai/deepagents #4844 'Project-level approval policy file for fine-grained auto-approval rules'; vercel/ai #22550 'harness-codex: support built-in tool approvals'; GitHub Topics page 'auto-approve' lists multiple third-party tools (codex-yolo, PTY-proxy auto-approvers) built purely to work around this pain",
+          "source": "github",
+          "detail": "Very strong, recurring theme: users want agents to run with full autonomy (auto-approve everything) but are also scared of doing so without a safety boundary \u2014 deepagents #4844 explicitly flags the security risk of a malicious repo shipping an auto-approve policy file. This is precisely the devcell value proposition (full auto-approve, but inside a disposable container) and is the second-strongest demand signal found after local/offline mode.",
+          "surface": "github-issues",
+          "surfaceRank": 2,
+          "author": "claude",
+          "key": "github issues:auto approve permission prompt friction"
+        },
+        {
+          "signal": "windows guest support",
+          "category": "Cross-repo recurring theme",
+          "status": "weak",
+          "evidence": "superradcompany/microsandbox had a 'Feature Request: Windows Support for Microsandbox' (#47, dating to late 2024) per earlier search; direct GitHub search-API queries for 'windows' in e2b-dev/E2B and daytonaio/daytona were rate-limited before a result could be captured",
+          "source": "github",
+          "detail": "Only one concrete hit found (microsandbox #47); could not confirm presence/absence in e2b or daytona due to GitHub search API rate-limiting (60 req/hr unauthenticated) encountered mid-session. Marked weak rather than absent because the search was interrupted, not exhaustively negative.",
+          "surface": "github-issues",
+          "surfaceRank": 2,
+          "author": "claude",
+          "key": "github issues:windows guest support"
+        },
+        {
+          "signal": "stealth/anti-detection browser automation",
+          "category": "Cross-repo recurring theme",
+          "status": "moderate",
+          "evidence": "vercel-labs/agent-browser issue #471 proposing a '--stealth' flag (closed as not planned); standalone projects shanewas/agentic-stealth-browser, RobithYusuf/mcp-stealth-chrome, CloakHQ/CloakBrowser, daijro/camoufox, leeguooooo/chrome-use all built specifically for AI-agent browser automation that evades bot detection",
+          "source": "github",
+          "detail": "Not framed as issues on sandbox repos directly (e2b/daytona/coder/microsandbox have no explicit stealth-browser issues found), but the demand is strong enough that an entire ecosystem of dedicated repos exists to serve it. Vercel's own agent-browser team declined to build it in-house (closed as 'not planned'), suggesting this is a feature gap deliberately left for others \u2014 directly relevant to devcell's 'stealth browser login' feature as a differentiator no major competitor has absorbed.",
+          "surface": "github-issues",
+          "surfaceRank": 2,
+          "author": "claude",
+          "key": "github issues:stealth anti detection browser automation"
+        },
+        {
+          "signal": "K8s / self-hosted deployment",
+          "category": "Competitor open feature request",
+          "status": "moderate",
+          "evidence": "e2b-dev/E2B #1061 'can e2b support on k8s' (1 reaction); daytonaio/daytona #4232 'K8s Self-Hosted Deployment Issues - Runner Cannot Connect to API (containerd clusters)' (8 reactions)",
+          "source": "github",
+          "detail": "Recurring but not highly engaged; more an infrastructure/ops ask than an end-user feature ask, less directly relevant to devcell's local-first single-host model.",
+          "surface": "github-issues",
+          "surfaceRank": 2,
+          "author": "claude",
+          "key": "github issues:k8s self hosted deployment"
+        },
+        {
+          "signal": "predictable / reusable sandbox resource management",
+          "category": "Competitor open feature request",
+          "status": "weak",
+          "evidence": "daytonaio/daytona #2909 'Daytona CLI Profile Management' (3 reactions), #3309 '[CLI] Live File Synchronization (daytona sandbox sync)' (3 reactions)",
+          "source": "github",
+          "detail": "Low engagement; CLI ergonomics requests rather than core sandbox-model requests.",
+          "surface": "github-issues",
+          "surfaceRank": 2,
+          "author": "claude",
+          "key": "github issues:predictable reusable sandbox resource management"
+        }
+      ]
+    },
+    {
+      "surface": {
+        "name": "competitor-features",
+        "rank": 3
+      },
+      "findings": [
+        {
+          "signal": "cloud-hosted agent execution beyond laptop",
+          "status": "strong",
+          "evidence": "https://www.globenewswire.com/news-release/2026/09/24/3368595/0/en/docker-launches-cloud-sandboxes-extending-secure-ai-agent-isolation-beyond-the-laptop.html ; https://forkast.news/docker-launched-cloud-sandboxes-containers-werent-designed-for-ai-agent-isolation/",
+          "source": "competitor",
+          "detail": "Docker's Sep 24, 2026 'Cloud Sandboxes' launch lets agent work continue running in the cloud after a laptop closes, billed by the second from $0.07/hr, with secrets/policies/networks/CloudMCP gateways built in. This directly targets devcell's core positioning (local-first, laptop-bound) as a limitation rather than a feature.",
+          "category": "Competitor ships, product lacks",
+          "surface": "competitor-features",
+          "surfaceRank": 3,
+          "author": "claude",
+          "key": "competitor features:cloud hosted agent execution beyond laptop"
+        },
+        {
+          "signal": "agent-framework SDK integrations",
+          "status": "strong",
+          "evidence": "https://e2b.dev/blog/e2b-is-now-in-agents-sdk ; https://medium.com/e-two-b/e2b-october-update-c840ec707e7a",
+          "source": "competitor",
+          "detail": "E2B became a first-party sandbox provider in the OpenAI Agents SDK (Apr 2026) and announced Stripe Projects integration letting agents provision/authenticate sandboxes directly (Jun 2026). No equivalent 'devcell as a provider inside X framework' integration was found for devcell.",
+          "category": "Competitor ships, product lacks",
+          "surface": "competitor-features",
+          "surfaceRank": 3,
+          "author": "claude",
+          "key": "competitor features:agent framework sdk integrations"
+        },
+        {
+          "signal": "GPU-backed sandboxes",
+          "status": "moderate",
+          "evidence": "https://www.morphllm.com/comparisons/daytona-alternative ; https://modal.com/resources/best-code-execution-sandboxes-ai-agents",
+          "source": "competitor",
+          "detail": "Daytona advertises first-party GPU support (H100, RTX PRO 6000) for agent sandboxes; Modal is described as the only platform with native GPU support in sandboxes. devcell's docs (per repo description) don't mention GPU passthrough support for agent workloads.",
+          "category": "Competitor ships, product lacks",
+          "surface": "competitor-features",
+          "surfaceRank": 3,
+          "author": "claude",
+          "key": "competitor features:gpu backed sandboxes"
+        },
+        {
+          "signal": "self-hosted BYOC deployment",
+          "status": "strong",
+          "evidence": "https://www.agenticwire.news/article/e2b-self-hosted-guide ; https://northflank.com/blog/self-hostable-alternatives-to-e2b-for-ai-agents",
+          "source": "competitor",
+          "detail": "E2B's runtime is Apache-2.0 and self-hostable (though described as operationally heavy \u2014 'requires more than just your laptop: gcp, nomad, firecracker, postgres'); enterprise tier adds BYOC on AWS/GCP/Azure. Framed as a major differentiator vs. closed alternatives.",
+          "category": "Pricing and packaging",
+          "surface": "competitor-features",
+          "surfaceRank": 3,
+          "author": "claude",
+          "key": "competitor features:self hosted byoc deployment"
+        },
+        {
+          "signal": "per-second usage billing",
+          "status": "strong",
+          "evidence": "https://www.morphllm.com/e2b-pricing ; https://www.globenewswire.com/news-release/2026/09/24/3368595/0/en/docker-launches-cloud-sandboxes-extending-secure-ai-agent-isolation-beyond-the-laptop.html",
+          "source": "competitor",
+          "detail": "E2B meters compute per-second ($0.000014/s per vCPU) atop tiered plans (Hobby free w/ $100 credit, Pro $150/mo for 100 concurrent sandboxes, Enterprise $3,000/mo min). Docker Cloud Sandboxes bills by the second from $0.07/hr. This usage-metered pricing model is a recurring competitor pattern; devcell (local Docker tool) has no equivalent metered-cloud pricing tier to compare against.",
+          "category": "Pricing and packaging",
+          "surface": "competitor-features",
+          "surfaceRank": 3,
+          "author": "claude",
+          "key": "competitor features:per second usage billing"
+        },
+        {
+          "signal": "OCI-based agent packaging format",
+          "status": "moderate",
+          "evidence": "https://www.helpnetsecurity.com/2026/09/25/docker-launches-cloud-sandboxes/",
+          "source": "competitor",
+          "detail": "Docker's updated 'Kits' spec packages an agent plus its tools, network/credential/volume permissions and rules into a standard OCI image, shareable like a container image. This is a distinct packaging primitive devcell does not advertise (devcell ships stacks/modules via Nix+Docker build rather than a shareable signed OCI 'agent kit').",
+          "category": "Competitor ships, product lacks",
+          "surface": "competitor-features",
+          "surfaceRank": 3,
+          "author": "claude",
+          "key": "competitor features:oci based agent packaging format"
+        },
+        {
+          "signal": "terminal agent pre-integration in cloud workspace",
+          "status": "strong",
+          "evidence": "https://coder.com/changelog/coder-2-26 ; https://coder.com/changelog/coder-2-37",
+          "source": "competitor",
+          "detail": "Coder pre-configures golden-path MCP configs at the template level and runs Claude Code, Codex, Cursor CLI, Gemini CLI, Auggie CLI, etc. inside hosted workspaces; Coder Agents reached GA in v2.37 (Sep 2026) with stable APIs, MCP/model access controls, and an AI Gateway. Overlaps closely with devcell's core pitch (multi-agent, baked MCP) but as a hosted/enterprise product rather than local-first.",
+          "category": "Competitor advertises prominently",
+          "surface": "competitor-features",
+          "surfaceRank": 3,
+          "author": "claude",
+          "key": "competitor features:terminal agent pre integration in cloud workspace"
+        },
+        {
+          "signal": "open-source license retrenchment",
+          "status": "moderate",
+          "evidence": "https://beri.net/article/e2b-vs-modal-vs-daytona-agent-sandbox-pricing-isolation-2026 ; https://www.morphllm.com/comparisons/daytona-alternative",
+          "source": "competitor",
+          "detail": "Daytona went closed-source for its actively-maintained/production codebase in June 2026 (public repo remains AGPL-3.0 but frozen), which multiple comparison sites say is pushing teams toward E2B or Microsandbox for open-source guarantees. This is a live competitive narrative devcell (itself open, per repo) could lean into, but it is being framed by third parties about competitors, not about devcell.",
+          "category": "Whitespace nobody claims",
+          "surface": "competitor-features",
+          "surfaceRank": 3,
+          "author": "claude",
+          "key": "competitor features:open source license retrenchment"
+        },
+        {
+          "signal": "native macOS/Windows guest engine for agents",
+          "status": "absent",
+          "evidence": "searched: 'daytona windows guest sandbox', 'e2b macos sandbox', 'microsandbox windows guest' via the queries above and cross-checked in comparison roundups (morphllm, northflank, blaxel, koyeb)",
+          "source": "competitor",
+          "detail": "None of E2B, Daytona, Microsandbox, Modal, Coder, or Docker Sandboxes advertise native macOS or Windows-guest execution for coding-agent sandboxes \u2014 every competitor source found is Linux-container/microVM-on-Linux-host only. devcell's tart (macOS via vz) and winkit (Windows via vz/qemu) engines appear to be unclaimed territory among the surveyed competitors.",
+          "category": "Whitespace nobody claims",
+          "surface": "competitor-features",
+          "surfaceRank": 3,
+          "author": "claude",
+          "key": "competitor features:native macos windows guest engine for agents"
+        },
+        {
+          "signal": "local-first laptop-run sandbox with cloud parity",
+          "status": "weak",
+          "evidence": "https://www.globenewswire.com/news-release/2026/09/24/3368595/0/en/docker-launches-cloud-sandboxes-extending-secure-ai-agent-isolation-beyond-the-laptop.html",
+          "source": "competitor",
+          "detail": "Docker frames its original (March/August 2026) local sandboxes as a stepping stone it is now extending to the cloud, implying the industry narrative treats 'local-only' as a starting point to graduate away from, not an end state. No competitor is found treating local-first as the permanent, primary design goal the way devcell's description does \u2014 this remains unclaimed framing, though it's at risk of being read as a limitation rather than a strength.",
+          "category": "Whitespace nobody claims",
+          "surface": "competitor-features",
+          "surfaceRank": 3,
+          "author": "claude",
+          "key": "competitor features:local first laptop run sandbox with cloud parity"
+        },
+        {
+          "signal": "bundled MCP server catalog in base image",
+          "status": "weak",
+          "evidence": "https://coder.com/changelog/coder-2-26 (golden-path MCP template configs, 2025) vs no equivalent pre-baked 12+ MCP catalog found for E2B, Daytona, Microsandbox, or Docker Sandboxes",
+          "source": "competitor",
+          "detail": "Coder lets admins pre-configure MCP servers at the template level, but this is admin-configured per org, not a vendor-curated, pre-baked catalog of a dozen+ specific MCP servers (finance, maps, CAD, IaC, etc.) shipped in the base image itself, which is how devcell is described. No competitor source found a 'batteries-included MCP catalog' as a headline feature.",
+          "category": "Whitespace nobody claims",
+          "surface": "competitor-features",
+          "surfaceRank": 3,
+          "author": "claude",
+          "key": "competitor features:bundled mcp server catalog in base image"
+        },
+        {
+          "signal": "stealth/undetected browser automation for agents",
+          "status": "absent",
+          "evidence": "searched within the microsandbox, e2b, daytona, docker-sandboxes, coder changelog/feature pages surfaced above; no mention of anti-bot-detection or stealth browser login capability in any",
+          "source": "competitor",
+          "detail": "None of the five competitor surfaces (e2b, daytona, docker-sandboxes, microsandbox, coder) advertise a stealth/anti-detection browser-login capability baked into their sandbox offering in any changelog, blog, or comparison page opened this session.",
+          "category": "Whitespace nobody claims",
+          "surface": "competitor-features",
+          "surfaceRank": 3,
+          "author": "claude",
+          "key": "competitor features:stealth undetected browser automation for agents"
+        },
+        {
+          "signal": "AI credential/payment auto-provisioning for agents",
+          "status": "moderate",
+          "evidence": "https://medium.com/e-two-b/e2b-october-update-c840ec707e7a (Stripe Projects integration, Jun 10 2026: 'AI agents can now provision and authenticate E2B sandboxes directly through Stripe Projects')",
+          "source": "competitor",
+          "detail": "E2B lets agents self-provision and pay for their own sandboxes via Stripe without a human in the loop \u2014 a distinct, fairly novel feature not mirrored by other competitors in the sources opened, and not present in devcell (which is local/free, no metered provisioning).",
+          "category": "Competitor ships, product lacks",
+          "surface": "competitor-features",
+          "surfaceRank": 3,
+          "author": "claude",
+          "key": "competitor features:ai credential payment auto provisioning for agents"
+        }
+      ]
+    },
+    {
+      "surface": {
+        "name": "analyst-reports",
+        "rank": 4
+      },
+      "findings": [
+        {
+          "signal": "microVM isolation over shared-kernel containers",
+          "status": "strong",
+          "evidence": "https://manveerc.substack.com/p/ai-agent-sandboxing-guide ; https://www.firecrawl.dev/blog/ai-agent-sandbox",
+          "source": "blog",
+          "detail": "2026 industry consensus (as of Feb 2026) is that shared-kernel Docker/runc isolation is insufficient for untrusted LLM-generated code; AWS/Azure/GCP control planes quietly migrated from runc to hardware-enforced isolation (Firecracker, gVisor, Cloud Hypervisor). Market has stratified into primitives (Firecracker/gVisor/LiteBox) vs embeddable runtimes (E2B, microsandbox).",
+          "category": "Industry trend",
+          "surface": "analyst-reports",
+          "surfaceRank": 4,
+          "author": "claude",
+          "key": "analyst reports:microvm isolation over shared kernel containers"
+        },
+        {
+          "signal": "sandbox-as-a-service category formation",
+          "status": "strong",
+          "evidence": "https://medium.com/@prabhueshwarla/the-ai-agent-sandbox-landscape-in-2026-8e662cc2cffb",
+          "source": "blog",
+          "detail": "By early 2026 Cloudflare, Vercel, Ramp, Modal, Docker (Sandboxes), E2B, Northflank, Firecrawl all shipped dedicated sandbox products/features \u2014 the category went from 'throwaway Docker container' to a competitive market in roughly one year. Gartner cited projecting 40% of enterprise apps embedding AI agents by end of 2026, up from <5% in 2025.",
+          "surface": "analyst-reports",
+          "surfaceRank": 4,
+          "author": "claude",
+          "key": "analyst reports:sandbox as a service category formation"
+        },
+        {
+          "signal": "developer trust in agent autonomy remains low",
+          "status": "strong",
+          "evidence": "https://stackoverflow.blog/2026/05/27/agents-on-a-leash-agentic-ai-remains-mostly-monitored-at-work/ ; https://survey.stackoverflow.co/2026/ai",
+          "source": "survey",
+          "detail": "Stack Overflow 2026 Developer Survey (30,000+ respondents, 169 countries; ~1,100 on the agent-specific module, late April 2026). 66% use coding agents, but 63% rarely/never let agents run fully autonomous; 60% block agents from unapproved system changes; 68% prefer single-agent over multi-agent setups. Only 7% trust AI with important decisions; 48% trust conditionally when output is easily verifiable. Top frustration (66%): 'almost right, but not quite' outputs; 45% say debugging AI code takes longer than writing it manually. This is direct demand signal for sandboxed, reviewable, bounded-autonomy execution (devcell's full-auto-approve-in-a-box model addresses the opposite end of this spectrum).",
+          "surface": "analyst-reports",
+          "surfaceRank": 4,
+          "author": "claude",
+          "key": "analyst reports:developer trust in agent autonomy remains low"
+        },
+        {
+          "signal": "sandbox infrastructure funding surge",
+          "status": "strong",
+          "evidence": "https://bex.co/blog/2026/09/11/ai-sandbox-funding-modal-daytona-e2b ; https://coder.com/blog/coder-raises-35m-in-latest-funding-round",
+          "source": "blog",
+          "detail": "Daytona: $24M Series A (Feb 5 2026, FirstMark, Datadog/Figma Ventures strategic), 850K sandboxes/day by May 2026, +74% MoM. E2B: $21M Series A (July 2025, Insight Partners), $35M total raised, 1 billionth sandbox start (June 3 2026), 94% of Fortune 100 use it. Modal: $355M Series C (May 2026) at $4.65B valuation, September 2026 reports of talks at ~$750M/~$15B valuation \u2014 but positioned as AI compute infra, not pure sandbox. Coder: $90M Series C (April 2026, led by KKR) for self-hosted CDEs for AI agents; competitors in same round wave: Gitpod $41M, DevZero $26M, Codesphere $31M. No M&A/acquisitions found in this category as of search date \u2014 activity is all primary fundraising.",
+          "category": "Funding or acquisition signal",
+          "surface": "analyst-reports",
+          "surfaceRank": 4,
+          "author": "claude",
+          "key": "analyst reports:sandbox infrastructure funding surge"
+        },
+        {
+          "signal": "acquisition activity in agent sandbox space",
+          "status": "absent",
+          "evidence": "Searched '\"AI agent sandbox\" funding OR acquisition e2b daytona' \u2014 all results returned fundraising rounds, zero acquisitions",
+          "source": "blog",
+          "detail": "Explicitly noted by a synthesized source: 'No major acquisitions of these three companies have surfaced in search results \u2014 the activity has been fundraising rounds (Series A/C) rather than M&A.'",
+          "category": "Funding or acquisition signal",
+          "surface": "analyst-reports",
+          "surfaceRank": 4,
+          "author": "claude",
+          "key": "analyst reports:acquisition activity in agent sandbox space"
+        },
+        {
+          "signal": "MCP servers pre-baked into sandbox images",
+          "status": "moderate",
+          "evidence": "https://cubesandbox.com/guide/mcp-gateway ; https://glama.ai/mcp/servers/dhanababum/agent-sandbox-os",
+          "source": "github",
+          "detail": "CubeSandbox's MCP gateway requires template Dockerfiles to pre-install MCP servers via build-arg (e.g. MCP_SERVERS=\"duckduckgo fetch time arxiv\") because the gateway only waits 55s for first-start downloads \u2014 direct architectural validation of devcell's 'baked MCP servers' approach. Docker Desktop 4.63 ships docker-agent preinstalled with MCP toolsets and default-deny-egress VM sandbox (opt-in). Microsandbox markets 'Native, out-of-the-box' MCP integration as a differentiator vs Docker's 'manual setup required.'",
+          "category": "Industry trend",
+          "surface": "analyst-reports",
+          "surfaceRank": 4,
+          "author": "claude",
+          "key": "analyst reports:mcp servers pre baked into sandbox images"
+        },
+        {
+          "signal": "incident-driven demand for sandboxing",
+          "status": "moderate",
+          "evidence": "https://upstash.com/blog/ai-agent-sandbox-providers-compared-2026 (cites Dec 2025 rm -rf incident)",
+          "source": "blog",
+          "detail": "Widely cited December 2025 incident: a coding agent ran rm -rf with a stray home-directory path, deleting a developer's files and keychain \u2014 repeatedly used across multiple 2026 vendor blogs as the canonical justification for sandbox adoption, suggesting real-world damage events (not just theoretical risk) are driving category growth.",
+          "surface": "analyst-reports",
+          "surfaceRank": 4,
+          "author": "claude",
+          "key": "analyst reports:incident driven demand for sandboxing"
+        },
+        {
+          "signal": "sandboxes solve containment, not governance/audit",
+          "status": "moderate",
+          "evidence": "https://www.mintmcp.com/blog/agent-sandbox",
+          "source": "blog",
+          "detail": "Research-identified gap: 'sandboxes solve where agent code runs, but they do not solve what agents do inside those environments, which credentials they use, or how their actions are attributed and audited' \u2014 a visibility gap that grows as orgs scale from 10 to 100+ agents. This is cited as an open frontier beyond current sandbox products.",
+          "category": "Research-identified gap",
+          "surface": "analyst-reports",
+          "surfaceRank": 4,
+          "author": "claude",
+          "key": "analyst reports:sandboxes solve containment not governance audit"
+        },
+        {
+          "signal": "stateful/persistent sandbox checkpoint performance research",
+          "status": "weak",
+          "evidence": "https://arxiv.org/pdf/2605.22781 (DeltaBox)",
+          "source": "github",
+          "detail": "DeltaBox paper (arXiv 2605.22781) proposes 'DeltaState' OS abstraction for incremental (not full-duplicate) sandbox checkpointing, achieving ~10.83ms checkpoint and ~1.86ms rollback, aimed at RL/exploration workloads needing many sandbox branches. Academic-only signal, not yet in shipped products besides general directional alignment with Daytona's snapshot/fork marketing.",
+          "category": "Research-identified gap",
+          "surface": "analyst-reports",
+          "surfaceRank": 4,
+          "author": "claude",
+          "key": "analyst reports:stateful persistent sandbox checkpoint performance research"
+        },
+        {
+          "signal": "multi-agent safety benchmarks underdeveloped",
+          "status": "weak",
+          "evidence": "https://arxiv.org/html/2605.16282v1",
+          "source": "github",
+          "detail": "Taxonomy paper (arXiv 2605.16282) surveying 40 agent-safety benchmarks (2023-2026) finds multi-agent safety category is 'methodologically narrower than count suggests': all 9 multi-agent benchmarks are sandboxed/constrained-tool only; none places multi-agent systems in containerized/live environments with open-ended authority; none tests cascading inter-agent failures in production deployments.",
+          "category": "Research-identified gap",
+          "surface": "analyst-reports",
+          "surfaceRank": 4,
+          "author": "claude",
+          "key": "analyst reports:multi agent safety benchmarks underdeveloped"
+        },
+        {
+          "signal": "Windows/winkit guest support for agent sandboxes",
+          "status": "absent",
+          "evidence": "No analyst coverage found across any of the 10 searches (all vendor comparisons \u2014 E2B, Daytona, Modal, Microsandbox, Docker Sandboxes, Northflank, Coder \u2014 focus on Linux containers/microVMs; Windows/macOS guest engines not discussed as a market trend)",
+          "source": "blog",
+          "detail": "Analyst/vendor-blog coverage of the AI agent sandbox market in 2026 is overwhelmingly Linux/container-and-microVM-centric; no report treats macOS or Windows guest support (devcell's tart/winkit engines) as a distinct demand signal or competitive axis.",
+          "surface": "analyst-reports",
+          "surfaceRank": 4,
+          "author": "claude",
+          "key": "analyst reports:windows winkit guest support for agent sandboxes"
+        }
+      ]
+    }
+  ]
+}

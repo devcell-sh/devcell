@@ -1,0 +1,9 @@
+1. **Recommend: devcell.** It is distinctive, owned, credible for the primary buyer, and already connected to the product’s technical model. “Dev” does not meaningfully exclude security researchers, platform teams, CI, or developers—they are still usually buying a tool for software work. Renaming to agentcell would overfit today’s hottest wedge and make the product feel irrelevant to non-agent workloads.
+
+Position it as: **“The agent sandbox for real developer environments.”** Lead with containment, not “development environment.”
+
+2. **Positioning and copy matter more than the name**—especially in this category. Buyers search for “AI agent sandbox,” “secure Claude Code,” “isolated code execution,” and “sandbox SDK,” not necessarily for a brand concept. The name must be memorable and credible; the homepage, category language, proof, integrations, and solitary-mode story explain why it wins.
+
+3. If forced to choose a name serving all five use cases with no semantic narrowing, I’d choose **Cell**. It cleanly conveys a bounded execution unit whether it holds an agent, malware sample, CI job, or full project. But I would not choose it operationally: discoverability, domain ambiguity, trademark/search burden, and CLI collisions make it an expensive generic brand. **devcell** is the practical version of that idea.
+
+4. The biggest mistake would be **renaming to chase the phrase “AI agent sandbox” and treating the name as the positioning strategy**. That burns continuity and domain equity while locking the company into a volatile market label. Own “agent sandbox” in the copy and category narrative; keep devcell as the durable brand.
