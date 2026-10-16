@@ -51,12 +51,19 @@ jobs:
 
       # go-winkit/winpe binds libwim through go-wimlib (cgo, resolved with
       # pkg-config), and go-wimlib v0.2.0 made that mandatory for every cgo
-      # build. Same package go-winkit's own CI installs. Release binaries
-      # are CGO_ENABLED=0 and get the pure-Go stub instead.
+      # build. Release binaries are CGO_ENABLED=0 and get the pure-Go stub
+      # instead.
+      #
+      # Ubuntu's wimlib.pc declares `Requires.private: libntfs-3g fuse`, and
+      # `pkg-config --cflags wimlib` (what cgo runs) fails unless those .pc
+      # files exist too, so the ntfs-3g and fuse dev packages must come
+      # along. On noble the ntfs-3g one is named ntfs-3g-dev (libntfs-3g-dev
+      # no longer exists).
       - name: Install wimlib (cgo dependency of go-winkit/winpe)
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libwim-dev
+          sudo apt-get install -y --no-install-recommends \
+            libwim-dev ntfs-3g-dev libfuse-dev
 
       # cmd/serve.go imports the gitignored api/swagger/ package, so the
       # docs must exist before cmd/ compiles (see AGENTS.md).
