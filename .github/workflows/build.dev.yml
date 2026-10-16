@@ -44,7 +44,7 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Install go-task
-        uses: arduino/setup-task@v2
+        uses: arduino/setup-task@v3
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
@@ -136,7 +136,7 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Install go-task
-        uses: arduino/setup-task@v2
+        uses: arduino/setup-task@v3
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
@@ -240,7 +240,7 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Install go-task
-        uses: arduino/setup-task@v2
+        uses: arduino/setup-task@v3
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
@@ -318,7 +318,7 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Install go-task
-        uses: arduino/setup-task@v2
+        uses: arduino/setup-task@v3
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
