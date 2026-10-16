@@ -4,7 +4,7 @@ project_name: devcell
 
 before:
   hooks:
-    - go run github.com/swaggo/swag/cmd/swag@latest init -g cmd/serve.go -o docs --parseDependency --parseInternal
+    - go run github.com/swaggo/swag/cmd/swag@latest init -g cmd/serve.go -o api/swagger --parseDependency --parseInternal
 
 builds:
   - id: devcell

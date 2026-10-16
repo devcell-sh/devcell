@@ -49,6 +49,15 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # go-winkit/winpe binds libwim through go-wimlib (cgo, resolved with
+      # pkg-config), and go-wimlib v0.2.0 made that mandatory for every cgo
+      # build. Same package go-winkit's own CI installs. Release binaries
+      # are CGO_ENABLED=0 and get the pure-Go stub instead.
+      - name: Install wimlib (cgo dependency of go-winkit/winpe)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwim-dev
+
       # cmd/serve.go imports the gitignored api/swagger/ package, so the
       # docs must exist before cmd/ compiles (see AGENTS.md).
       - name: Generate swagger docs
@@ -366,8 +375,8 @@ jobs:
             -t "${R}:dev" \
             "${R}:v0.0.0-arm64-ultimate"
 
-  cell-build:
-    name: Cell CLI Dev Build
+  devcell-build:
+    name: Devcell CLI Dev Build
     needs: secrets
     runs-on: blacksmith-4vcpu-ubuntu-2404
     env:
@@ -416,7 +425,7 @@ jobs:
 
   e2e-install:
     name: E2E Install (${{ matrix.arch }})
-    needs: [cell-build, docker-manifest]
+    needs: [devcell-build, docker-manifest]
     strategy:
       fail-fast: false
       matrix:
@@ -479,7 +488,7 @@ jobs:
 
   brew-install:
     name: Brew Install (${{ matrix.arch }})
-    needs: [cell-build]
+    needs: [devcell-build]
     strategy:
       fail-fast: false
       matrix:

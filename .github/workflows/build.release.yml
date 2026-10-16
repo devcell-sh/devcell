@@ -160,8 +160,8 @@ jobs:
           echo "=== ${V} ==="
           docker buildx imagetools inspect "${R}:${V}"
 
-  cell-release:
-    name: Cell CLI Release Build
+  devcell-release:
+    name: Devcell CLI Release Build
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v5
@@ -197,7 +197,7 @@ jobs:
 
   e2e-install:
     name: E2E Install (${{ matrix.arch }})
-    needs: [cell-release, docker-manifest]
+    needs: [devcell-release, docker-manifest]
     strategy:
       fail-fast: false
       matrix:
