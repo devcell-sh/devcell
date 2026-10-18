@@ -162,17 +162,13 @@ func TestBootPanelVisual(t *testing.T) {
 		os.Exit(0)
 	}
 
-	bin := filepath.Join(t.TempDir(), "docker.test")
-	build := exec.Command("go", "test", "-c", "-o", bin, "./internal/engine/docker/")
-	build.Dir = "/devcell-2"
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build: %v\n%s", err, out)
-	}
+	bin := buildDockerTestBinary(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	t.Setenv("TERMPROOF_HELPER", "real")
+	pinTruecolorTerminal(t)
 	tm, err := termoscope.Start(ctx, 120, 24, bin, "-test.run=^TestBootPanelVisual$")
 	if err != nil {
 		t.Fatal(err)
@@ -315,17 +311,13 @@ func TestBootPanelVisual_MidScreen(t *testing.T) {
 		os.Exit(0)
 	}
 
-	bin := filepath.Join(t.TempDir(), "docker.test")
-	build := exec.Command("go", "test", "-c", "-o", bin, "./internal/engine/docker/")
-	build.Dir = "/devcell-2"
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build: %v\n%s", err, out)
-	}
+	bin := buildDockerTestBinary(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	t.Setenv("TERMPROOF_HELPER", "midscreen")
+	pinTruecolorTerminal(t)
 	tm, err := termoscope.Start(ctx, 120, 34, bin, "-test.run=^TestBootPanelVisual_MidScreen$")
 	if err != nil {
 		t.Fatal(err)
@@ -423,6 +415,38 @@ func TestBootPanelVisual_MidScreen(t *testing.T) {
 	if logoLine != 17 {
 		t.Errorf("Claude Code logo on line %d, want line 17 (10 prior + banner + 5 groups + rule)", logoLine)
 	}
+}
+
+// buildDockerTestBinary compiles this package's test binary so a visual test
+// can re-exec itself as a helper under termoscope. The repo root is derived
+// from the package directory (go test runs with cwd = package dir), never
+// hardcoded: the same test runs on a developer machine, in a devcell and
+// on a CI runner.
+func buildDockerTestBinary(t *testing.T) string {
+	t.Helper()
+	repoRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(t.TempDir(), "docker.test")
+	build := exec.Command("go", "test", "-c", "-o", bin, "./internal/engine/docker/")
+	build.Dir = repoRoot
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+	return bin
+}
+
+// pinTruecolorTerminal makes the helper render with the truecolor palette
+// the dot assertions are written against. termoscope already advertises
+// TERM=xterm-256color and COLORTERM=truecolor to the helper, but termenv
+// treats any non-empty CI variable as "not a TTY" and downgrades to the
+// 16-color ANSI profile, where the amber warning dot lands on red. CI
+// runners export CI=true, so clear it for the helper (termenv checks the
+// length, so an empty value counts as unset).
+func pinTruecolorTerminal(t *testing.T) {
+	t.Helper()
+	t.Setenv("CI", "")
 }
 
 func countDots(tm *termoscope.Terminal) (green, yellow, red, grey int) {

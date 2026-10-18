@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -175,22 +173,13 @@ func TestMockDemo(t *testing.T) {
 		os.Exit(0)
 	}
 
-	repoRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	bin := filepath.Join(t.TempDir(), "docker.test")
-	build := exec.Command("go", "test", "-c", "-o", bin, "./internal/engine/docker/")
-	build.Dir = repoRoot
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build: %v\n%s", err, out)
-	}
+	bin := buildDockerTestBinary(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	t.Setenv("TERMPROOF_HELPER", "mock-demo")
+	pinTruecolorTerminal(t)
 	tm, err := termoscope.Start(ctx, 120, 17, bin, "-test.run=^TestMockDemo$")
 	if err != nil {
 		t.Fatal(err)
