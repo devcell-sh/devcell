@@ -103,9 +103,18 @@ func staleCellNudge(baseDir string, h NixStoreHealth, probed, staleWarn bool) er
 // exists on the shared nix-store volume. A dead closure means the image
 // will boot silently broken — no nix-daemon, no shell setup, no tools.
 // Prompts for rebuild on TTY; auto-rebuilds on non-TTY.
-func closureCheckPhase(ctx context.Context, pr ux.Phaser, thin bool, imageTag string, rebuild func() error) error {
+//
+// Skipped in dry-run mode: image acquisition already skips there, so the
+// image may not exist at all, and probing a missing image looks exactly
+// like a dead closure. Acting on it would turn a dry run into an image
+// build.
+func closureCheckPhase(ctx context.Context, pr ux.Phaser, thin bool, imageTag string, dryRun bool, rebuild func() error) error {
 	if !thin {
 		ux.Debugf("closure check: skipped (not thin mode)")
+		return nil
+	}
+	if dryRun {
+		ux.Debugf("closure check: skipped (dry-run)")
 		return nil
 	}
 	volume := ThinStoreVolume()

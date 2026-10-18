@@ -280,7 +280,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		return err
 	}
 
-	if err := closureCheckPhase(ctx, panel, thin, imageTag(), func() error {
+	if err := closureCheckPhase(ctx, panel, thin, imageTag(), dryRun, func() error {
 		return build(ctx, opts.Cell, autoBuildParams(opts.Cell))
 	}); err != nil {
 		return err
