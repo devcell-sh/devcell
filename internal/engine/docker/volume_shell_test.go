@@ -51,14 +51,24 @@ func TestEnsureVolumeShellArgv_UsesCorrectImage(t *testing.T) {
 	}
 }
 
-func TestEnsureVolumeShellArgv_ScriptChecksBeforeCopying(t *testing.T) {
+func TestEnsureVolumeShellArgv_ScriptReconcilesWithoutEarlyExit(t *testing.T) {
 	argv := docker.EnsureVolumeShellArgv("vol", "img")
 	script := argv[len(argv)-1]
 
-	// The script must check if the profile closure already exists
-	// (fast path: exit 0 without copying).
-	if !strings.Contains(script, "exit 0") {
-		t.Error("script must have a fast-path exit when the closure is already present")
+	// No fast-path exit: the profile's store directory being present does
+	// not prove the volume is usable (a hydrated cache can leave
+	// /nix/var/nix/profiles/default dangling), so the script must always
+	// reach the link repair below.
+	if strings.Contains(script, "exit 0") {
+		t.Error("script must not exit early when the closure is already present")
+	}
+	// Store paths already on the volume are skipped, not re-copied.
+	if !strings.Contains(script, `[ ! -d "/mnt/nix/store/$BASE" ]`) {
+		t.Error("script must copy only store paths missing from the volume")
+	}
+	// The profile link is repointed unconditionally.
+	if !strings.Contains(script, `ln -sfT "$PROFILE_TARGET" /mnt/nix/var/nix/profiles/default`) {
+		t.Error("script must repoint /mnt/nix/var/nix/profiles/default on every run")
 	}
 	// The script must use nix-store to resolve the full closure.
 	if !strings.Contains(script, "nix-store") {

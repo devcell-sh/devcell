@@ -13,13 +13,26 @@ import (
 // that /bin/sh (and coreutils, nix, git, etc.) resolve when a later
 // container mounts the volume at /nix.
 //
-// Fast path: if the profile's store path already exists on the volume,
-// nothing is copied.
+// Every run reconciles: store paths already on the volume are skipped, so
+// a healthy volume costs one directory test per closure path, but there is
+// deliberately no early exit. The profile's store directory being present
+// does not mean the volume is usable: `cell build prune` garbage-collects
+// the builder's own profile closure (the image ships no gcroot for it), and
+// a nix cache published from such a volume carries a dangling
+// /nix/var/nix/profiles/default. Hydrating that cache over a freshly
+// populated volume overwrites the good link while bash stays in the store,
+// so /bin/sh starts but PATH resolves nothing and the thin build dies on
+// its first mkdir. The link is therefore repointed unconditionally.
+//
+// The devcell-tools profile is invalidated only when the core image's
+// profile closure was missing, i.e. the image changed: a mere link repair
+// must not force a rebuild of the tools profile.
 const volumeShellBootstrapScript = `set -e
 PROFILE_TARGET=$(readlink -f /nix/var/nix/profiles/default)
 VOLUME_BASE=$(basename "$PROFILE_TARGET")
-if [ -d "/mnt/nix/store/$VOLUME_BASE" ]; then
-  exit 0
+CORE_CHANGED=0
+if [ ! -d "/mnt/nix/store/$VOLUME_BASE" ]; then
+  CORE_CHANGED=1
 fi
 DEPS=$(nix-store --query --requisites "$PROFILE_TARGET")
 mkdir -p /mnt/nix/store
@@ -33,10 +46,14 @@ for d in $DEPS; do
 done
 mkdir -p /mnt/nix/var/nix/profiles
 ln -sfT "$PROFILE_TARGET" /mnt/nix/var/nix/profiles/default
-# Core image changed: wipe the devcell-tools profile so the thin build
-# recreates it with store paths from the new closure.
-rm -f /mnt/nix/var/nix/profiles/devcell-tools*
-echo "bootstrap: synced $COPIED store paths, invalidated devcell-tools"
+if [ "$CORE_CHANGED" = 1 ]; then
+  # Core image changed: wipe the devcell-tools profile so the thin build
+  # recreates it with store paths from the new closure.
+  rm -f /mnt/nix/var/nix/profiles/devcell-tools*
+  echo "bootstrap: synced $COPIED store paths, invalidated devcell-tools"
+else
+  echo "bootstrap: synced $COPIED store paths, profile link verified"
+fi
 `
 
 // EnsureVolumeShellArgv returns the docker argv that bootstraps the nix
