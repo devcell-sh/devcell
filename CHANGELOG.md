@@ -5,9 +5,45 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-- `--experimental=<names>` (also `[cell] experimental` and `DEVCELL_EXPERIMENTAL`): the shared gate for experimental features, backed by the `internal/experiments` registry that also generates the README and website lists; `devcell experimental` prints it. See [docs/experimental.md](docs/experimental.md).
-  - `ui-cage` wraps the run in a host tmux session with a one-line bottom bar (workspace, cell name, UTC and ET clocks; `[theme]` picks or overrides colours); the mouse is left to the outer terminal or tmux (CELL-655). `ui-boot-popup` renders the boot panel in a centred tmux popup that is closed before the agent starts (CELL-657). See [docs/cage.md](docs/cage.md).
-  - `engine-windows`: the Windows guest (`--os windows` or `winpe`, engine `winkit`) is now explicitly experimental and refuses to run until the experiment is on. Previously it ran unguarded.
+## [0.10.0] - 2026-10-19
+
+### Removed
+
+- **CLI binary renamed from `cell` to `devcell`** — existing `cell` installs must be replaced; Homebrew casks, goreleaser builds, and CI all use the new name
+- **Config file renamed from `.devcell.toml` to `devcell.toml`** (dotless) and sections flattened (`[ports] forward`, `[[volumes]]`, `[packages.nix] stable` → `[cell] ports`, `[cell] volumes`, `[cell] packages`) — old keys still work with a deprecation warning
+- **Env vars renamed**: `DEVCELL_CELL_NAME` → `DEVCELL_WORKSPACE`, `APP_NAME` → `CELL_NAME`, `WORKSPACE` → `DEVCELL_PROJECT_DIR`, `IS_SANDBOX` → `DEVCELL_CONTAINER` — old names forwarded with deprecation warnings
+- **Core identity terms renamed**: `session` → `workspace`, `bunk` → `cellID`, `cellName` derived from project + cellID — `DEVCELL_BUNK` and `DEVCELL_CELL_NAME` deprecated
+- Retired `--local`, `--macos`, `--vagrant-*`, and `--qemu-*` flags in favor of `--os`, `--engine`, and `--winkit-*` equivalents — old flags still parse but warn
+
+### Added
+
+- Unified engine capability table pairing engines (docker, tart, winkit) with guests (linux, macos, winpe, windows-full); `--os` flag lets users pick a guest OS instead of learning engine names
+- Docker engine works on Podman and rootless-container hosts — no daemon privilege or Docker Desktop required
+- Nix store hydration from a pre-built GHCR cache image on first build — eliminates the cold-start penalty
+- Config drift detection: `devcell start` restarts stale containers when devcell.toml changes instead of silently running an outdated configuration
+- macOS VMs get a GUI toggle (`[gui] enabled`) and VNC endpoint — headless by default, graphical when needed
+- Windows cells boot a PE+WSL1+Nix environment via go-winkit, replacing the full-install QEMU path
+- OCI-backed VM disk cache with a `devcell disk-store` CLI — QEMU builds pull pre-built disks instead of re-downloading ISOs
+- Squid-based egress proxy sidecar with domain/CIDR allowlists/blocklists; `--solitary` or `[network.proxy]` routes all traffic through a filtering proxy
+- Engine-agnostic ContainerPolicy with open and solitary presets — solitary mode drops all capabilities, denies privileged/docker-socket/KVM/WireGuard/TUN
+- Experimental-features registry with lifecycle tracking; features ship behind `--experimental=<name>`, validated on boot so typos fail loudly
+- Host tmux bar and boot popup behind `ui-cage` and `ui-boot-popup` experiments; boot-failure view when services fail
+- Streak-chart boot panel visualizing Prepare / Configure / Boot / Services progress in real time
+- Cell-level `packages` shorthand: `[cell] packages = ["ripgrep", "jq"]` replaces the verbose `[packages.nix] stable` table
+- Relaunched Astro marketing site around "Claude Code, without the blast radius" positioning
+- CONTRIBUTING.md, SECURITY.md, and package-level Go docs with runnable examples
+
+### Fixed
+
+- s6-rc service-activation timeout raised from 30s to 5m with one retry — cold starts with slow oneshots no longer fail to boot
+- Dangling nix profile symlink repaired when hydrated volume cache is reused across image rebuilds
+- `--dry-run` no longer triggers a full image rebuild
+
+### Changed
+
+- CI workflows migrated to Blacksmith runners; PR-triggered Go unit tests and Dependabot added
+- Go module renamed to `github.com/devcell-sh/devcell`
+- nixhome reference updated to `devcell-sh/home`
 
 ## [v0.9.0] - 2026-08-28
 
