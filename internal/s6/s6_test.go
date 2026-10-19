@@ -485,6 +485,40 @@ func TestEntrypointSnippet_S6BootSequenceOrder(t *testing.T) {
 	}
 }
 
+func TestEntrypointSnippet_NoShortGlobalTimeout(t *testing.T) {
+	env := LinuxSessionEnv("warden")
+	script := EntrypointSnippet(env)
+	if strings.Contains(script, "-t 30000 ") {
+		t.Error("must not apply 30s global timeout to the entire user bundle; 30s is too short for cold starts with slow oneshots (nix-packages, project-flake, mise-packages)")
+	}
+}
+
+func TestEntrypointSnippet_RetriesFailedTransition(t *testing.T) {
+	env := LinuxSessionEnv("warden")
+	script := EntrypointSnippet(env)
+	count := strings.Count(script, "change user")
+	if count < 2 {
+		t.Errorf("must retry s6-rc change user on failure (found %d invocations, want >= 2)", count)
+	}
+}
+
+func TestActivateScript_NoShortGlobalTimeout(t *testing.T) {
+	env := DarwinSessionEnv("warden", "devcell")
+	script := ActivateScript(env)
+	if strings.Contains(script, "-t 30000 ") {
+		t.Error("must not apply 30s global timeout to the entire user bundle; 30s is too short for cold starts with slow oneshots")
+	}
+}
+
+func TestActivateScript_RetriesFailedTransition(t *testing.T) {
+	env := DarwinSessionEnv("warden", "devcell")
+	script := ActivateScript(env)
+	count := strings.Count(script, "change user")
+	if count < 2 {
+		t.Errorf("must retry s6-rc change user on failure (found %d invocations, want >= 2)", count)
+	}
+}
+
 func TestActivateScript_S6BootSequenceOrder(t *testing.T) {
 	env := DarwinSessionEnv("warden", "devcell")
 	script := ActivateScript(env)

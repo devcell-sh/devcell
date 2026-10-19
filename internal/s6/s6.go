@@ -197,10 +197,14 @@ if [ -d "$S6_COMPILED" ]; then
     # hasn't created the supervision tree (prevents infinite hang).
     if s6-rc-init -t 5000 -c "$S6_COMPILED" -l "$S6_LIVE" "$S6_SCAN"; then
       # Bring up all services in dependency order (parallel, readiness-aware).
-      # -t 30000: 30s global timeout so boot never hangs on a service
-      # that crash-loops or can't reach readiness.
-      if s6-rc -l "$S6_LIVE" -t 30000 -u change user >>"$S6_LOG/rc-change.log" 2>&1; then
+      # -t 300000: 5m global timeout. The previous 30s budget was too short
+      # for cold starts with slow oneshots (nix-packages, project-flake,
+      # mise-packages). On failure, retry once: s6-rc change is idempotent
+      # and only brings up services not yet active.
+      if s6-rc -l "$S6_LIVE" -t 300000 -u change user >>"$S6_LOG/rc-change.log" 2>&1; then
         :
+      elif s6-rc -l "$S6_LIVE" -t 300000 -u change user >>"$S6_LOG/rc-change.log" 2>&1; then
+        _notify s6.warn "Service activation recovered on retry (see $S6_LOG/)"
       else
         _notify s6.warn "Service activation failed (non-fatal, see $S6_LOG/)"
       fi
@@ -265,8 +269,10 @@ if command -v s6-rc >/dev/null 2>&1 && [ -d "$S6_COMPILED" ]; then
   # Initialize s6-rc live state. -t 5000: bail if svscan not ready in 5s.
   if sudo s6-rc-init -t 5000 -c "$S6_COMPILED" -l "$S6_LIVE" "$S6_SCAN"; then
     # Bring up all services in dependency order
-    if sudo s6-rc -l "$S6_LIVE" -t 30000 -u change user; then
+    if sudo s6-rc -l "$S6_LIVE" -t 300000 -u change user; then
       echo "s6: session services activated"
+    elif sudo s6-rc -l "$S6_LIVE" -t 300000 -u change user; then
+      echo "s6: service activation recovered on retry"
     else
       echo "s6: service activation failed (non-fatal)"
     fi
