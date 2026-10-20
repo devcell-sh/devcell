@@ -866,8 +866,18 @@ type McpSection struct {
 
 // StealthSection holds [stealth] config for browser fingerprint spoofing.
 type StealthSection struct {
-	Arch     string `toml:"arch"`
-	Platform string `toml:"platform"`
+	Enabled   *bool  `toml:"enabled"`   // master switch; default: false
+	Arch      string `toml:"arch"`      // Chrome getHighEntropyValues().architecture; default: host-detected
+	Platform  string `toml:"platform"`  // Chrome platform; default: "Linux"
+	UserAgent string `toml:"useragent"` // explicit UA override; default: auto-built from arch+platform
+}
+
+// ResolvedEnabled returns false when Enabled is nil (absent from config).
+func (s StealthSection) ResolvedEnabled() bool {
+	if s.Enabled == nil {
+		return false
+	}
+	return *s.Enabled
 }
 
 // ResolvedArch returns the stealth architecture: explicit > host-detected.
@@ -893,7 +903,13 @@ func (s StealthSection) ResolvedPlatform() string {
 }
 
 // ResolvedUserAgent builds a Chrome UA string matching the stealth identity.
+// Explicit useragent > auto-built from arch+platform.
+// On arm64 + Linux (default), produces a CrOS (Chromebook) UA for hardware
+// realism: Chromebooks are the dominant arm64 browser devices.
 func (s StealthSection) ResolvedUserAgent() string {
+	if s.UserAgent != "" {
+		return s.UserAgent
+	}
 	arch := s.ResolvedArch()
 	platform := s.ResolvedPlatform()
 	var platformUA string
@@ -904,7 +920,7 @@ func (s StealthSection) ResolvedUserAgent() string {
 		platformUA = "Windows NT 10.0; Win64; x64"
 	default:
 		if arch == "arm" {
-			platformUA = "X11; Linux aarch64"
+			platformUA = "X11; CrOS aarch64 15853.66.0"
 		} else {
 			platformUA = "X11; Linux x86_64"
 		}
@@ -1488,15 +1504,22 @@ func Merge(global, project CellConfig) CellConfig {
 	out.Mcp.Enabled = unionDedupStrings(global.Mcp.Enabled, project.Mcp.Enabled)
 	sort.Strings(out.Mcp.Enabled)
 
-	// Stealth: project wins when non-empty
+	// Stealth: enabled is OR (like proxy); image is global wins (like proxy);
+	// arch/platform/useragent: project wins when non-empty.
 	out.Stealth = global.Stealth
+	if global.Stealth.ResolvedEnabled() || project.Stealth.ResolvedEnabled() {
+		b := true
+		out.Stealth.Enabled = &b
+	}
 	if project.Stealth.Arch != "" {
 		out.Stealth.Arch = project.Stealth.Arch
 	}
 	if project.Stealth.Platform != "" {
 		out.Stealth.Platform = project.Stealth.Platform
 	}
-
+	if project.Stealth.UserAgent != "" {
+		out.Stealth.UserAgent = project.Stealth.UserAgent
+	}
 	// Build: project wins when non-zero
 	out.Build = global.Build
 	if project.Build.Memory != "" {
@@ -1916,6 +1939,11 @@ func ValidateNetworkProxy(c CellConfig) error {
 // merged config. Either layer setting enabled = true is enough.
 func NetworkProxyEnabled(c CellConfig) bool {
 	return c.Network.Proxy.ResolvedEnabled()
+}
+
+// StealthEnabled reports whether stealth mode is enabled in the merged config.
+func StealthEnabled(c CellConfig) bool {
+	return c.Stealth.ResolvedEnabled()
 }
 
 // WireguardEnabled reports whether any [[wireguard]] entry is enabled.

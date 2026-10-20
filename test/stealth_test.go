@@ -481,6 +481,64 @@ func ensureStealthXvfb(t *testing.T, c testcontainers.Container) {
 	}
 }
 
+const stealthDBusAddrFile = stealthDir + "/dbus-addr"
+const stealthPulseAudioConf = "/opt/devcell/.local/state/nix/profiles/profile/etc/pulse/default.pa"
+
+// ensureStealthDBus starts a D-Bus session daemon unless one is already
+// running. Writes the bus address to stealthDBusAddrFile so probes can
+// pick it up. Chromium needs D-Bus for permission backends.
+func ensureStealthDBus(t *testing.T, c testcontainers.Container) {
+	t.Helper()
+	if _, code := containerExec(t, c, []string{"bash", "-c",
+		"[ -f " + stealthDBusAddrFile + " ] && cat " + stealthDBusAddrFile + " | xargs -I{} dbus-send --bus={} --dest=org.freedesktop.DBus --print-reply / org.freedesktop.DBus.ListNames >/dev/null 2>&1",
+	}); code == 0 {
+		return
+	}
+	containerExec(t, c, []string{"bash", "-c",
+		"dbus-uuidgen > /etc/machine-id 2>/dev/null || true"})
+	dbusConf := "/opt/devcell/.local/state/nix/profiles/profile/share/dbus-1/session.conf"
+	out, code := containerExec(t, c, []string{"bash", "-c",
+		"dbus-daemon --config-file=" + dbusConf + " --fork --print-address"})
+	if code != 0 {
+		t.Fatalf("dbus-daemon failed: %s", out)
+	}
+	addr := strings.TrimSpace(out)
+	containerExec(t, c, []string{"bash", "-c",
+		"echo '" + addr + "' > " + stealthDBusAddrFile})
+	t.Logf("D-Bus session: %s", addr)
+}
+
+// ensureStealthPulseAudio starts PulseAudio unless it is already running.
+// Chromium queries PulseAudio for audio device permissions.
+func ensureStealthPulseAudio(t *testing.T, c testcontainers.Container) {
+	t.Helper()
+	if _, code := containerExec(t, c, []string{"bash", "-c",
+		"pgrep pulseaudio >/dev/null 2>&1",
+	}); code == 0 {
+		return
+	}
+	containerExec(t, c, []string{"bash", "-c",
+		"mkdir -p /tmp/runtime-pulse"})
+	out, code := containerExec(t, c, []string{"bash", "-c",
+		"XDG_RUNTIME_DIR=/tmp/runtime-pulse pulseaudio --exit-idle-time=-1 --daemonize=yes --log-level=error " +
+			"-F " + stealthPulseAudioConf + " --disallow-module-loading=0 2>&1; echo exit=$?"})
+	if code != 0 {
+		t.Logf("PulseAudio start warning (non-fatal): %s", out)
+	}
+}
+
+// stealthServiceEnv returns env vars for D-Bus + PulseAudio that headed
+// probes need. Call after ensureStealthDBus/ensureStealthPulseAudio.
+func stealthServiceEnv(t *testing.T, c testcontainers.Container) []string {
+	t.Helper()
+	var env []string
+	if addr, code := containerExec(t, c, []string{"cat", stealthDBusAddrFile}); code == 0 {
+		env = append(env, "DBUS_SESSION_BUS_ADDRESS="+strings.TrimSpace(addr))
+	}
+	env = append(env, "XDG_RUNTIME_DIR=/tmp/runtime-pulse")
+	return env
+}
+
 // runStealthProbe drives one probe page through patchright-mcp-cell, decodes
 // the JSON the page POSTed into `into`, and returns the raw request-header
 // log (see parseStealthHeaders).
@@ -495,7 +553,10 @@ func runStealthProbe(t *testing.T, c testcontainers.Container, p stealthProbe, i
 	argv := append([]string{"env"}, p.env...)
 	if p.headed {
 		ensureStealthXvfb(t, c)
+		ensureStealthDBus(t, c)
+		ensureStealthPulseAudio(t, c)
 		argv = append(argv, "DISPLAY=:99")
+		argv = append(argv, stealthServiceEnv(t, c)...)
 	}
 	argv = append(argv, "python3", stealthDir+"/client.py", p.name)
 	if !p.headed {

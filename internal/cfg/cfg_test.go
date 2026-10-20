@@ -2317,6 +2317,132 @@ func TestMerge_StealthProjectWins(t *testing.T) {
 	}
 }
 
+func TestLoadFile_StealthEnabled(t *testing.T) {
+	dir := t.TempDir()
+	writeTOML(t, dir, "devcell.toml", `
+[stealth]
+enabled = true
+arch = "arm"
+`)
+	c, err := cfg.LoadFile(filepath.Join(dir, "devcell.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Stealth.Enabled == nil {
+		t.Fatal("stealth.enabled should not be nil after parsing enabled = true")
+	}
+	if !*c.Stealth.Enabled {
+		t.Errorf("stealth.enabled: want true, got false")
+	}
+	if c.Stealth.Arch != "arm" {
+		t.Errorf("stealth.arch: want arm, got %q", c.Stealth.Arch)
+	}
+}
+
+func TestLoadFile_StealthAllFields(t *testing.T) {
+	dir := t.TempDir()
+	writeTOML(t, dir, "devcell.toml", `
+[stealth]
+enabled = true
+arch = "arm"
+platform = "Linux"
+useragent = "Mozilla/5.0 Custom"
+`)
+	c, err := cfg.LoadFile(filepath.Join(dir, "devcell.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Stealth.Enabled == nil || !*c.Stealth.Enabled {
+		t.Errorf("stealth.enabled: want true")
+	}
+	if c.Stealth.Arch != "arm" {
+		t.Errorf("stealth.arch: want arm, got %q", c.Stealth.Arch)
+	}
+	if c.Stealth.Platform != "Linux" {
+		t.Errorf("stealth.platform: want Linux, got %q", c.Stealth.Platform)
+	}
+	if c.Stealth.UserAgent != "Mozilla/5.0 Custom" {
+		t.Errorf("stealth.useragent: want %q, got %q", "Mozilla/5.0 Custom", c.Stealth.UserAgent)
+	}
+}
+
+func TestStealthSection_ResolvedEnabled_Default(t *testing.T) {
+	s := cfg.StealthSection{}
+	if s.ResolvedEnabled() {
+		t.Errorf("ResolvedEnabled() default: want false, got true")
+	}
+}
+
+func TestStealthSection_ResolvedEnabled_ExplicitTrue(t *testing.T) {
+	s := cfg.StealthSection{Enabled: boolPtr(true)}
+	if !s.ResolvedEnabled() {
+		t.Errorf("ResolvedEnabled() explicit true: want true, got false")
+	}
+}
+
+func TestStealthSection_ResolvedEnabled_ExplicitFalse(t *testing.T) {
+	s := cfg.StealthSection{Enabled: boolPtr(false)}
+	if s.ResolvedEnabled() {
+		t.Errorf("ResolvedEnabled() explicit false: want false, got true")
+	}
+}
+
+func TestStealthSection_ResolvedUserAgent_CrOS_Arm(t *testing.T) {
+	s := cfg.StealthSection{Arch: "arm"}
+	ua := s.ResolvedUserAgent()
+	if !strings.Contains(ua, "CrOS aarch64") {
+		t.Errorf("ResolvedUserAgent() with arch=arm should contain CrOS aarch64, got %q", ua)
+	}
+	if !strings.Contains(ua, "Chrome/") {
+		t.Errorf("ResolvedUserAgent() should contain Chrome/ version, got %q", ua)
+	}
+}
+
+func TestStealthSection_ResolvedUserAgent_ExplicitOverride(t *testing.T) {
+	s := cfg.StealthSection{UserAgent: "Mozilla/5.0 Custom Agent"}
+	if got := s.ResolvedUserAgent(); got != "Mozilla/5.0 Custom Agent" {
+		t.Errorf("ResolvedUserAgent() with explicit UA: want %q, got %q", "Mozilla/5.0 Custom Agent", got)
+	}
+}
+
+func TestMerge_StealthEnabled_OR(t *testing.T) {
+	// global enabled, project not set → enabled
+	global := cfg.CellConfig{Stealth: cfg.StealthSection{Enabled: boolPtr(true)}}
+	project := cfg.CellConfig{}
+	merged := cfg.Merge(global, project)
+	if !merged.Stealth.ResolvedEnabled() {
+		t.Errorf("global enabled + project unset: want enabled, got disabled")
+	}
+
+	// project enabled, global not set → enabled
+	global2 := cfg.CellConfig{}
+	project2 := cfg.CellConfig{Stealth: cfg.StealthSection{Enabled: boolPtr(true)}}
+	merged2 := cfg.Merge(global2, project2)
+	if !merged2.Stealth.ResolvedEnabled() {
+		t.Errorf("project enabled + global unset: want enabled, got disabled")
+	}
+}
+
+func TestMerge_StealthUserAgent_ProjectWins(t *testing.T) {
+	global := cfg.CellConfig{Stealth: cfg.StealthSection{UserAgent: "global-ua"}}
+	project := cfg.CellConfig{Stealth: cfg.StealthSection{UserAgent: "project-ua"}}
+	merged := cfg.Merge(global, project)
+	if merged.Stealth.UserAgent != "project-ua" {
+		t.Errorf("stealth.useragent: project should win, got %q", merged.Stealth.UserAgent)
+	}
+}
+
+func TestStealthEnabled_Helper(t *testing.T) {
+	c := cfg.CellConfig{Stealth: cfg.StealthSection{Enabled: boolPtr(true)}}
+	if !cfg.StealthEnabled(c) {
+		t.Errorf("StealthEnabled() should return true when enabled=true")
+	}
+	c2 := cfg.CellConfig{}
+	if cfg.StealthEnabled(c2) {
+		t.Errorf("StealthEnabled() should return false when not set")
+	}
+}
+
 // --- [nix] section ---
 
 func TestLoadFile_NixSection(t *testing.T) {

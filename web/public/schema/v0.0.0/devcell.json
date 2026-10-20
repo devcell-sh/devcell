@@ -719,9 +719,19 @@
       "additionalProperties": false,
       "properties": {
         "arch": {
+          "description": "Chrome getHighEntropyValues().architecture; default: host-detected",
           "type": "string"
         },
+        "enabled": {
+          "description": "master switch; default: false",
+          "type": "boolean"
+        },
         "platform": {
+          "description": "Chrome platform; default: \"Linux\"",
+          "type": "string"
+        },
+        "useragent": {
+          "description": "explicit UA override; default: auto-built from arch+platform",
           "type": "string"
         }
       },
