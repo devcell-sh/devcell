@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
+	"golang.org/x/term"
 )
 
 // LogPlainText disables spinners and uses plain logger output when true.
@@ -47,6 +48,25 @@ var (
 	// TableBorder is the default style for lipgloss/table borders.
 	TableBorder = lipgloss.NewStyle().Foreground(colorBorder)
 )
+
+// TermWidth returns the current terminal width in columns, or 80 if it
+// cannot be determined (non-TTY, piped output, etc.).
+func TermWidth() int {
+	w, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil || w <= 0 {
+		return 80
+	}
+	return w
+}
+
+// PhaseRowBudget returns the number of characters available for the detail
+// portion of a phase row, given the phase name length. The overhead accounts
+// for the prefix glyph column (8 chars with padding), " — " separator (3),
+// and elapsed-time suffix (~10 chars including space).
+func PhaseRowBudget(nameLen int) int {
+	const overhead = 8 + 3 + 10 // prefix + separator + elapsed
+	return TermWidth() - overhead - nameLen
+}
 
 // prefix renders a fixed-width (6 char) prefix for aligned message columns.
 func prefix(style lipgloss.Style, text string) string {

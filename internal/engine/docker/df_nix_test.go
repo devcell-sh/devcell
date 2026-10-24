@@ -86,7 +86,7 @@ func TestFormatNixStoreSection_ShowsCountsNamesMetaAndHints(t *testing.T) {
 		"dikb1y8-profile", "dikb1y8-generation",
 		"old4321-profile", "(stale)",
 		"project=devcell", "stack=ultimate", "nixpkgs=9f8e7d6",
-		"cell cleanup", "cell build prune --pure",
+		"cell build prune",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("nix section missing %q\noutput:\n%s", want, out)

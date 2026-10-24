@@ -60,6 +60,23 @@ func MigrateTOML(src string) (MigrationResult, error) {
 			note("["+strings.Join(r.from, ".")+"]", "renamed to ["+strings.Join(r.to, ".")+"]")
 		}
 	}
+	// After [op] → [secrets.onepassword], rename the legacy "items" key to
+	// "documents". OpSection carried both; OnePasswordSecrets only has documents.
+	if sec := doc.section([]string{"secrets", "onepassword"}, false); sec != nil {
+		if items := sec.find("items"); items != nil {
+			if docs := sec.find("documents"); docs != nil {
+				if a, ok := inlineArrayItems(docs); ok {
+					if b, ok := inlineArrayItems(items); ok {
+						docs.setValue("[" + strings.Join(append(a, b...), ", ") + "]")
+					}
+				}
+				sec.removeEntry(items)
+			} else {
+				items.setKey("documents")
+			}
+			note("[op] items", "renamed to [secrets.onepassword] documents")
+		}
+	}
 	if vals := doc.removeVolumeTables(); len(vals) > 0 {
 		doc.setOrMergeArray([]string{"cell"}, "volumes", vals)
 		note("[[volumes]]", "moved to [cell] volumes")

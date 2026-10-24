@@ -99,7 +99,7 @@ fi`
 
 // `cell build prune` cleanup planner.
 //
-// Pure builders compose the ordered plan of commands for each prune mode.
+// Builders compose the ordered plan of commands for each prune mode.
 // The runtime layer (RunDockerPrune / RunNixPrune) executes the plan
 // after a confirmation prompt. All host-specific branching lives in the
 // builders so unit tests can pin behavior without invoking real commands.
@@ -116,16 +116,17 @@ type PruneOpts struct {
 	// aggressive nix GC). Default mode is the standard prune sequence.
 	Force bool
 
-	// Pure selects the nix path instead of the docker path.
+	// Pure is deprecated: the default now prunes both Docker and nix.
+	// Retained for backwards compatibility; ignored by RunPrune.
 	Pure bool
 
 	// Rootless indicates a rootless Docker daemon on Linux. Only relevant
-	// when GOOS == "linux" && !Pure && Force. The runtime call site
-	// auto-detects this via `docker info`.
+	// when GOOS == "linux" && Force. The runtime call site auto-detects
+	// this via `docker info`.
 	Rootless bool
 
 	// NixOS indicates /etc/NIXOS is present. Only relevant when
-	// GOOS == "linux" && Pure && Force; triggers system-profile cleanup.
+	// GOOS == "linux" && Force; triggers system-profile cleanup.
 	NixOS bool
 
 	// HomeDir is the resolved user home (e.g. /home/warden). Used to
@@ -226,7 +227,7 @@ func BuildNixPruneSteps(opts PruneOpts) []PruneStep {
 	}
 
 	if !opts.Force {
-		// Default --pure targets the devcell-nix-store volume on every OS
+		// Safe mode targets the devcell-nix-store volume on every OS
 		// (CELL-333): show root report (drift detection, CELL-334), then run
 		// safe project-aware GC inside a container with the nix volume
 		// mounted. On macOS the thin-mode store lives in this Docker volume,
@@ -338,12 +339,7 @@ type RunPruneArgs struct {
 // abort the loop on failure. Returns nil if the prompt was rejected (not an
 // error — user intent).
 func RunPrune(a RunPruneArgs) error {
-	var steps []PruneStep
-	if a.Opts.Pure {
-		steps = BuildNixPruneSteps(a.Opts)
-	} else {
-		steps = BuildDockerPruneSteps(a.Opts)
-	}
+	steps := append(BuildDockerPruneSteps(a.Opts), BuildNixPruneSteps(a.Opts)...)
 	prompt := BuildPrunePrompt(a.Opts)
 	if !ConfirmDestructive(a.Out, a.In, a.SkipYes, a.IsTTY, prompt) {
 		fmt.Fprintln(a.Out, "Aborted, nothing was deleted.")
@@ -404,82 +400,58 @@ func ConfirmDestructive(out io.Writer, in io.Reader, skipYes bool, isTTY bool, w
 //
 // The exact list and target line are mode-specific, per CELL-101.
 func BuildPrunePrompt(opts PruneOpts) string {
+	const tail = "   Continue? [y/N]"
+
+	if !opts.Force {
+		return "⚠  This will:\n" +
+			"   Docker: remove stopped containers, unused images, volumes, BuildKit cache.\n" +
+			"   Nix:    remove orphaned profile generations and unreferenced store paths.\n" +
+			"           Running containers and their closures are protected.\n" +
+			"   Target: local Docker daemon + " + DefaultThinStoreVolume + " volume (/nix)\n" +
+			tail
+	}
+
+	// Force mode: nuclear reset of both Docker and nix.
 	host := opts.LinuxBuilderHost
 	if host == "" {
 		host = "builder@linux-builder"
 	}
-	const tail = "   Continue? [y/N]"
 
-	if !opts.Pure {
-		// Docker path.
-		if !opts.Force {
-			return "⚠  This will delete ALL stopped containers, unused images, unused volumes,\n" +
-				"   and the BuildKit cache on the local Docker daemon.\n" +
-				tail
-		}
-		// Docker force.
-		if opts.GOOS == "darwin" {
-			wipe := opts.HomeDir + "/Library/Containers/com.docker.docker/Data/vms/0/data"
-			return fmt.Sprintf(
-				"⚠  This will delete ALL Docker state: STOP Docker Desktop,\n"+
-					"   delete its entire data directory (containers, images, volumes,\n"+
-					"   networks, BuildKit cache), then restart it.\n"+
-					"   Target: Docker Desktop VM at %s\n"+
-					tail,
-				wipe,
-			)
-		}
-		// Linux.
-		target := "/var/lib/docker"
-		modeNote := "(rootful, via systemctl + sudo)"
-		if opts.Rootless {
-			target = opts.HomeDir + "/.local/share/docker"
-			modeNote = "(rootless, via systemctl --user)"
-		}
-		return fmt.Sprintf(
-			"⚠  This will delete ALL Docker state: STOP the Docker daemon, delete\n"+
-				"   its entire data directory (containers, images, volumes, networks,\n"+
-				"   BuildKit cache), then restart it.\n"+
-				"   Target: %s %s\n"+
-				tail,
-			target, modeNote,
-		)
-	}
-
-	// Nix path. Default --pure targets the devcell-nix-store volume on
-	// every OS (CELL-333).
-	if !opts.Force {
-		return "⚠  This will remove orphaned profile generations not protected by\n" +
-			"   project GC roots in /nix/var/nix/gcroots/devcell/, then GC\n" +
-			"   unreferenced /nix/store paths. Use --force for blanket cleanup.\n" +
-			"   Target: " + DefaultThinStoreVolume + " Docker volume (/nix)\n" +
-			tail
-	}
-	// Nix force.
 	if opts.GOOS == "darwin" {
+		wipe := opts.HomeDir + "/Library/Containers/com.docker.docker/Data/vms/0/data"
 		return fmt.Sprintf(
-			"⚠  This will delete ALL data inside the linux-builder VM:\n"+
-				"   STOP the VM, DELETE its qcow disk image (entire /nix/store),\n"+
-				"   then restart it. The VM rebuilds from the nix-darwin derivation\n"+
-				"   on next build.\n"+
-				"   Target: linux-builder VM (%s)\n"+
+			"⚠  This will delete ALL Docker and nix state:\n"+
+				"   Docker: STOP Docker Desktop, wipe its data directory, restart.\n"+
+				"           Target: %s\n"+
+				"   Nix:    STOP linux-builder VM, DELETE its qcow disk image,\n"+
+				"           restart. VM rebuilds on next build.\n"+
+				"           Target: linux-builder VM (%s)\n"+
 				tail,
-			host,
+			wipe, host,
 		)
 	}
-	// Linux force-pure.
+
+	// Linux force.
+	dockerTarget := "/var/lib/docker"
+	modeNote := "(rootful, via systemctl + sudo)"
+	if opts.Rootless {
+		dockerTarget = opts.HomeDir + "/.local/share/docker"
+		modeNote = "(rootless, via systemctl --user)"
+	}
 	nixosLine := ""
 	if opts.NixOS {
 		nixosLine = "   Also: NixOS system-profile old generations.\n"
 	}
 	return fmt.Sprintf(
-		"⚠  This will delete ALL old profile generations on this host, run\n"+
-			"   aggressive nix-collect-garbage, optimise the store, and wipe\n"+
-			"   %s/.cache/nix.\n"+
+		"⚠  This will delete ALL Docker and nix state:\n"+
+			"   Docker: STOP daemon, wipe data directory, restart.\n"+
+			"           Target: %s %s\n"+
+			"   Nix:    delete old profile generations, aggressive GC, optimise,\n"+
+			"           wipe %s/.cache/nix.\n"+
 			"%s"+
-			"   Note: --force on Linux cannot wipe /nix/store safely; this is the\n"+
-			"   aggressive GC ceiling. For total reset, reinstall nix manually.\n"+
+			"   Note: --force cannot wipe /nix/store safely; this is the aggressive\n"+
+			"   GC ceiling. For total reset, reinstall nix manually.\n"+
 			tail,
-		opts.HomeDir, nixosLine,
+		dockerTarget, modeNote, opts.HomeDir, nixosLine,
 	)
 }

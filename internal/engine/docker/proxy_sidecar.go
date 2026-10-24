@@ -79,7 +79,9 @@ func EnsureIsolatedNetwork(ctx context.Context, name string, isolateGateway bool
 
 // RemoveNetwork removes a docker network by name. Best-effort.
 func RemoveNetwork(ctx context.Context, name string) error {
-	cmd := exec.CommandContext(ctx, "docker", "network", "rm", name)
+	tctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(tctx, "docker", "network", "rm", name)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	_ = cmd.Run()
@@ -194,7 +196,9 @@ func EnsureProxySidecar(ctx context.Context, opts ProxySidecarOpts) error {
 
 // RemoveProxySidecar removes the proxy sidecar container. Best-effort.
 func RemoveProxySidecar(ctx context.Context, name string) error {
-	cmd := exec.CommandContext(ctx, "docker", "rm", "-f", name)
+	tctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(tctx, "docker", "rm", "-f", name)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	_ = cmd.Run()
@@ -206,7 +210,9 @@ func RemoveProxySidecar(ctx context.Context, name string) error {
 // internal networks. skipCellName is the current cell being started: its
 // gateway is not orphaned, just pre-created before the container boots.
 func CleanupOrphanedProxies(ctx context.Context, skipCellName string) error {
-	out, err := exec.CommandContext(ctx, "docker", "ps",
+	tctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(tctx, "docker", "ps",
 		"--filter", "label=devcell.role=proxy",
 		"--format", "{{.Names}}").Output()
 	if err != nil {

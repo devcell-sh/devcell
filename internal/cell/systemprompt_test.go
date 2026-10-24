@@ -12,10 +12,12 @@ import (
 
 func sampleConfig() config.Config {
 	return config.Config{
-		CellName: "devcell-85",
-		BaseDir:  "/Users/warden/dev/dimmkirr/devcell",
-		HostUser: "warden",
-		HostHome: "/Users/warden",
+		CellName:      "devcell-85",
+		ProjectName:   "devcell",
+		WorkspaceName: "devcell",
+		BaseDir:       "/Users/warden/dev/dimmkirr/devcell",
+		HostUser:      "warden",
+		HostHome:      "/Users/warden",
 	}
 }
 
@@ -30,7 +32,8 @@ func TestContainerContext_DescribesMountsAndConstraints(t *testing.T) {
 
 	checks := map[string]string{
 		"container identity": "Docker container",
-		"project alias":      "/devcell-85",
+		"project dir":        "Project: /devcell/Users/warden/dev/dimmkirr/devcell",
+		"alias for":          "alias for /Users/warden/dev/dimmkirr/devcell on host",
 		"host base dir":      "/Users/warden/dev/dimmkirr/devcell",
 		"same filesystem":    "same filesystem",
 		"persistent home":    "/home/warden",
@@ -43,6 +46,29 @@ func TestContainerContext_DescribesMountsAndConstraints(t *testing.T) {
 		"nix PATH layout":    "PATH layout",
 		"nix ld libs":        "NIX_LD_LIBRARY_PATH",
 		"nix cgo":            "CGO_CFLAGS",
+	}
+
+	for name, want := range checks {
+		if !strings.Contains(ctx, want) {
+			t.Errorf("%s: container context missing %q\n\nFull:\n%s", name, want, ctx)
+		}
+	}
+}
+
+func boolPtr(v bool) *bool { return &v }
+
+func TestContainerContext_ShortProjectDir(t *testing.T) {
+	short := true
+	cellCfg := cfg.CellConfig{
+		Cell: cfg.CellSection{ShortProjectDir: &short},
+	}
+
+	ctx := ContainerContext(sampleConfig(), cellCfg)
+
+	checks := map[string]string{
+		"project alias":  "Project: /devcell/devcell (alias for",
+		"host base dir":  "/Users/warden/dev/dimmkirr/devcell",
+		"same filesystem": "same filesystem",
 	}
 
 	for name, want := range checks {

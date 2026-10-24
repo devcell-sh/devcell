@@ -123,6 +123,44 @@ func TestMigrateTOML_RenamesTablesAndSubtables(t *testing.T) {
 	}
 }
 
+func TestMigrateTOML_OpItemsBecomesDocuments(t *testing.T) {
+	// [op] items is the legacy key; after [op] → [secrets.onepassword] the
+	// key must become documents, not stay as items (which OnePasswordSecrets
+	// does not have).
+	src := "[op]\nitems = [\"prod-keys\"]\n"
+	res := migrate(t, src)
+	if !strings.Contains(res.After, "[secrets.onepassword]\ndocuments = [\"prod-keys\"]\n") {
+		t.Errorf("items must become documents:\n%s", res.After)
+	}
+	if strings.Contains(res.After, "items") {
+		t.Errorf("items key must be gone:\n%s", res.After)
+	}
+}
+
+func TestMigrateTOML_OpItemsAndDocumentsMerge(t *testing.T) {
+	// Both items and documents under [op]; the migration must merge them
+	// into a single documents array.
+	src := "[op]\ndocuments = [\"a\"]\nitems = [\"b\"]\n"
+	res := migrate(t, src)
+	if !strings.Contains(res.After, "[secrets.onepassword]\ndocuments = [\"a\", \"b\"]\n") {
+		t.Errorf("want merged documents array:\n%s", res.After)
+	}
+	if strings.Contains(res.After, "items") {
+		t.Errorf("items key must be gone:\n%s", res.After)
+	}
+}
+
+func TestMigrateTOML_CommentedOpItemsBecomesDocuments(t *testing.T) {
+	src := "[cell]\nstack = \"go\"\n# [op]\n# items = [\"prod-keys\"]\n"
+	res := migrate(t, src)
+	if !strings.Contains(res.After, "# [secrets.onepassword]\n# documents = [\"prod-keys\"]\n") {
+		t.Errorf("commented items must become documents:\n%s", res.After)
+	}
+	if strings.Contains(res.After, "items") {
+		t.Errorf("items key must be gone from comments:\n%s", res.After)
+	}
+}
+
 func TestMigrateTOML_LLMFlagsBecomeProviderAndModel(t *testing.T) {
 	src := "[llm]\nuse_ollama = true\nmodel = \"ollama/qwen3:8b\"\n\n[llm.models]\ndefault = \"qwen3:8b\"\n"
 	res := migrate(t, src)

@@ -146,6 +146,12 @@ var Deprecations = []Deprecation{
 		Message:     `use [secrets.onepassword] documents = ["prod-api-keys"] instead`,
 	},
 	{
+		Path:        []string{"op", "items"},
+		Name:        "[op] items",
+		Replacement: "[secrets.onepassword] documents",
+		Message:     `use [secrets.onepassword] documents = ["prod-api-keys"] instead`,
+	},
+	{
 		Path:        []string{"llm", "use_ollama"},
 		Name:        "[llm] use_ollama",
 		Replacement: "[llm] provider",

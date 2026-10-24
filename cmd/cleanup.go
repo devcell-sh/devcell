@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,19 +19,10 @@ import (
 // existing. Roots of stopped cells are reaped; those cells rebuild via the
 // hydration gate (CELL-38) on next start.
 var cleanupCmd = &cobra.Command{
-	Use:   "cleanup",
-	Short: "Reap nix GC roots no running cell references (shared volume hygiene)",
-	Long: `Reap GC root symlinks under /nix/var/nix/gcroots/devcell/ whose closure
-no RUNNING devcell container references.
-
-Only root symlinks (and their -meta files) are removed — the nix store itself
-is untouched. Run ` + "`devcell build prune --pure`" + ` afterwards to garbage-collect
-the store paths the reaped roots were anchoring.
-
-Roots of stopped cells are reaped too: a stopped cell rebuilds automatically
-on its next start. A running cell can never lose its roots — its closure is
-resolved live from inside the container before anything is removed.`,
-	RunE: runCleanup,
+	Use:        "cleanup",
+	Short:      "Reap nix GC roots no running cell references (shared volume hygiene)",
+	Deprecated: "use `cell build prune` instead (it now prunes both Docker and nix)",
+	RunE:       runCleanup,
 }
 
 func init() {
@@ -45,7 +37,7 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	closures, err := docker.CollectLiveClosures(
+	closures, failures, err := docker.CollectLiveClosures(
 		func() ([]string, error) { return docker.DockerRunningDevcellContainers(ctx) },
 		func(container, link string) (string, error) {
 			return docker.DockerResolveContainerLink(ctx, container, link)
@@ -54,6 +46,15 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 	)
 	if err != nil {
 		return err
+	}
+	if len(failures) > 0 {
+		isTTY := isatty.IsTerminal(os.Stdin.Fd())
+		if !docker.ConfirmDestructive(os.Stdout, os.Stdin, yes, isTTY, docker.BuildStopBrokenPrompt(failures)) {
+			return fmt.Errorf("aborted: %d container(s) with unresolvable closures", len(failures))
+		}
+		for _, f := range failures {
+			docker.DockerStopContainer(ctx, f.Container)
+		}
 	}
 
 	return docker.RunCleanup(docker.RunCleanupArgs{

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // Runtime seams for CollectLiveClosures — thin exec wrappers, injected as
@@ -15,7 +16,9 @@ import (
 // Running-only on purpose: `docker ps` without -a (CELL-334 retention
 // decision, 2026-08-01).
 func DockerRunningDevcellContainers(ctx context.Context) ([]string, error) {
-	out, err := exec.CommandContext(ctx,
+	tctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(tctx,
 		"docker", "ps",
 		"--filter", "label=devcell.basedir",
 		"--format", "{{.Names}}",
@@ -32,10 +35,20 @@ func DockerRunningDevcellContainers(ctx context.Context) ([]string, error) {
 	return names, nil
 }
 
+// DockerStopContainer force-stops a container by name. Used when the caller
+// has prompted the user and they agreed to stop broken containers.
+func DockerStopContainer(ctx context.Context, container string) {
+	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	_ = exec.CommandContext(tctx, "docker", "stop", container).Run()
+}
+
 // DockerResolveContainerLink resolves a symlink inside a running container
 // to its final target — the only namespace where /opt/devcell resolves.
 func DockerResolveContainerLink(ctx context.Context, container, link string) (string, error) {
-	out, err := exec.CommandContext(ctx,
+	tctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(tctx,
 		"docker", "exec", container, "readlink", "-f", link,
 	).Output()
 	if err != nil {

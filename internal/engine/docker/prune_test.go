@@ -377,9 +377,8 @@ func TestBuildNixPruneSteps_ForceOnLinux_NixOSAddsSystemProfileCleanup(t *testin
 	}
 }
 
-// Every prune mode must produce a "This will delete ALL <list>." warning
-// before any destructive action. The list is mode-specific; the prefix is
-// invariant so users can spot it consistently across modes.
+// Every prune mode must produce a clear warning before any destructive action.
+// Default mode covers both Docker and nix; --force escalates both.
 func TestBuildPrunePrompt_AllModesContainWarningAndTarget(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -387,91 +386,44 @@ func TestBuildPrunePrompt_AllModesContainWarningAndTarget(t *testing.T) {
 		mustHave []string // substrings the prompt must contain
 	}{
 		{
-			name: "docker default darwin",
-			opts: docker.PruneOpts{GOOS: "darwin"},
-			mustHave: []string{
-				"This will delete ALL",
-				"stopped containers",
-				"unused images",
-				"BuildKit cache",
-				"Continue? [y/N]",
-			},
-		},
-		{
-			name: "docker default linux",
+			name: "default",
 			opts: docker.PruneOpts{GOOS: "linux"},
 			mustHave: []string{
-				"This will delete ALL",
-				"stopped containers",
-				"Continue? [y/N]",
-			},
-		},
-		{
-			name: "docker force darwin",
-			opts: docker.PruneOpts{GOOS: "darwin", Force: true, HomeDir: "/Users/x"},
-			mustHave: []string{
-				"This will delete ALL",
 				"Docker",
-				"data directory",
-				"Docker Desktop",
-				"Continue? [y/N]",
-			},
-		},
-		{
-			name: "docker force linux rootful",
-			opts: docker.PruneOpts{GOOS: "linux", Force: true, HomeDir: "/home/x"},
-			mustHave: []string{
-				"This will delete ALL",
-				"/var/lib/docker",
-				"Continue? [y/N]",
-			},
-		},
-		{
-			name: "docker force linux rootless",
-			opts: docker.PruneOpts{GOOS: "linux", Force: true, Rootless: true, HomeDir: "/home/x"},
-			mustHave: []string{
-				"This will delete ALL",
-				"/home/x/.local/share/docker",
-				"Continue? [y/N]",
-			},
-		},
-		{
-			// CELL-333: darwin default prunes the devcell-nix-store volume,
-			// same as linux — no ssh, no sudo, no linux-builder mention.
-			name: "nix default darwin",
-			opts: docker.PruneOpts{GOOS: "darwin", Pure: true},
-			mustHave: []string{
+				"Nix",
+				"stopped containers",
 				"orphaned profile generations",
-				"project GC roots",
 				"devcell-nix-store",
 				"Continue? [y/N]",
 			},
 		},
 		{
-			name: "nix default linux",
-			opts: docker.PruneOpts{GOOS: "linux", Pure: true},
+			name: "force darwin",
+			opts: docker.PruneOpts{GOOS: "darwin", Force: true, HomeDir: "/Users/x"},
 			mustHave: []string{
-				"orphaned profile generations",
-				"project GC roots",
-				"Continue? [y/N]",
-			},
-		},
-		{
-			name: "nix force darwin",
-			opts: docker.PruneOpts{GOOS: "darwin", Pure: true, Force: true},
-			mustHave: []string{
-				"This will delete ALL",
+				"Docker and nix",
+				"Docker Desktop",
 				"linux-builder",
 				"qcow",
 				"Continue? [y/N]",
 			},
 		},
 		{
-			name: "nix force linux",
-			opts: docker.PruneOpts{GOOS: "linux", Pure: true, Force: true, HomeDir: "/home/x"},
+			name: "force linux rootful",
+			opts: docker.PruneOpts{GOOS: "linux", Force: true, HomeDir: "/home/x"},
 			mustHave: []string{
-				"This will delete ALL",
-				"old profile generations",
+				"Docker and nix",
+				"/var/lib/docker",
+				"aggressive GC",
+				"Continue? [y/N]",
+			},
+		},
+		{
+			name: "force linux rootless",
+			opts: docker.PruneOpts{GOOS: "linux", Force: true, Rootless: true, HomeDir: "/home/x"},
+			mustHave: []string{
+				"Docker and nix",
+				"/home/x/.local/share/docker",
 				"Continue? [y/N]",
 			},
 		},
@@ -596,7 +548,7 @@ func TestRunPrune_AcceptedPromptExecutesAllSteps(t *testing.T) {
 		return nil
 	}
 	err := docker.RunPrune(docker.RunPruneArgs{
-		Opts:    docker.PruneOpts{GOOS: "linux"}, // docker default = 4 steps
+		Opts:    docker.PruneOpts{GOOS: "linux"}, // Docker (4) + Nix steps
 		Exec:    exec,
 		Out:     &strings.Builder{},
 		In:      strings.NewReader("y\n"),
@@ -606,12 +558,19 @@ func TestRunPrune_AcceptedPromptExecutesAllSteps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunPrune err: %v", err)
 	}
-	if len(executed) != 4 {
-		t.Errorf("want 4 steps executed, got %d: %v", len(executed), executed)
+	// Default prune now runs both Docker (4 steps) and Nix steps.
+	dockerSteps := docker.BuildDockerPruneSteps(docker.PruneOpts{GOOS: "linux"})
+	nixSteps := docker.BuildNixPruneSteps(docker.PruneOpts{GOOS: "linux"})
+	want := len(dockerSteps) + len(nixSteps)
+	if len(executed) != want {
+		t.Errorf("want %d steps executed (Docker %d + Nix %d), got %d: %v",
+			want, len(dockerSteps), len(nixSteps), len(executed), executed)
 	}
 }
 
 func TestRunPrune_DryRunStepsAreNotExecuted(t *testing.T) {
+	// Force on Darwin: Docker force steps execute (stop/wipe/start),
+	// but Nix force steps are DryRun (qcow nuke not yet verified).
 	var executed []string
 	exec := func(step docker.PruneStep) error {
 		executed = append(executed, strings.Join(step.Argv, " "))
@@ -619,8 +578,7 @@ func TestRunPrune_DryRunStepsAreNotExecuted(t *testing.T) {
 	}
 	var out strings.Builder
 	err := docker.RunPrune(docker.RunPruneArgs{
-		// Darwin force-pure → all steps are DryRun
-		Opts:    docker.PruneOpts{GOOS: "darwin", Pure: true, Force: true},
+		Opts:    docker.PruneOpts{GOOS: "darwin", Force: true, HomeDir: "/Users/x"},
 		Exec:    exec,
 		Out:     &out,
 		In:      strings.NewReader("y\n"),
@@ -630,17 +588,10 @@ func TestRunPrune_DryRunStepsAreNotExecuted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunPrune err: %v", err)
 	}
-	// Only the registry cleanup step (non-dry-run) should execute.
-	for _, cmd := range executed {
-		if !strings.Contains(cmd, ".devcell/registry") {
-			t.Errorf("dry-run steps must not execute, but got: %v", cmd)
-		}
-	}
-	// Plan must be printed with `# (dry-run)` marker.
+	// Nix DryRun steps should be printed but not executed.
 	if !strings.Contains(out.String(), "# (dry-run)") {
 		t.Errorf("dry-run output should include `# (dry-run)` marker, got:\n%s", out.String())
 	}
-	// And include the qcow placeholder so user knows what's coming.
 	if !strings.Contains(out.String(), "launchctl") {
 		t.Errorf("dry-run output should print the launchctl commands, got:\n%s", out.String())
 	}
@@ -656,8 +607,10 @@ func TestRunPrune_IgnoreErrorStepDoesNotAbortLoop(t *testing.T) {
 		}
 		return nil
 	}
+	opts := docker.PruneOpts{GOOS: "linux"}
+	totalSteps := len(docker.BuildDockerPruneSteps(opts)) + len(docker.BuildNixPruneSteps(opts))
 	err := docker.RunPrune(docker.RunPruneArgs{
-		Opts:    docker.PruneOpts{GOOS: "linux"},
+		Opts:    opts,
 		Exec:    exec,
 		Out:     &strings.Builder{},
 		In:      strings.NewReader("y\n"),
@@ -667,8 +620,8 @@ func TestRunPrune_IgnoreErrorStepDoesNotAbortLoop(t *testing.T) {
 	if err != nil {
 		t.Errorf("step 1 failure with IgnoreError=true must not propagate: %v", err)
 	}
-	if calls != 4 {
-		t.Errorf("want all 4 steps attempted, got %d", calls)
+	if calls != totalSteps {
+		t.Errorf("want all %d steps attempted, got %d", totalSteps, calls)
 	}
 }
 

@@ -70,6 +70,7 @@ type CellSection struct {
 	QemuProjectSync  string            `toml:"qemu_project_sync"`       // retired with the libvirt engine; parsed only so the deprecation warning fires
 	DefaultCommand   string            `toml:"default_command"`         // subcommand to run when `cell` is invoked with no args; env: DEVCELL_DEFAULT_COMMAND
 	DockerSocket     *bool             `toml:"docker_socket"`           // mount /var/run/docker.sock into the container; default: true; env: DEVCELL_DOCKER_SOCKET
+	ShortProjectDir  *bool             `toml:"short_project_dir"`       // use /<cellName> as the container workdir instead of the host path; default: false; env: DEVCELL_SHORT_PROJECT_DIR
 	Flake            *bool             `toml:"flake"`                   // enable project-level flake.nix install; default: false (opt-in); env: DEVCELL_FLAKE
 	Packages         []string          `toml:"packages"`                // nix packages from the stable channel, baked into the image at build time
 	Volumes          []string          `toml:"volumes"`                 // shorthand volume list: "/path", "/host:/container", "/host:/container:ro"
@@ -178,6 +179,20 @@ func (c CellSection) ResolvedExperimental() []string {
 	add(c.Experimental)
 	add(strings.Split(os.Getenv("DEVCELL_EXPERIMENTAL"), ","))
 	return out
+}
+
+// ResolvedShortProjectDir returns whether the container workdir should use the
+// short /<cellName> path instead of the host-based project path: env > toml > false.
+func (c CellSection) ResolvedShortProjectDir() bool {
+	if v := os.Getenv("DEVCELL_SHORT_PROJECT_DIR"); v == "1" {
+		return true
+	} else if v == "0" {
+		return false
+	}
+	if c.ShortProjectDir != nil {
+		return *c.ShortProjectDir
+	}
+	return false
 }
 
 // FlakeEnabled returns whether project-level flake.nix install is enabled: env > toml > false.
@@ -1390,6 +1405,9 @@ func Merge(global, project CellConfig) CellConfig {
 	}
 	if project.Cell.Background != nil {
 		out.Cell.Background = project.Cell.Background
+	}
+	if project.Cell.ShortProjectDir != nil {
+		out.Cell.ShortProjectDir = project.Cell.ShortProjectDir
 	}
 	if project.Cell.TartSSHPort > 0 {
 		out.Cell.TartSSHPort = project.Cell.TartSSHPort

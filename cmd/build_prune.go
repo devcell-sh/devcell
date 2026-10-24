@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -18,34 +19,31 @@ import (
 
 // `devcell build prune` — standalone cleanup subcommand. See CELL-101.
 //
-// Default mode: prune the Docker daemon (containers, images, volumes, BuildKit
-// cache). `--pure` switches the target to the nix store (linux-builder VM on
-// macOS, local /nix/store on Linux native). `--force` escalates to a nuclear
-// reset (wipe daemon data dir on macOS / Linux; nuke linux-builder qcow on
-// macOS dry-run only; aggressive GC on Linux). `-y` / `--yes` skips the
-// confirmation prompt.
+// Default mode: safe prune of both Docker daemon (stopped containers, images,
+// volumes, BuildKit cache) and the nix store (orphaned profiles, unreferenced
+// store paths). Running containers and their nix closures are always protected.
 //
-// NOTE: `--pure` here means "target the nix store" (CELL-101) and is
-// UNRELATED to `--pure` on agent commands (`devcell claude --pure`, etc.) which
-// is a silent no-op after CELL-183. Both flags coexist in the cell CLI and
-// the prune meaning is preserved for now. See CELL-189 chain for the agent
-// flip context.
+// `--force` escalates to a nuclear reset of both Docker and nix.
+//
+// `--pure` is deprecated: it used to select nix-only mode but the default now
+// covers both. Passing --pure still works (runs the combined prune) but warns.
 var pruneCmd = &cobra.Command{
 	Use:   "prune",
-	Short: "Prune Docker daemon or nix store. --pure for nix path. --force for nuclear.",
-	Long: `Prune the local Docker daemon (default) or nix store (--pure).
+	Short: "Prune Docker daemon and nix store. --force for nuclear.",
+	Long: `Prune the local Docker daemon and nix store.
 
-By default, mirrors ` + "`docker system prune`" + ` semantics — removes stopped
-containers, unused images, unused volumes, and BuildKit cache.
+By default, runs a safe prune of both targets:
+  - Docker: removes stopped containers, unused images, volumes, BuildKit cache.
+  - Nix:    removes orphaned profile generations and unreferenced store paths.
+            Running containers and their nix closures are always protected.
 
---force escalates:
+--force escalates to a nuclear reset of both:
   - Docker: stops the daemon, wipes its data directory, restarts it.
-            macOS:    Docker Desktop VM at ~/Library/Containers/com.docker.docker/Data
-            Linux:    /var/lib/docker (rootful) or ~/.local/share/docker (rootless).
   - Nix:    macOS:    DRY-RUN ONLY — prints the qcow nuke + launchctl restart plan.
-                      (Will execute once linux-builder paths are verified live.)
             Linux:    Aggressive GC ceiling — delete old generations, collect-garbage,
                       optimise, wipe ~/.cache/nix. Does NOT rm -rf /nix/store.
+
+--pure is deprecated: the default now covers both Docker and nix.
 
 A "This will delete ALL …" prompt confirms every destructive op. Pass -y to skip.
 Non-interactive stdin without -y refuses (prevents accidental pipelined destruction).`,
@@ -53,24 +51,23 @@ Non-interactive stdin without -y refuses (prevents accidental pipelined destruct
 }
 
 func init() {
-	pruneCmd.Flags().Bool("pure", false, "target the nix store (linux-builder VM on macOS, local on Linux) instead of Docker")
+	pruneCmd.Flags().Bool("pure", false, "deprecated: the default now prunes both Docker and nix")
+	_ = pruneCmd.Flags().MarkDeprecated("pure", "the default now prunes both Docker and nix")
 	pruneCmd.Flags().Bool("force", false, "nuclear cleanup (wipe daemon data dir / nuke linux-builder VM / aggressive nix GC)")
 	pruneCmd.Flags().BoolP("yes", "y", false, "skip the confirmation prompt")
 	buildCmd.AddCommand(pruneCmd)
 }
 
 func runBuildPrune(cmd *cobra.Command, _ []string) error {
-	pure, _ := cmd.Flags().GetBool("pure")
 	force, _ := cmd.Flags().GetBool("force")
 	yes, _ := cmd.Flags().GetBool("yes")
 
-	telemetry.Track("build_prune", map[string]any{"pure": pure, "force": force})
+	telemetry.Track("build_prune", map[string]any{"force": force})
 
 	homeDir, _ := os.UserHomeDir()
 	opts := docker.PruneOpts{
 		GOOS:    runtime.GOOS,
 		Force:   force,
-		Pure:    pure,
 		HomeDir: homeDir,
 		// Auto-detect rootless Docker and NixOS at runtime.
 		Rootless: detectRootlessDocker(),
@@ -80,12 +77,11 @@ func runBuildPrune(cmd *cobra.Command, _ []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// CELL-334 preflight gate: resolve every RUNNING cell's closure so the
-	// plan can stamp its GC roots before the sweep. A cell whose closure
-	// cannot be resolved aborts the prune (named in the error) — proceeding
-	// on "some roots exist" is exactly the gap this closes.
-	if pure && !force {
-		closures, err := docker.CollectLiveClosures(
+	// Preflight gate: resolve every RUNNING cell's closure so the nix
+	// prune plan can stamp its GC roots before the sweep. Containers whose
+	// closure cannot be resolved are offered for force-stop.
+	if !force {
+		closures, failures, err := docker.CollectLiveClosures(
 			func() ([]string, error) { return docker.DockerRunningDevcellContainers(ctx) },
 			func(container, link string) (string, error) {
 				return docker.DockerResolveContainerLink(ctx, container, link)
@@ -94,6 +90,15 @@ func runBuildPrune(cmd *cobra.Command, _ []string) error {
 		)
 		if err != nil {
 			return err
+		}
+		if len(failures) > 0 {
+			isTTY := isatty.IsTerminal(os.Stdin.Fd())
+			if !docker.ConfirmDestructive(os.Stdout, os.Stdin, yes, isTTY, docker.BuildStopBrokenPrompt(failures)) {
+				return fmt.Errorf("aborted: %d container(s) with unresolvable closures", len(failures))
+			}
+			for _, f := range failures {
+				docker.DockerStopContainer(ctx, f.Container)
+			}
 		}
 		opts.LiveClosures = closures
 	}

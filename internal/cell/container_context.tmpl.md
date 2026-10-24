@@ -1,7 +1,12 @@
 Environment: Docker container (cell-{{.CellName}})
+{{- if .HasProjectAlias}}
 Project: {{.ProjectDir}} (alias for {{.HostDir}} on host)
 Both paths are bind-mounted from the same host directory and resolve to the same filesystem. Working directory is
 {{.ProjectDir}}. If the user mentions host paths like {{.HostDir}}/..., they map to {{.ProjectDir}}/...
+{{- else}}
+Project: {{.ProjectDir}}
+Working directory is {{.ProjectDir}}.
+{{- end}}
 
 ## Bind mounts
 

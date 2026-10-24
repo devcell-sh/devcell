@@ -5,6 +5,7 @@ import (
 	"io"
 	"path"
 	"strings"
+	"sync"
 )
 
 // CELL-334: `cell cleanup` reaper + prune preflight gate.
@@ -34,6 +35,12 @@ type LiveClosure struct {
 	GenerationPath string // /nix/store/<hash>-home-manager-generation
 }
 
+// ClosureFailure records a container whose closure could not be resolved.
+type ClosureFailure struct {
+	Container string
+	Err       error
+}
+
 // storeHash extracts the nix store hash from a store path
 // (/nix/store/abc123-name → abc123). Empty input yields "".
 func storeHash(storePath string) string {
@@ -49,42 +56,79 @@ func storeHash(storePath string) string {
 // Dependency-injected for tests; the runtime call site wires `docker ps`
 // and `docker exec readlink -f`.
 //
-// A running container whose closure cannot be resolved fails the whole
-// collection: an unknown closure means neither the reaper nor the prune
-// gate can guarantee safety, so both must refuse — naming the cell.
+// Containers whose closure cannot be resolved are returned as failures
+// (not a hard error) so the caller can prompt the user to force-stop them.
+// The error return is reserved for infrastructure failures (e.g. docker ps
+// itself failing).
 //
 // logf, when non-nil, receives one line per datapoint (--debug visibility).
 func CollectLiveClosures(
 	ps func() ([]string, error),
 	resolve func(container, link string) (string, error),
 	logf func(format string, args ...any),
-) ([]LiveClosure, error) {
+) ([]LiveClosure, []ClosureFailure, error) {
 	if logf == nil {
 		logf = func(string, ...any) {}
 	}
 	containers, err := ps()
 	if err != nil {
-		return nil, fmt.Errorf("listing running devcell containers: %w", err)
+		return nil, nil, fmt.Errorf("listing running devcell containers: %w", err)
 	}
 	logf("live-closure scan: %d running devcell container(s)", len(containers))
-	closures := make([]LiveClosure, 0, len(containers))
-	for _, c := range containers {
-		profile, err := resolve(c, ContainerProfileLink)
-		if err != nil {
-			return nil, fmt.Errorf("container %q: resolving %s: %w — refusing, its closure cannot be protected", c, ContainerProfileLink, err)
-		}
-		generation, err := resolve(c, ContainerGenerationLink)
-		if err != nil {
-			return nil, fmt.Errorf("container %q: resolving %s: %w — refusing, its closure cannot be protected", c, ContainerGenerationLink, err)
-		}
-		logf("  %s: profile=%s generation=%s", c, profile, generation)
-		closures = append(closures, LiveClosure{
-			Container:      c,
-			ProfilePath:    profile,
-			GenerationPath: generation,
-		})
+
+	type result struct {
+		closure LiveClosure
+		failure *ClosureFailure
 	}
-	return closures, nil
+	results := make([]result, len(containers))
+
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 5) // bound concurrency
+	for i, c := range containers {
+		wg.Add(1)
+		go func(i int, c string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			profile, err := resolve(c, ContainerProfileLink)
+			if err != nil {
+				logf("  %s: FAILED to resolve profile: %v", c, err)
+				results[i] = result{failure: &ClosureFailure{
+					Container: c,
+					Err:       fmt.Errorf("resolving %s: %w", ContainerProfileLink, err),
+				}}
+				return
+			}
+			generation, err := resolve(c, ContainerGenerationLink)
+			if err != nil {
+				logf("  %s: FAILED to resolve generation: %v", c, err)
+				results[i] = result{failure: &ClosureFailure{
+					Container: c,
+					Err:       fmt.Errorf("resolving %s: %w", ContainerGenerationLink, err),
+				}}
+				return
+			}
+			logf("  %s: profile=%s generation=%s", c, profile, generation)
+			results[i] = result{closure: LiveClosure{
+				Container:      c,
+				ProfilePath:    profile,
+				GenerationPath: generation,
+			}}
+		}(i, c)
+	}
+	wg.Wait()
+
+	closures := make([]LiveClosure, 0, len(containers))
+	var failures []ClosureFailure
+	for _, r := range results {
+		if r.failure != nil {
+			failures = append(failures, *r.failure)
+		} else if r.closure.Container != "" {
+			closures = append(closures, r.closure)
+		}
+	}
+	return closures, failures, nil
 }
 
 // liveHashes returns the deduplicated hash set of all live closures, in
@@ -160,7 +204,7 @@ func BuildCleanupPrompt(closures []LiveClosure) string {
 	const tail = "   Continue? [y/N]"
 	if len(closures) == 0 {
 		return "⚠  No devcell containers are running — this will reap ALL GC roots\n" +
-			"   under /nix/var/nix/gcroots/devcell/. The next `cell build prune --pure`\n" +
+			"   under /nix/var/nix/gcroots/devcell/. The next `cell build prune`\n" +
 			"   may then garbage-collect every cell closure on the volume.\n" +
 			"   (Stopped cells rebuild automatically on next start.)\n" +
 			tail
@@ -176,6 +220,27 @@ func BuildCleanupPrompt(closures []LiveClosure) string {
 			tail,
 		len(closures), plural, strings.Join(containerNames(closures), ", "),
 	)
+}
+
+// BuildStopBrokenPrompt returns the confirmation text shown when some
+// containers cannot have their closure resolved. Lists the broken containers
+// and asks whether to force-stop them so the operation can proceed.
+func BuildStopBrokenPrompt(failures []ClosureFailure) string {
+	var b strings.Builder
+	plural := ""
+	if len(failures) != 1 {
+		plural = "s"
+	}
+	fmt.Fprintf(&b,
+		"⚠  %d container%s cannot have their nix closure resolved:\n",
+		len(failures), plural)
+	for _, f := range failures {
+		fmt.Fprintf(&b, "   - %s: %v\n", f.Container, f.Err)
+	}
+	b.WriteString("\n   Force-stop these containers so the operation can proceed?\n")
+	b.WriteString("   (Stopped cells rebuild automatically on next start.)\n")
+	b.WriteString("   Continue? [y/N]")
+	return b.String()
 }
 
 func containerNames(closures []LiveClosure) []string {

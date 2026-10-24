@@ -129,9 +129,9 @@ func TestParseNixStoreHealth_RevFieldsOptional(t *testing.T) {
 // Summary returns (tag, detail, warn) for the "Nix store" phase row.
 func TestNixStoreHealth_SummaryClean(t *testing.T) {
 	h := docker.NixStoreHealth{TotalRoots: 4, ProfileHashes: 1, Generations: 2}
-	tag, detail, warn := h.Summary()
-	if warn {
-		t.Error("clean store must not be a warning")
+	tag, detail, sev := h.Summary()
+	if sev != docker.NixStoreOK {
+		t.Errorf("severity = %d, want NixStoreOK", sev)
 	}
 	if tag != "clean" {
 		t.Errorf("clean tag = %q, want %q", tag, "clean")
@@ -143,44 +143,72 @@ func TestNixStoreHealth_SummaryClean(t *testing.T) {
 	}
 }
 
-func TestNixStoreHealth_SummaryFindingsIncludePruneHint(t *testing.T) {
+func TestNixStoreHealth_SummaryCleanUpTo3Hashes(t *testing.T) {
+	h := docker.NixStoreHealth{TotalRoots: 6, ProfileHashes: 3, Generations: 3}
+	tag, detail, sev := h.Summary()
+	if sev != docker.NixStoreOK {
+		t.Errorf("severity = %d, want NixStoreOK (<=3 hashes is clean)", sev)
+	}
+	if tag != "clean" {
+		t.Errorf("tag = %q, want %q", tag, "clean")
+	}
+	if !strings.Contains(detail, "3 profile hashes") {
+		t.Errorf("detail must show hash count, got %q", detail)
+	}
+}
+
+func TestNixStoreHealth_SummaryStaleWithFewHashes(t *testing.T) {
 	h := docker.NixStoreHealth{TotalRoots: 6, StaleRoots: 2, ProfileHashes: 3, Generations: 8, OrphanedGenerations: 5}
-	tag, detail, warn := h.Summary()
-	if !warn {
-		t.Error("findings must be a warning")
+	tag, detail, sev := h.Summary()
+	if sev != docker.NixStoreWarn {
+		t.Errorf("severity = %d, want NixStoreWarn", sev)
 	}
-	if tag != "drifted" {
-		t.Errorf("tag = %q, want %q (drift takes precedence)", tag, "drifted")
+	if tag != "unhealthy" {
+		t.Errorf("tag = %q, want %q (stale+orphaned without bloat)", tag, "unhealthy")
 	}
-	for _, want := range []string{"2 stale root", "5 orphaned generation", "cell build prune --pure"} {
+	for _, want := range []string{"2 stale root", "5 orphaned generation", "cell build prune"} {
 		if !strings.Contains(detail, want) {
 			t.Errorf("findings detail missing %q, got %q", want, detail)
 		}
 	}
 }
 
-func TestNixStoreHealth_SummaryReportsDrift(t *testing.T) {
-	h := docker.NixStoreHealth{TotalRoots: 4, ProfileHashes: 3, Generations: 2}
-	tag, detail, warn := h.Summary()
-	if !warn {
-		t.Error("drift must be a warning")
+func TestNixStoreHealth_SummaryBloating(t *testing.T) {
+	h := docker.NixStoreHealth{TotalRoots: 8, ProfileHashes: 4, Generations: 4}
+	tag, detail, sev := h.Summary()
+	if sev != docker.NixStoreWarn {
+		t.Errorf("severity = %d, want NixStoreWarn (4 hashes = bloating)", sev)
 	}
-	if tag != "drifted" {
-		t.Errorf("tag = %q, want %q", tag, "drifted")
+	if tag != "bloating" {
+		t.Errorf("tag = %q, want %q", tag, "bloating")
 	}
-	if !strings.Contains(detail, "3 profile hashes") {
-		t.Errorf("drift (multiple hashes) must be visible in detail, got %q", detail)
+	if !strings.Contains(detail, "4 profile hashes (old builds)") {
+		t.Errorf("detail must explain old builds, got %q", detail)
 	}
-	if !strings.Contains(detail, "cell build prune --pure") {
-		t.Errorf("drift-only detail must include prune hint, got %q", detail)
+	if !strings.Contains(detail, "cell build prune") {
+		t.Errorf("detail must include prune hint, got %q", detail)
+	}
+}
+
+func TestNixStoreHealth_SummaryBloated(t *testing.T) {
+	h := docker.NixStoreHealth{TotalRoots: 12, ProfileHashes: 7, Generations: 7}
+	tag, detail, sev := h.Summary()
+	if sev != docker.NixStoreError {
+		t.Errorf("severity = %d, want NixStoreError (7 hashes = bloated)", sev)
+	}
+	if tag != "bloated" {
+		t.Errorf("tag = %q, want %q", tag, "bloated")
+	}
+	if !strings.Contains(detail, "7 profile hashes (old builds)") {
+		t.Errorf("detail must show hash count, got %q", detail)
 	}
 }
 
 func TestNixStoreHealth_SummaryStaleOnly(t *testing.T) {
 	h := docker.NixStoreHealth{TotalRoots: 4, StaleRoots: 2, ProfileHashes: 1, Generations: 3}
-	tag, _, warn := h.Summary()
-	if !warn {
-		t.Error("stale roots must be a warning")
+	tag, _, sev := h.Summary()
+	if sev != docker.NixStoreWarn {
+		t.Errorf("severity = %d, want NixStoreWarn", sev)
 	}
 	if tag != "stale" {
 		t.Errorf("tag = %q, want %q", tag, "stale")
@@ -189,9 +217,9 @@ func TestNixStoreHealth_SummaryStaleOnly(t *testing.T) {
 
 func TestNixStoreHealth_SummaryOrphanedOnly(t *testing.T) {
 	h := docker.NixStoreHealth{TotalRoots: 4, ProfileHashes: 1, Generations: 5, OrphanedGenerations: 3}
-	tag, _, warn := h.Summary()
-	if !warn {
-		t.Error("orphaned generations must be a warning")
+	tag, _, sev := h.Summary()
+	if sev != docker.NixStoreWarn {
+		t.Errorf("severity = %d, want NixStoreWarn", sev)
 	}
 	if tag != "orphaned" {
 		t.Errorf("tag = %q, want %q", tag, "orphaned")
@@ -200,12 +228,12 @@ func TestNixStoreHealth_SummaryOrphanedOnly(t *testing.T) {
 
 func TestNixStoreHealth_SummaryStaleAndOrphaned(t *testing.T) {
 	h := docker.NixStoreHealth{TotalRoots: 6, StaleRoots: 2, ProfileHashes: 1, Generations: 5, OrphanedGenerations: 3}
-	tag, _, warn := h.Summary()
-	if !warn {
-		t.Error("stale+orphaned must be a warning")
+	tag, _, sev := h.Summary()
+	if sev != docker.NixStoreWarn {
+		t.Errorf("severity = %d, want NixStoreWarn", sev)
 	}
 	if tag != "unhealthy" {
-		t.Errorf("tag = %q, want %q (mixed findings without drift)", tag, "unhealthy")
+		t.Errorf("tag = %q, want %q (mixed findings without bloat)", tag, "unhealthy")
 	}
 }
 

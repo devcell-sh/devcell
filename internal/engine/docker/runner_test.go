@@ -274,7 +274,7 @@ func TestArgv_MandatoryEnvVars(t *testing.T) {
 		"HOST_UID=" + strconv.Itoa(os.Getuid()),
 		"HOME=/home/bob",
 		"IS_SANDBOX=1",
-		"WORKSPACE=/myproject-3",
+		"WORKSPACE=/devcell/home/bob/myproject",
 		"EXT_VNC_PORT=350",
 	}
 	for _, e := range mustHaveEnv {
@@ -286,11 +286,11 @@ func TestArgv_MandatoryEnvVars(t *testing.T) {
 
 func TestArgv_WorkspaceEnvVar(t *testing.T) {
 	argv := buildArgv(t)
-	if !hasArg(argv, "DEVCELL_WORKSPACE=main") {
-		t.Errorf("missing -e DEVCELL_WORKSPACE=main in argv: %v", argv)
+	if !hasArg(argv, "DEVCELL_WORKSPACE=devcell") {
+		t.Errorf("missing -e DEVCELL_WORKSPACE=devcell in argv: %v", argv)
 	}
-	if !hasArg(argv, "DEVCELL_CELL_NAME=main") {
-		t.Errorf("missing deprecated -e DEVCELL_CELL_NAME=main in argv: %v", argv)
+	if !hasArg(argv, "DEVCELL_CELL_NAME=devcell") {
+		t.Errorf("missing deprecated -e DEVCELL_CELL_NAME=devcell in argv: %v", argv)
 	}
 }
 
@@ -726,8 +726,8 @@ func TestArgv_Network(t *testing.T) {
 
 func TestArgv_WorkdirAndImage(t *testing.T) {
 	argv := buildArgv(t)
-	if !hasConsecutive(argv, "--workdir", "/myproject-3") {
-		t.Errorf("expected --workdir /myproject-3: %v", argv)
+	if !hasConsecutive(argv, "--workdir", "/devcell/home/bob/myproject") {
+		t.Errorf("expected --workdir /devcell/home/bob/myproject: %v", argv)
 	}
 	// BuildArgv's default image is the Debian variant — callers using --pure
 	// (the default after the CELL-189 flip) override Image explicitly on the
@@ -1115,8 +1115,8 @@ func TestUserImageTag_PerSession_Default(t *testing.T) {
 	withCleanImageState(t)
 	docker.PerCellImage = true
 	got := docker.UserImageTag()
-	if got != "localhost/devcell-user:main" {
-		t.Errorf("per-session default: want devcell-user:main, got %q", got)
+	if got != "localhost/devcell-user:devcell" {
+		t.Errorf("per-session default: want devcell-user:devcell, got %q", got)
 	}
 }
 
@@ -2268,5 +2268,101 @@ func TestArgv_OpenPolicy_NoCapDrop(t *testing.T) {
 	})
 	if hasArg(argv, "--cap-drop=ALL") {
 		t.Error("open policy must not drop caps")
+	}
+}
+
+// --- ShortProjectDir ---
+
+func TestArgv_ShortProjectDir_True_UsesShortWorkdir(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.CellCfg.Cell.ShortProjectDir = boolPtr(true)
+	})
+	if !hasConsecutive(argv, "--workdir", "/devcell/myproject") {
+		t.Errorf("short_project_dir=true should use --workdir /devcell/myproject: %v", argv)
+	}
+}
+
+func TestArgv_ShortProjectDir_False_UsesDevcellPrefixWorkdir(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.CellCfg.Cell.ShortProjectDir = boolPtr(false)
+	})
+	if !hasConsecutive(argv, "--workdir", "/devcell/home/bob/myproject") {
+		t.Errorf("short_project_dir=false should use --workdir /devcell/home/bob/myproject: %v", argv)
+	}
+}
+
+func TestArgv_ShortProjectDir_Default_UsesDevcellPrefixWorkdir(t *testing.T) {
+	argv := buildArgv(t)
+	if !hasConsecutive(argv, "--workdir", "/devcell/home/bob/myproject") {
+		t.Errorf("default (nil) should use /devcell/<hostPath> as workdir: %v", argv)
+	}
+}
+
+func TestArgv_ShortProjectDir_EnvOverride(t *testing.T) {
+	t.Setenv("DEVCELL_SHORT_PROJECT_DIR", "1")
+	argv := buildArgv(t)
+	if !hasConsecutive(argv, "--workdir", "/devcell/myproject") {
+		t.Errorf("DEVCELL_SHORT_PROJECT_DIR=1 should use short workdir: %v", argv)
+	}
+}
+
+func TestArgv_ShortProjectDir_ProjectDirEnv(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.CellCfg.Cell.ShortProjectDir = boolPtr(true)
+	})
+	if !hasConsecutive(argv, "-e", "WORKSPACE=/devcell/myproject") {
+		t.Errorf("WORKSPACE env should match short project dir: %v", argv)
+	}
+}
+
+func TestArgv_Default_ProjectDirEnv(t *testing.T) {
+	argv := buildArgv(t)
+	if !hasConsecutive(argv, "-e", "WORKSPACE=/devcell/home/bob/myproject") {
+		t.Errorf("WORKSPACE env should match /devcell/<hostPath> by default: %v", argv)
+	}
+}
+
+func TestArgv_DevcellPrefixMount_AlwaysPresent(t *testing.T) {
+	argv := buildArgv(t)
+	if !hasArg(argv, "/home/bob/myproject:/devcell/home/bob/myproject") {
+		t.Errorf("missing /devcell/<hostPath> bind mount: %v", argv)
+	}
+}
+
+func TestArgv_EmptyProjectName_SkipsShortPath(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		s.Config.ProjectName = ""
+	})
+	// Empty ProjectName would produce short path /devcell/ (ancestor of
+	// everything under /devcell/). Guard: the short path is not mounted at all.
+	for _, a := range argv {
+		if a == "/home/bob/myproject:/devcell/" {
+			t.Errorf("empty ProjectName short path /devcell/ should not be mounted: %v", argv)
+		}
+	}
+	// BaseDir, ProjectMountPath, and cellName mounts must still be present.
+	if !hasArg(argv, "/home/bob/myproject:/home/bob/myproject") {
+		t.Errorf("BaseDir mount should still be present: %v", argv)
+	}
+	if !hasArg(argv, "/home/bob/myproject:/devcell/home/bob/myproject") {
+		t.Errorf("ProjectMountPath should still be present (no ancestor mount): %v", argv)
+	}
+	if !hasArg(argv, "/home/bob/myproject:/myproject-3") {
+		t.Errorf("cellName mount should still be present: %v", argv)
+	}
+}
+
+func TestArgv_ProjectMountNesting_SkipsDescendant(t *testing.T) {
+	argv := buildArgv(t, func(s *docker.RunSpec) {
+		// Force cellName to a path that nests inside BaseDir.
+		s.Config.CellName = "home/bob/myproject/nested"
+	})
+	// /home/bob/myproject/nested descends into /home/bob/myproject (BaseDir).
+	if hasArg(argv, "/home/bob/myproject:/home/bob/myproject/nested") {
+		t.Errorf("nested cellName mount should be skipped: %v", argv)
+	}
+	// BaseDir itself should still be present.
+	if !hasArg(argv, "/home/bob/myproject:/home/bob/myproject") {
+		t.Errorf("BaseDir mount should still be present: %v", argv)
 	}
 }

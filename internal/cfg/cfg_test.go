@@ -3915,3 +3915,62 @@ func TestResolvedExperimental_UnionsTOMLAndEnv(t *testing.T) {
 		t.Errorf("nothing set: want empty, got %v", got)
 	}
 }
+
+// --- ShortProjectDir ---
+
+func TestResolvedShortProjectDir_Default(t *testing.T) {
+	if got := (cfg.CellSection{}).ResolvedShortProjectDir(); got != false {
+		t.Errorf("default should be false, got %v", got)
+	}
+}
+
+func TestResolvedShortProjectDir_True(t *testing.T) {
+	v := true
+	if got := (cfg.CellSection{ShortProjectDir: &v}).ResolvedShortProjectDir(); got != true {
+		t.Errorf("explicit true should be true, got %v", got)
+	}
+}
+
+func TestResolvedShortProjectDir_False(t *testing.T) {
+	v := false
+	if got := (cfg.CellSection{ShortProjectDir: &v}).ResolvedShortProjectDir(); got != false {
+		t.Errorf("explicit false should be false, got %v", got)
+	}
+}
+
+func TestResolvedShortProjectDir_EnvOverride(t *testing.T) {
+	t.Setenv("DEVCELL_SHORT_PROJECT_DIR", "1")
+	if got := (cfg.CellSection{}).ResolvedShortProjectDir(); got != true {
+		t.Errorf("env=1 should be true, got %v", got)
+	}
+	t.Setenv("DEVCELL_SHORT_PROJECT_DIR", "0")
+	v := true
+	if got := (cfg.CellSection{ShortProjectDir: &v}).ResolvedShortProjectDir(); got != false {
+		t.Errorf("env=0 should override toml true, got %v", got)
+	}
+}
+
+func TestLoadFile_ShortProjectDir(t *testing.T) {
+	dir := t.TempDir()
+	writeTOML(t, dir, "devcell.toml", `
+[cell]
+short_project_dir = true
+`)
+	c, err := cfg.LoadFile(filepath.Join(dir, "devcell.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Cell.ShortProjectDir == nil || !*c.Cell.ShortProjectDir {
+		t.Errorf("short_project_dir should be true, got %v", c.Cell.ShortProjectDir)
+	}
+}
+
+func TestMerge_ShortProjectDir_ProjectWins(t *testing.T) {
+	v := true
+	global := cfg.CellConfig{}
+	project := cfg.CellConfig{Cell: cfg.CellSection{ShortProjectDir: &v}}
+	merged := cfg.Merge(global, project)
+	if merged.Cell.ShortProjectDir == nil || !*merged.Cell.ShortProjectDir {
+		t.Errorf("project should win, got %v", merged.Cell.ShortProjectDir)
+	}
+}

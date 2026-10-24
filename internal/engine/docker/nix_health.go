@@ -24,7 +24,7 @@ import (
 // total/stale: devcell root symlinks and how many dangle. hashes: distinct
 // profile hashes (>1 means config/lock drift). generations/orphaned:
 // per-user profile generations and how many no devcell root protects
-// (reclaimable by `cell build prune --pure`).
+// (reclaimable by `cell build prune`).
 const NixHealthProbeScript = `total=0; stale=0; PROTECTED=""
 for l in /nix/var/nix/gcroots/devcell/*-profile /nix/var/nix/gcroots/devcell/*-generation; do
   [ -L "$l" ] || continue
@@ -180,11 +180,21 @@ func plural(n int, word string) string {
 // Summary returns a short tag for the phase row, a longer diagnostic detail
 // for debug output, and whether the result is a warning. The tag is what
 // users see next to the dot; the detail carries counts and remediation hints.
-func (h NixStoreHealth) Summary() (tag, detail string, warn bool) {
+// NixStoreSeverity controls the phase-row rendering: OK is green,
+// Warn is yellow, Error is red (but non-fatal: boot continues).
+type NixStoreSeverity int
+
+const (
+	NixStoreOK NixStoreSeverity = iota
+	NixStoreWarn
+	NixStoreError
+)
+
+func (h NixStoreHealth) Summary() (tag, detail string, severity NixStoreSeverity) {
 	hashPart := plural(h.ProfileHashes, "profile hash")
-	if h.StaleRoots == 0 && h.OrphanedGenerations == 0 && h.ProfileHashes <= 1 {
+	if h.StaleRoots == 0 && h.OrphanedGenerations == 0 && h.ProfileHashes <= 3 {
 		detail = fmt.Sprintf("%s, %s", plural(h.TotalRoots, "root"), hashPart)
-		return "clean", detail, false
+		return "clean", detail, NixStoreOK
 	}
 
 	var findings []string
@@ -194,14 +204,18 @@ func (h NixStoreHealth) Summary() (tag, detail string, warn bool) {
 	if h.OrphanedGenerations > 0 {
 		findings = append(findings, plural(h.OrphanedGenerations, "orphaned generation"))
 	}
-	if h.ProfileHashes > 1 {
-		findings = append(findings, hashPart+" (drift)")
+	if h.ProfileHashes > 3 {
+		findings = append(findings, hashPart+" (old builds)")
 	}
-	detail = strings.Join(findings, ", ") + " — run: cell build prune --pure"
+	detail = strings.Join(findings, ", ") + " — run: cell build prune"
 
+	severity = NixStoreWarn
 	switch {
-	case h.ProfileHashes > 1:
-		tag = "drifted"
+	case h.ProfileHashes > 5:
+		tag = "bloated"
+		severity = NixStoreError
+	case h.ProfileHashes > 3:
+		tag = "bloating"
 	case h.StaleRoots > 0 && h.OrphanedGenerations > 0:
 		tag = "unhealthy"
 	case h.StaleRoots > 0:
@@ -211,5 +225,5 @@ func (h NixStoreHealth) Summary() (tag, detail string, warn bool) {
 	default:
 		tag = "unhealthy"
 	}
-	return tag, detail, true
+	return tag, detail, severity
 }

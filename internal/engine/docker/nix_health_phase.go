@@ -53,13 +53,23 @@ func nixStorePhase(ctx context.Context, pr ux.Phaser, thin bool, baseDir string,
 			h.DistinctRevs, h.NewestRev, h.NewestProjects)
 		health, probed = h, true
 
-		tag, detail, warn := h.Summary()
-		ux.Debugf("nix health: tag=%s detail=%s", tag, detail)
+		tag, detail, severity := h.Summary()
+		ux.Debugf("nix health: tag=%s detail=%s severity=%d", tag, detail, severity)
 		rowDetail := tag + " — " + detail
+		if severity != NixStoreOK && h.Generations > 0 {
+			extra := ", " + plural(h.Generations, "generation")
+			budget := ux.PhaseRowBudget(len("Nix store"))
+			if len(rowDetail)+len(extra) <= budget {
+				rowDetail += extra
+			}
+		}
 		if autoCleanup {
 			rowDetail += "; " + autoCleanupDetail(ctx)
 		}
-		return rowDetail, warn, nil
+		if severity == NixStoreError {
+			return "", false, fmt.Errorf("%s", rowDetail)
+		}
+		return rowDetail, severity == NixStoreWarn, nil
 	})
 
 	return staleCellNudge(baseDir, health, probed, staleWarn)
@@ -147,7 +157,7 @@ func closureCheckPhase(ctx context.Context, pr ux.Phaser, thin bool, imageTag st
 // --auto-cleanup flag IS the consent. Failures degrade to a detail string;
 // a cell start must never break because hygiene did.
 func autoCleanupDetail(ctx context.Context) string {
-	closures, err := CollectLiveClosures(
+	closures, failures, err := CollectLiveClosures(
 		func() ([]string, error) { return DockerRunningDevcellContainers(ctx) },
 		func(container, link string) (string, error) {
 			return DockerResolveContainerLink(ctx, container, link)
@@ -156,7 +166,12 @@ func autoCleanupDetail(ctx context.Context) string {
 	)
 	if err != nil {
 		ux.Debugf("auto-cleanup: refused: %v", err)
-		return "auto-cleanup skipped (a running cell's closure is unresolvable)"
+		return "auto-cleanup skipped (docker ps failed)"
+	}
+	if len(failures) > 0 {
+		for _, f := range failures {
+			ux.Debugf("auto-cleanup: skipping unresolvable container %s: %v", f.Container, f.Err)
+		}
 	}
 	for _, step := range BuildCleanupSteps(closures) {
 		ux.Debugf("auto-cleanup: exec %s", strings.Join(step.Argv[:6], " ")+" …")

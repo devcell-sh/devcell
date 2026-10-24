@@ -266,12 +266,16 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 
 	// Orphan cleanup: remove stopped containers. Running containers are
 	// left alone so we can attach to them via docker exec.
+	// Phase-level timeout: orphan cleanup is best-effort housekeeping —
+	// a slow daemon must not block boot indefinitely.
 	if err := panel.Phase("Orphan cleanup", func() error {
-		_ = CleanupOrphanedProxies(ctx, c.CellName)
-		if ContainerRunning(ctx, c.ContainerName) {
+		orphanCtx, orphanCancel := context.WithTimeout(ctx, 30*time.Second)
+		defer orphanCancel()
+		_ = CleanupOrphanedProxies(orphanCtx, c.CellName)
+		if ContainerRunning(orphanCtx, c.ContainerName) {
 			return nil
 		}
-		return RemoveOrphanedContainer(ctx, c.ContainerName)
+		return RemoveOrphanedContainer(orphanCtx, c.ContainerName)
 	}); err != nil {
 		return err
 	}

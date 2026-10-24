@@ -239,6 +239,10 @@
           "description": "container registry; default: DefaultRegistry; env: DEVCELL_REGISTRY",
           "type": "string"
         },
+        "short_project_dir": {
+          "description": "use /\u003ccellName\u003e as the container workdir instead of the host path; default: false; env: DEVCELL_SHORT_PROJECT_DIR",
+          "type": "boolean"
+        },
         "stack": {
           "description": "nix stack name (e.g. \"go\", \"python\"); default: \"base\" (see ResolvedStack)",
           "examples": [
@@ -583,7 +587,8 @@
           "type": "array"
         },
         "items": {
-          "description": "deprecated: use documents (kept for backwards compat)",
+          "deprecated": true,
+          "description": "deprecated: use documents (kept for backwards compat). Deprecated: use [secrets.onepassword] documents = [\"prod-api-keys\"] instead (replacement: [secrets.onepassword] documents)",
           "items": {
             "type": "string"
           },

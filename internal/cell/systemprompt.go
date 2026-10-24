@@ -34,13 +34,14 @@ type volumeMount struct {
 }
 
 type contextData struct {
-	CellName  string
-	ProjectDir string
-	HostDir   string
-	HomeDir   string
-	HostHome  string
-	ConfigDir string
-	Volumes   []volumeMount
+	CellName          string
+	ProjectDir        string
+	HostDir           string
+	HasProjectAlias bool
+	HomeDir           string
+	HostHome          string
+	ConfigDir         string
+	Volumes           []volumeMount
 }
 
 // ContainerContext returns the auto-generated filesystem/runtime preamble
@@ -69,14 +70,20 @@ func ContainerContext(c config.Config, cellCfg cfg.CellConfig) string {
 		}
 	}
 
+	projectDir := c.ProjectMountPath()
+	if cellCfg.Cell.ResolvedShortProjectDir() {
+		projectDir = "/" + c.WorkspaceName + "/" + c.ProjectName
+	}
+
 	data := contextData{
-		CellName:   c.CellName,
-		ProjectDir: "/" + c.CellName,
-		HostDir:   c.BaseDir,
-		HomeDir:   "/home/" + c.HostUser,
-		HostHome:  c.HostHome,
-		ConfigDir: c.ConfigDir,
-		Volumes:   vols,
+		CellName:          c.CellName,
+		ProjectDir:        projectDir,
+		HostDir:           c.BaseDir,
+		HasProjectAlias: projectDir != c.BaseDir,
+		HomeDir:           "/home/" + c.HostUser,
+		HostHome:          c.HostHome,
+		ConfigDir:         c.ConfigDir,
+		Volumes:           vols,
 	}
 
 	var buf bytes.Buffer

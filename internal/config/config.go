@@ -11,10 +11,13 @@ import (
 	"strings"
 )
 
+const DefaultWorkspaceName = "devcell"
+
 // Config holds all runtime variables resolved from environment and cwd.
 type Config struct {
 	CellID        string
 	CellName      string
+	ProjectName   string
 	WorkspaceName string
 	WorkspaceHome string
 	ConfigDir     string
@@ -51,6 +54,7 @@ func Load(cwd string, getenv func(string) string) Config {
 	return Config{
 		CellID:        cellID,
 		CellName:      cellName,
+		ProjectName:   filepath.Base(cwd),
 		WorkspaceName: workspaceName,
 		WorkspaceHome: home + "/.devcell/" + workspaceName,
 		ConfigDir:     configDir,
@@ -131,7 +135,14 @@ func ResolveWorkspaceName(getenv func(string) string) string {
 	if s := getenv("TMUX_SESSION_NAME"); s != "" {
 		return s
 	}
-	return "main"
+	return DefaultWorkspaceName
+}
+
+// ProjectMountPath returns the container-side mount path for the project:
+// /<workspaceName>/<hostPath>. With the default workspace ("devcell") this
+// yields /devcell/<hostPath>.
+func (c Config) ProjectMountPath() string {
+	return "/" + c.WorkspaceName + c.BaseDir
 }
 
 func resolvePortPrefix(getenv func(string) string, cellID string) string {

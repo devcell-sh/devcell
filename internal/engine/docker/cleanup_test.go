@@ -2,8 +2,11 @@ package docker_test
 
 import (
 	"errors"
+	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/devcell-sh/devcell/internal/engine/docker"
 )
@@ -33,9 +36,12 @@ func TestCollectLiveClosures_ResolvesProfileAndGenerationPerContainer(t *testing
 		"cell-b " + docker.ContainerGenerationLink: "/nix/store/ddd444-home-manager-generation",
 	})
 
-	closures, err := docker.CollectLiveClosures(ps, resolve, nil)
+	closures, failures, err := docker.CollectLiveClosures(ps, resolve, nil)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(failures) != 0 {
+		t.Fatalf("want 0 failures, got %+v", failures)
 	}
 	if len(closures) != 2 {
 		t.Fatalf("want 2 closures, got %d: %+v", len(closures), closures)
@@ -47,30 +53,60 @@ func TestCollectLiveClosures_ResolvesProfileAndGenerationPerContainer(t *testing
 	}
 }
 
-// A running container whose closure cannot be resolved must fail the whole
-// collection — an unknown closure means neither the cleanup reaper nor the
-// prune gate can guarantee safety, so both must refuse, naming the cell.
-func TestCollectLiveClosures_UnresolvableContainerFailsNamingIt(t *testing.T) {
+// A running container whose closure cannot be resolved is reported as a
+// ClosureFailure, not a hard error — the caller decides whether to prompt
+// the user to force-stop it.
+func TestCollectLiveClosures_UnresolvableContainerReportedAsFailure(t *testing.T) {
 	ps := func() ([]string, error) { return []string{"cell-broken"}, nil }
 	resolve := fakeResolve(map[string]string{})
 
-	_, err := docker.CollectLiveClosures(ps, resolve, nil)
-	if err == nil {
-		t.Fatal("want error for unresolvable container, got nil")
+	closures, failures, err := docker.CollectLiveClosures(ps, resolve, nil)
+	if err != nil {
+		t.Fatalf("infrastructure error must be nil: %v", err)
 	}
-	if !strings.Contains(err.Error(), "cell-broken") {
-		t.Errorf("error must name the container: %v", err)
+	if len(closures) != 0 {
+		t.Errorf("want 0 closures, got %d", len(closures))
+	}
+	if len(failures) != 1 {
+		t.Fatalf("want 1 failure, got %d", len(failures))
+	}
+	if failures[0].Container != "cell-broken" {
+		t.Errorf("failure must name the container: %+v", failures[0])
+	}
+}
+
+// When some containers resolve and others don't, closures and failures are
+// returned together so the caller can prompt the user about the broken ones.
+func TestCollectLiveClosures_PartialFailure_ReturnsBothClosuresAndFailures(t *testing.T) {
+	ps := func() ([]string, error) { return []string{"cell-good", "cell-broken"}, nil }
+	resolve := fakeResolve(map[string]string{
+		"cell-good " + docker.ContainerProfileLink:    "/nix/store/aaa111-home-manager-path",
+		"cell-good " + docker.ContainerGenerationLink: "/nix/store/bbb222-home-manager-generation",
+	})
+
+	closures, failures, err := docker.CollectLiveClosures(ps, resolve, nil)
+	if err != nil {
+		t.Fatalf("infrastructure error must be nil: %v", err)
+	}
+	if len(closures) != 1 || closures[0].Container != "cell-good" {
+		t.Errorf("want 1 good closure for cell-good, got %+v", closures)
+	}
+	if len(failures) != 1 || failures[0].Container != "cell-broken" {
+		t.Errorf("want 1 failure for cell-broken, got %+v", failures)
 	}
 }
 
 func TestCollectLiveClosures_NoRunningContainersIsEmptyNotError(t *testing.T) {
 	ps := func() ([]string, error) { return nil, nil }
-	closures, err := docker.CollectLiveClosures(ps, fakeResolve(nil), nil)
+	closures, failures, err := docker.CollectLiveClosures(ps, fakeResolve(nil), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(closures) != 0 {
 		t.Fatalf("want 0 closures, got %+v", closures)
+	}
+	if len(failures) != 0 {
+		t.Fatalf("want 0 failures, got %+v", failures)
 	}
 }
 
@@ -84,7 +120,7 @@ func TestCollectLiveClosures_LogsDatapoints(t *testing.T) {
 	logf := func(format string, args ...any) {
 		lines = append(lines, format)
 	}
-	if _, err := docker.CollectLiveClosures(ps, resolve, logf); err != nil {
+	if _, _, err := docker.CollectLiveClosures(ps, resolve, logf); err != nil {
 		t.Fatal(err)
 	}
 	if len(lines) == 0 {
@@ -249,6 +285,56 @@ func TestBuildCleanupPrompt_WarnsWhenNothingRunning(t *testing.T) {
 	}
 }
 
+// CollectLiveClosures must resolve containers concurrently — with many
+// running cells, serial docker exec calls compound into minutes of wall time.
+func TestCollectLiveClosures_ResolvesContainersConcurrently(t *testing.T) {
+	const N = 10
+	var names []string
+	for i := range N {
+		names = append(names, fmt.Sprintf("cell-%d", i))
+	}
+	ps := func() ([]string, error) { return names, nil }
+
+	var concurrent atomic.Int32
+	var maxConcurrent atomic.Int32
+	resolve := func(container, link string) (string, error) {
+		n := concurrent.Add(1)
+		for {
+			old := maxConcurrent.Load()
+			if n <= old || maxConcurrent.CompareAndSwap(old, n) {
+				break
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+		concurrent.Add(-1)
+		if strings.HasSuffix(link, "profile") {
+			return "/nix/store/aaa-home-manager-path", nil
+		}
+		return "/nix/store/bbb-home-manager-generation", nil
+	}
+
+	start := time.Now()
+	closures, failures, err := docker.CollectLiveClosures(ps, resolve, nil)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(failures) != 0 {
+		t.Fatalf("want 0 failures, got %+v", failures)
+	}
+	if len(closures) != N {
+		t.Fatalf("want %d closures, got %d", N, len(closures))
+	}
+	if maxConcurrent.Load() < 2 {
+		t.Errorf("resolve calls must run concurrently; max concurrent was %d", maxConcurrent.Load())
+	}
+	// Serial would take at least N * 2 * 10ms = 200ms. Parallel should be well under.
+	if elapsed > 150*time.Millisecond {
+		t.Errorf("resolution took %v — should be parallel, not serial", elapsed)
+	}
+}
+
 // CELL-334 secondary: PROTECTED must be collected from BOTH *-profile and
 // *-generation roots — generations carry home-manager-files, the very
 // closure CELL-320 exists to protect.
@@ -256,6 +342,21 @@ func TestSafeNixGCScript_CollectsProtectedFromBothRootKinds(t *testing.T) {
 	if !strings.Contains(docker.SafeNixGCScript,
 		"/nix/var/nix/gcroots/devcell/*-profile /nix/var/nix/gcroots/devcell/*-generation") {
 		t.Error("SafeNixGCScript must collect PROTECTED from both *-profile and *-generation globs (CELL-334)")
+	}
+}
+
+// BuildStopBrokenPrompt must name the broken containers and ask the user
+// whether to force-stop them so the operation can proceed.
+func TestBuildStopBrokenPrompt_NamesContainersAndAsksToStop(t *testing.T) {
+	failures := []docker.ClosureFailure{
+		{Container: "cell-broken-1", Err: errors.New("exit status 127")},
+		{Container: "cell-broken-2", Err: errors.New("readlink failed")},
+	}
+	prompt := docker.BuildStopBrokenPrompt(failures)
+	for _, want := range []string{"cell-broken-1", "cell-broken-2", "stop", "Continue? [y/N]"} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt missing %q\nprompt:\n%s", want, prompt)
+		}
 	}
 }
 

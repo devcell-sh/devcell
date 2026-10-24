@@ -378,6 +378,156 @@ func TestWireguard_Disabled(t *testing.T) {
 	}
 }
 
+// TestWireguard_S6ServiceWiring boots a container through the real entrypoint
+// so the s6 wireguard oneshot runs end-to-end with fake credentials. Verifies:
+//
+//  1. ValidateWireguard accepts the config
+//  2. PrepareWireguard rewrites config (PostUp injected, secrets stripped)
+//  3. s6 service source installed (/etc/s6-rc/source/wireguard/)
+//  4. Secrets written to /run/secrets/ with mode 600
+//  5. wg0 interface created, peer configured with preshared key
+//
+// Uses random keys and an unreachable endpoint — the tunnel cannot handshake,
+// which is expected. The test verifies wiring, not connectivity.
+func TestWireguard_S6ServiceWiring(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+	img := image()
+	requireWgQuick(t, img)
+
+	privKey := wgRandomKey(t)
+	psk := wgRandomKey(t)
+	peerPub := wgRandomKey(t)
+
+	rawConfig := "[Interface]\nAddress = 10.2.0.2/32\nDNS = 10.2.0.1\n\n" +
+		"[Peer]\nPublicKey = " + peerPub + "\n" +
+		"AllowedIPs = 0.0.0.0/0\nEndpoint = 79.127.131.222:51820\nPersistentKeepalive = 25\n"
+
+	cellCfg := cfg.CellConfig{Wireguard: []cfg.WireguardEntry{{
+		Name:    "wg0",
+		Enabled: true,
+		Config:  rawConfig,
+	}}}
+
+	// 1. Validate — same path runner.go uses before PrepareWireguard
+	if err := cfg.ValidateWireguard(cellCfg); err != nil {
+		t.Fatalf("ValidateWireguard: %v", err)
+	}
+
+	// 2. Host-side rewrite: strip secrets, inject PostUp
+	wgDir := t.TempDir()
+	if err := docker.PrepareWireguard(wgDir, cellCfg); err != nil {
+		t.Fatalf("PrepareWireguard: %v", err)
+	}
+	confBytes, err := os.ReadFile(filepath.Join(wgDir, ".wg", "wg0.conf"))
+	if err != nil {
+		t.Fatalf("read conf: %v", err)
+	}
+	confStr := string(confBytes)
+	t.Logf("rewritten config:\n%s", confStr)
+
+	if !strings.Contains(confStr, "PostUp = wg set %i private-key /run/secrets/wg-private-key") {
+		t.Fatal("config missing private-key PostUp")
+	}
+	if !strings.Contains(confStr, "preshared-key /run/secrets/wg-preshared-key") {
+		t.Fatal("config missing preshared-key PostUp")
+	}
+	if !strings.Contains(confStr, peerPub) {
+		t.Fatal("config missing peer public key")
+	}
+
+	// 3. Boot container: write config, then exec real entrypoint.
+	// The entrypoint starts s6 which runs the wireguard oneshot.
+	// The verify script runs as CMD after all s6 oneshots complete.
+	bootScript := `set -e
+mkdir -p /run/secrets && chmod 700 /run/secrets
+mkdir -p /home/$HOST_USER/.devcell/$DEVCELL_CELL_NAME/.wg
+cat > /home/$HOST_USER/.devcell/$DEVCELL_CELL_NAME/.wg/wg0.conf << 'DEVCELL_WGCONF_EOF'
+` + confStr + `DEVCELL_WGCONF_EOF
+chmod 600 /home/$HOST_USER/.devcell/$DEVCELL_CELL_NAME/.wg/wg0.conf
+
+cat > /tmp/wg-verify.sh << 'VERIFY'
+#!/bin/bash
+echo "WGENV:"
+env | grep -o '^WG_[A-Z_]*' | sort
+echo "SECRETS:"
+sudo -n ls -l /run/secrets/wg-* 2>&1
+echo "S6TYPE:$(cat /etc/s6-rc/source/wireguard/type 2>/dev/null || echo NOT_FOUND)"
+echo "S6UPSH:$(test -x /etc/s6-rc/source/wireguard/up.sh && echo exists || echo missing)"
+echo "WGSHOW:"
+sudo -n wg show wg0 2>&1 || echo "WG_NOT_FOUND"
+echo "PSK:"
+sudo -n wg show wg0 preshared-keys 2>&1 || echo "PSK_NOT_FOUND"
+echo "DONE"
+VERIFY
+chmod +x /tmp/wg-verify.sh
+
+exec /opt/devcell/.local/bin/entrypoint.sh /tmp/wg-verify.sh`
+
+	args := wgBaseArgs(img, map[string]string{
+		"HOST_USER":           "testuser",
+		"APP_NAME":            "wgtest",
+		"DEVCELL_WG_ENABLED":  "1",
+		"DEVCELL_WORKSPACE":   "main",
+		"DEVCELL_CELL_NAME":   "main",
+		"WG_PRIVATE_KEY":      privKey,
+		"WG_PRESHARED_KEY":    psk,
+		"DEVCELL_DEBUG":       "true",
+	},
+		"--cap-add=NET_ADMIN",
+		"--device=/dev/net/tun",
+		"--sysctl", "net.ipv4.conf.all.src_valid_mark=1",
+		"--entrypoint", "bash",
+	)
+	args = append(args, "-c", bootScript)
+
+	out, err := osexec.Command("docker", args...).CombinedOutput()
+	output := string(out)
+	t.Logf("output:\n%s", output)
+	if err != nil {
+		t.Fatalf("docker run: %v\noutput: %s", err, output)
+	}
+
+	// Env vars visible inside container
+	for _, k := range []string{"WG_PRIVATE_KEY", "WG_PRESHARED_KEY"} {
+		if !strings.Contains(output, k) {
+			t.Errorf("container does not see %s in its environment", k)
+		}
+	}
+
+	// Secrets in /run/secrets with mode 600
+	for _, f := range []string{"wg-private-key", "wg-preshared-key"} {
+		if !strings.Contains(output, f) {
+			t.Errorf("/run/secrets/%s not written", f)
+		}
+	}
+	if !strings.Contains(output, "-rw------- ") {
+		t.Error("/run/secrets files should have mode 600")
+	}
+
+	// s6 service installed in the image
+	if !strings.Contains(output, "S6TYPE:oneshot") {
+		t.Error("s6 wireguard service type is not 'oneshot'")
+	}
+	if !strings.Contains(output, "S6UPSH:exists") {
+		t.Error("s6 wireguard up.sh not found or not executable")
+	}
+
+	// wg0 interface created with peer
+	if !strings.Contains(output, "interface: wg0") {
+		t.Error("wg0 interface not created")
+	}
+	if !strings.Contains(output, peerPub) {
+		t.Error("peer not configured on wg0")
+	}
+
+	// Preshared key applied (not "(none)")
+	if strings.Contains(output, peerPub+"\t(none)") {
+		t.Error("preshared key not applied to peer (shows none)")
+	}
+}
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 // extractJSON finds the first JSON object in a string (handles entrypoint

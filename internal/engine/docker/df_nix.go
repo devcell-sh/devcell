@@ -156,5 +156,5 @@ func FormatNixStoreSection(r NixStoreReport, w io.Writer) {
 		}
 		fmt.Fprintln(w, line)
 	}
-	fmt.Fprintln(w, "  To reclaim: cell cleanup && cell build prune --pure")
+	fmt.Fprintln(w, "  To reclaim: cell build prune")
 }

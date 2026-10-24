@@ -135,8 +135,8 @@ func TestCellHome_WithTmuxSession(t *testing.T) {
 
 func TestCellHome_DefaultMain(t *testing.T) {
 	c := config.Load("/cwd", env("HOME", "/home/bob"))
-	if c.WorkspaceHome != "/home/bob/.devcell/main" {
-		t.Errorf("want /home/bob/.devcell/main, got %q", c.WorkspaceHome)
+	if c.WorkspaceHome != "/home/bob/.devcell/devcell" {
+		t.Errorf("want /home/bob/.devcell/devcell, got %q", c.WorkspaceHome)
 	}
 }
 
@@ -166,7 +166,7 @@ func TestResolveWorkspaceName_Precedence(t *testing.T) {
 	}{
 		{"explicit wins over tmux", env("DEVCELL_CELL_NAME", "explicit", "TMUX_SESSION_NAME", "work"), "explicit"},
 		{"tmux session", env("TMUX_SESSION_NAME", "work"), "work"},
-		{"default main", env(), "main"},
+		{"default devcell", env(), "devcell"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

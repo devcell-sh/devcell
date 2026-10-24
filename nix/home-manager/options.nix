@@ -48,6 +48,7 @@ in
     qemu_project_sync = opt types.str;
     default_command = opt types.str;
     docker_socket = opt types.bool;
+    short_project_dir = opt types.bool;
     flake = opt types.bool;
     packages = opt (types.listOf types.str);
     volumes = opt (types.listOf types.str);
@@ -112,8 +113,10 @@ in
     enabled = opt (types.listOf types.str);
   };
   stealth = {
+    enabled = opt types.bool;
     arch = opt types.str;
     platform = opt types.str;
+    useragent = opt types.str;
   };
   gui = {
     enabled = opt types.bool;

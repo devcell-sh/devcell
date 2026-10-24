@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/devcell-sh/devcell/internal/cell"
 	"github.com/devcell-sh/devcell/internal/cfg"
@@ -241,6 +242,14 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	dp := spec.dockerPolicy()
 	policy := spec.effectivePolicy()
 
+	// Container-side project directory: /<workspace>/<hostPath> by default
+	// (e.g. /devcell/Users/...), /<workspace>/<projectName> when
+	// [cell] short_project_dir = true.
+	projectDir := c.ProjectMountPath()
+	if spec.CellCfg.Cell.ResolvedShortProjectDir() {
+		projectDir = "/" + c.WorkspaceName + "/" + c.ProjectName
+	}
+
 	// 1Password passthrough (suppressed by --no-secrets or policy)
 	if !spec.NoSecrets && !dp.DenyOpRun() {
 		if opPath, err := lookPath("op"); err == nil && opPath != "" {
@@ -344,6 +353,13 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	e("TMPDIR", "/home/"+c.HostUser+"/tmp")
 	e("CODEX_OSS_BASE_URL", envOrDefault("CODEX_OSS_BASE_URL", "http://host.docker.internal:1234/v1"))
 	e("DEVCELL_HOST_PROJECT_DIR", c.BaseDir)
+	shortProjectPath := "/" + c.WorkspaceName + "/" + c.ProjectName
+	e("DEVCELL_PROJECT_MOUNTS", strings.Join([]string{
+		c.BaseDir,
+		c.ProjectMountPath(),
+		shortProjectPath,
+		"/" + c.CellName,
+	}, ":"))
 
 	mountSeen := map[string]string{} // container path → source description
 	v := func(mount string) {
@@ -447,7 +463,7 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	for _, kv := range cell.GuestEnv(cell.EnvInput{
 		WorkspaceName: c.WorkspaceName,
 		CellName:      c.CellName,
-		ProjectDir:    "/" + c.CellName,
+		ProjectDir:    projectDir,
 		Git:       spec.CellCfg.Git,
 		Timezone:  spec.CellCfg.Cell.Timezone,
 		Locale:    spec.CellCfg.Cell.Locale,
@@ -497,10 +513,30 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	v(c.WorkspaceHome + ":/home/" + c.HostUser)
 	homeTarget := "/home/" + c.HostUser
 	if filepath.Clean(c.BaseDir) == filepath.Clean(homeTarget) {
-		ux.Warn("Project dir is your home directory. The workspace home (" + c.WorkspaceHome + ") is mounted at " + homeTarget + "; your project is at /" + c.CellName + ".")
+		ux.Warn("Project dir is your home directory. The workspace home (" + c.WorkspaceHome + ") is mounted at " + homeTarget + "; your project is at " + projectDir + ".")
 	}
-	v(c.BaseDir + ":" + c.BaseDir)
-	v(c.BaseDir + ":/" + c.CellName)
+	// Project bind mounts: multiple container-side aliases for the same host dir.
+	// Skip any alias whose container path nests inside another alias's path,
+	// because Docker would create intermediate dirs inside the parent bind,
+	// polluting the host project directory.
+	projectTargets := []string{c.BaseDir, c.ProjectMountPath(), "/" + c.CellName}
+	if c.ProjectName != "" {
+		projectTargets = append(projectTargets, "/"+c.WorkspaceName+"/"+c.ProjectName)
+	}
+	for i, target := range projectTargets {
+		t := filepath.Clean(target)
+		nested := false
+		for j, other := range projectTargets {
+			if i != j && strings.HasPrefix(t, filepath.Clean(other)+"/") {
+				ux.Debugf("volume: skipping project mount %s — nests inside %s", target, other)
+				nested = true
+				break
+			}
+		}
+		if !nested {
+			v(c.BaseDir + ":" + target)
+		}
+	}
 	if spec.CellCfg.Cell.ResolvedDockerSocket() && !spec.ProxyEnabled && !dp.DenyDockerSock() {
 		v("/var/run/docker.sock:/var/run/docker.sock")
 	}
@@ -589,7 +625,7 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	}
 
 	// Workdir
-	argv = append(argv, "--workdir", "/"+c.CellName)
+	argv = append(argv, "--workdir", projectDir)
 
 	// Go-generated entrypoint: s6 activation + gosu drop to user + exec CMD.
 	// The init script is written to bootDir by Run() before docker run.
@@ -643,7 +679,9 @@ func isDeniedByPolicy(mount string, deniedPrefixes []string) bool {
 // Returns nil if the container doesn't exist or was successfully removed.
 // Returns an error if the container is currently running.
 func RemoveOrphanedContainer(ctx context.Context, name string) error {
-	out, err := exec.CommandContext(ctx, "docker", "inspect", "--format", "{{.State.Status}}", name).Output()
+	tctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(tctx, "docker", "inspect", "--format", "{{.State.Status}}", name).Output()
 	if err != nil {
 		// Container doesn't exist — nothing to do.
 		return nil
@@ -652,7 +690,9 @@ func RemoveOrphanedContainer(ctx context.Context, name string) error {
 	if status == "running" {
 		return fmt.Errorf("container %q is already running — stop it first with: docker stop %s", name, name)
 	}
-	if err := exec.CommandContext(ctx, "docker", "rm", name).Run(); err != nil {
+	tctx2, cancel2 := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel2()
+	if err := exec.CommandContext(tctx2, "docker", "rm", "-f", name).Run(); err != nil {
 		return fmt.Errorf("remove orphaned container %q: %w", name, err)
 	}
 	return nil
@@ -660,7 +700,9 @@ func RemoveOrphanedContainer(ctx context.Context, name string) error {
 
 // ContainerRunning checks if a container with the given name is currently running.
 func ContainerRunning(ctx context.Context, name string) bool {
-	out, err := exec.CommandContext(ctx, "docker", "inspect", "--format", "{{.State.Status}}", name).Output()
+	tctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(tctx, "docker", "inspect", "--format", "{{.State.Status}}", name).Output()
 	if err != nil {
 		return false
 	}
