@@ -17,6 +17,10 @@
     "build": {
       "additionalProperties": false,
       "properties": {
+        "chunk_size": {
+          "description": "nix-cache push chunk size (e.g. \"512MB\"); 0 = single layer; env: DEVCELL_NIX_CACHE_CHUNK_SIZE",
+          "type": "string"
+        },
         "cores": {
           "description": "nix cores (make -j per job); 0 = derived; env: DEVCELL_NIX_CORES",
           "type": "integer"
@@ -35,6 +39,10 @@
         },
         "threads": {
           "description": "nix download threads (max-substitution-jobs + http-connections); 0 = 128; env: DEVCELL_BUILD_THREADS",
+          "type": "integer"
+        },
+        "upload_jobs": {
+          "description": "nix-cache push concurrent blob streams; 0 = library default (6); env: DEVCELL_NIX_CACHE_UPLOAD_JOBS",
           "type": "integer"
         }
       },

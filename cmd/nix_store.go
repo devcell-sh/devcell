@@ -52,9 +52,9 @@ Two modes:
   (no --volume)   Read an uncompressed tar from stdin
 
 By default, the tar is split on entry boundaries into ~512 MB chunks,
-buffered to temp files, then uploaded in parallel (4 concurrent blob
-streams, 1 manifest write). Set DEVCELL_NIX_CHUNK_SIZE=0 to disable
-chunking.
+buffered to temp files, then uploaded in parallel (6 concurrent blob
+streams, 1 manifest write). Tune with DEVCELL_NIX_CACHE_CHUNK_SIZE (e.g.
+"256MB", "0" to disable chunking) and DEVCELL_NIX_CACHE_UPLOAD_JOBS (e.g. "8").
 
 Examples:
   devcell nix-store push --volume devcell-nix-store-arm64 \
@@ -104,6 +104,24 @@ func runNixStorePush(cmd *cobra.Command, args []string) error {
 		nixoci.Debug = true
 	}
 
+	var chunkBytes int64
+	if s := os.Getenv("DEVCELL_NIX_CACHE_CHUNK_SIZE"); s != "" {
+		v, err := nixoci.ParseSize(s)
+		if err != nil {
+			return errFlag(fmt.Sprintf("invalid DEVCELL_NIX_CACHE_CHUNK_SIZE: %v", err))
+		}
+		chunkBytes = v
+	}
+
+	var uploadJobs int
+	if s := os.Getenv("DEVCELL_NIX_CACHE_UPLOAD_JOBS"); s != "" {
+		v, err := strconv.Atoi(s)
+		if err != nil {
+			return errFlag(fmt.Sprintf("invalid DEVCELL_NIX_CACHE_UPLOAD_JOBS: %v", err))
+		}
+		uploadJobs = v
+	}
+
 	if volume != "" {
 		var minSize int64
 		if minSizeStr != "" {
@@ -114,12 +132,20 @@ func runNixStorePush(cmd *cobra.Command, args []string) error {
 			minSize = v
 		}
 		return nixoci.PushFromVolume(cmd.Context(), volume, base, image, nixoci.PushOpts{
-			TagAlias: tagAlias,
-			Retries:  retries,
-			MinSize:  minSize,
+			TagAlias:   tagAlias,
+			Retries:    retries,
+			MinSize:    minSize,
+			ChunkBytes: chunkBytes,
+			UploadJobs: uploadJobs,
 		})
 	}
 
+	if chunkBytes > 0 {
+		nixoci.ChunkSize = chunkBytes
+	}
+	if uploadJobs > 0 {
+		nixoci.UploadJobs = uploadJobs
+	}
 	if s := os.Getenv("DEVCELL_NIX_TOTAL_SIZE"); s != "" {
 		if v, err := strconv.ParseInt(s, 10, 64); err == nil && v > 0 {
 			nixoci.TotalSizeHint = v

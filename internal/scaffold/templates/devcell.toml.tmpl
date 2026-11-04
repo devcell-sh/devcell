@@ -104,6 +104,8 @@
 # max_jobs = 0                     # nix max-jobs; 0 = derived. Env: DEVCELL_NIX_MAX_JOBS
 # cores = 0                        # nix cores per job; 0 = derived. Env: DEVCELL_NIX_CORES
 # threads = 128                    # nix download threads. Env: DEVCELL_BUILD_THREADS
+# chunk_size = "512MB"             # nix-cache push chunk size; "0" = single layer. Env: DEVCELL_NIX_CACHE_CHUNK_SIZE
+# upload_jobs = 6                  # nix-cache push concurrent blob streams. Env: DEVCELL_NIX_CACHE_UPLOAD_JOBS
 
 # --- Nix ---
 # [nix]

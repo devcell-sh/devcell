@@ -990,11 +990,13 @@ func (d DockerSection) ResolvedShmSize() string {
 // Values feed the same resolution chain as the env vars; an explicit env var
 // always wins over TOML (env > toml > derived default).
 type BuildSection struct {
-	Memory  string `toml:"memory"`   // docker --memory ceiling (e.g. "16g"); "0" = uncapped; env: DEVCELL_BUILD_MEMORY
-	CPUs    string `toml:"cpus"`     // docker --cpus quota (e.g. "8"); "0" = no quota; env: DEVCELL_BUILD_CPUS
-	MaxJobs int    `toml:"max_jobs"` // nix max-jobs; 0 = derived from ceiling; env: DEVCELL_NIX_MAX_JOBS
-	Cores   int    `toml:"cores"`    // nix cores (make -j per job); 0 = derived; env: DEVCELL_NIX_CORES
-	Threads int    `toml:"threads"`  // nix download threads (max-substitution-jobs + http-connections); 0 = 128; env: DEVCELL_BUILD_THREADS
+	Memory     string `toml:"memory"`      // docker --memory ceiling (e.g. "16g"); "0" = uncapped; env: DEVCELL_BUILD_MEMORY
+	CPUs       string `toml:"cpus"`        // docker --cpus quota (e.g. "8"); "0" = no quota; env: DEVCELL_BUILD_CPUS
+	MaxJobs    int    `toml:"max_jobs"`    // nix max-jobs; 0 = derived from ceiling; env: DEVCELL_NIX_MAX_JOBS
+	Cores      int    `toml:"cores"`       // nix cores (make -j per job); 0 = derived; env: DEVCELL_NIX_CORES
+	Threads    int    `toml:"threads"`     // nix download threads (max-substitution-jobs + http-connections); 0 = 128; env: DEVCELL_BUILD_THREADS
+	ChunkSize  string `toml:"chunk_size"`  // nix-cache push chunk size (e.g. "512MB"); 0 = single layer; env: DEVCELL_NIX_CACHE_CHUNK_SIZE
+	UploadJobs int    `toml:"upload_jobs"` // nix-cache push concurrent blob streams; 0 = library default (6); env: DEVCELL_NIX_CACHE_UPLOAD_JOBS
 }
 
 // NixSection holds [nix] config for nix image and nixhome settings.
@@ -1551,6 +1553,12 @@ func Merge(global, project CellConfig) CellConfig {
 	}
 	if project.Build.Cores != 0 {
 		out.Build.Cores = project.Build.Cores
+	}
+	if project.Build.ChunkSize != "" {
+		out.Build.ChunkSize = project.Build.ChunkSize
+	}
+	if project.Build.UploadJobs != 0 {
+		out.Build.UploadJobs = project.Build.UploadJobs
 	}
 
 	// Docker: project wins when non-empty / true
