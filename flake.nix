@@ -2,7 +2,7 @@
   description = "devcell — container-native dev environments";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
   };
 
   outputs = {
@@ -55,7 +55,7 @@
         version = nixpkgs.lib.removePrefix "v" cellVersion;
         src = cellSrc;
 
-        vendorHash = "sha256-7TUvrZuQxBmxl+Qe8ep3m3nhtgZ0cQX3lO4HF1FGmyw=";
+        vendorHash = "sha256-nzqFqZMOPnHfJu+fe4dCg9gl1O71I5kLvZfRDmHqC84=";
 
         subPackages = ["cmd"];
 
@@ -83,6 +83,10 @@
           mkdir -p docs
           cat > docs/docs.go << 'EOF'
           package docs
+          EOF
+          mkdir -p api/swagger
+          cat > api/swagger/swagger.go << 'EOF'
+          package swagger
           EOF
         '';
 
