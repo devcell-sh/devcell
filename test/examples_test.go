@@ -183,10 +183,11 @@ func TestExamples_E2E(t *testing.T) {
 }
 
 // startupTimeout scales the container readiness timeout with available CPU
-// cores. The entrypoint (nix, mise, s6 init) is CPU-bound: 120s suffices on
-// 4+ cores but starves on the 2-core free GitHub runners.
+// cores. The entrypoint (nix, mise, s6 init) is CPU-bound: 300s suffices on
+// 4+ cores but starves on 2-core free GitHub runners; ARM64 runners need more
+// time than x86_64 for the same core count.
 func startupTimeout() time.Duration {
-	const baseSec = 120 // calibrated for 4 cores
+	const baseSec = 300 // calibrated for 4-core ARM64 GitHub runners
 	cpus := runtime.NumCPU()
 	sec := baseSec * 4 / cpus
 	if sec < baseSec {

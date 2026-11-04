@@ -459,7 +459,14 @@ jobs:
       - name: Verify devcell binary
         run: |
           devcell --help
-          echo "--- devcell binary OK ---"
+          VER=$(devcell --version)
+          echo "Installed: ${VER}"
+          if echo "${VER}" | grep -qE "devcell version v?[0-9]+\.[0-9]+\.[0-9]+"; then
+            echo "--- PASS: devcell version OK ---"
+          else
+            echo "--- FAIL: unexpected version output ---"
+            exit 1
+          fi
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -478,11 +485,19 @@ jobs:
           OUTPUT=$(devcell --plain-text claude --version 2>&1) || true
           echo "$OUTPUT"
 
-          # Assert devcell version string is present
-          if echo "$OUTPUT" | grep -qE "devcell\s+v?[0-9]+\.[0-9]+\.[0-9]+"; then
-            echo "--- PASS: devcell version found ---"
+          # Assert cell booted successfully
+          if echo "$OUTPUT" | grep -q "Cell ready"; then
+            echo "--- PASS: cell booted ---"
           else
-            echo "--- FAIL: devcell version string not found in output ---"
+            echo "--- FAIL: 'Cell ready' not found in output ---"
+            exit 1
+          fi
+
+          # Assert claude ran inside the container (prints its version)
+          if echo "$OUTPUT" | grep -qE "[0-9]+\.[0-9]+\.[0-9]+.*(Claude|claude)"; then
+            echo "--- PASS: claude responded ---"
+          else
+            echo "--- FAIL: claude version not found in output ---"
             exit 1
           fi
 
@@ -531,7 +546,7 @@ jobs:
         run: |
           INSTALLED=$(devcell --version)
           echo "Installed: ${INSTALLED}"
-          if echo "${INSTALLED}" | grep -qE "^devcell version [0-9]+\.[0-9]+\.[0-9]+"; then
+          if echo "${INSTALLED}" | grep -qE "^devcell version v?[0-9]+\.[0-9]+\.[0-9]+"; then
             echo "--- PASS: devcell version OK ---"
           else
             echo "--- FAIL: unexpected version output ---"
