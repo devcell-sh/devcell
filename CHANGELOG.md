@@ -5,6 +5,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-04
+
+### Added
+
+- `devcell ps` shows running cells filtered to the current workspace; `devcell list` enumerates all cells including stopped ones; `devcell top` ranks cells by CPU usage
+- Containers carry a `devcell.workspace` label so `ps` and `top` filter to the current workspace by default
+- Host timezone auto-detection from `/etc/localtime` or `/etc/timezone`, exposed in the container system prompt
+- `short_project_dir` config key creates bind-mount aliases via `DEVCELL_PROJECT_MOUNTS` with nesting detection
+- WireGuard s6 service wiring integration test covering the full boot path
+
+### Changed
+
+- `devcell build prune` runs both Docker and nix cleanup in a single pass with concurrent closure resolution (bounded to 5 goroutines)
+- Borderless tabwriter output replaces lipgloss bordered tables (docker ps / kubectl style)
+- Nix store health thresholds raised (clean: 1 to 3 hashes, error: 1 to 5) and "drifted" renamed to "bloating"
+- Default workspace name changed from `main` to `devcell`
+- `docker inspect` and `docker rm` calls enforce timeouts
+
+### Deprecated
+
+- `--pure` flag on `devcell build prune` (nix pruning now always included)
+- `devcell cleanup` command (use `devcell build prune`)
+
+### Fixed
+
+- [CELL-667] Browser stealth identity hardened: CrOS user-agent for arm64, new `stealth.enabled` and `stealth.user_agent` config fields
+- [CELL-667] Stealth test suite consolidated from seven separate probe pages into one comprehensive Chromium session
+
 ## [0.10.0] - 2026-10-19
 
 ### Removed
