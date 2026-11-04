@@ -211,24 +211,10 @@ func ResolveNixhome(source, buildDir, ver string, force bool) error {
 	defer os.RemoveAll(tmpDir)
 
 	// Shallow clone with sparse checkout.
-	cloneArgs := []string{"clone", "--depth", "1", "--branch", ref, "--filter=blob:none"}
-	if subdir != "" {
-		cloneArgs = append(cloneArgs, "--sparse")
-	}
-	cloneArgs = append(cloneArgs, gs.RepoURL, tmpDir)
-
-	cmds := [][]string{{"git"}}
-	cmds[0] = append(cmds[0], cloneArgs...)
-	if subdir != "" {
-		cmds = append(cmds, []string{"git", "-C", tmpDir, "sparse-checkout", "set", subdir})
-	}
-
-	for _, args := range cmds {
-		cmd := exec.Command(args[0], args[1:]...)
-		if err := cmd.Run(); err != nil {
-			sp.Fail("Fetch nixhome failed")
-			return fmt.Errorf("%s: %w", strings.Join(args[:2], " "), err)
-		}
+	ref, err = cloneNixhomeWithFallback(gs.RepoURL, ref, subdir, tmpDir)
+	if err != nil {
+		sp.Fail("Fetch nixhome failed")
+		return err
 	}
 
 	// Copy from clone to dest.
@@ -255,6 +241,48 @@ func ResolveNixhome(source, buildDir, ver string, force bool) error {
 	os.WriteFile(filepath.Join(dest, NixhomeSourceFile), []byte(sourceLabel+"\n"), 0644)
 
 	sp.Success(fmt.Sprintf("Fetched nixhome (%s)", ref))
+	return nil
+}
+
+// cloneNixhomeWithFallback runs a shallow git clone at the requested ref. If
+// the clone fails and ref is not already the default branch, it retries with
+// nixhome.DefaultNixhomeGitRef ("main"). Returns the ref that succeeded.
+func cloneNixhomeWithFallback(repoURL, ref, subdir, tmpDir string) (string, error) {
+	err := shallowClone(repoURL, ref, subdir, tmpDir)
+	if err != nil && ref != nixhome.DefaultNixhomeGitRef {
+		ux.Warn(fmt.Sprintf("nixhome ref %q not found, falling back to %s", ref, nixhome.DefaultNixhomeGitRef))
+		os.RemoveAll(tmpDir)
+		if mkErr := os.MkdirAll(tmpDir, 0755); mkErr != nil {
+			return "", mkErr
+		}
+		ref = nixhome.DefaultNixhomeGitRef
+		err = shallowClone(repoURL, ref, subdir, tmpDir)
+	}
+	if err != nil {
+		return "", err
+	}
+	return ref, nil
+}
+
+func shallowClone(repoURL, ref, subdir, tmpDir string) error {
+	cloneArgs := []string{"clone", "--depth", "1", "--branch", ref, "--filter=blob:none"}
+	if subdir != "" {
+		cloneArgs = append(cloneArgs, "--sparse")
+	}
+	cloneArgs = append(cloneArgs, repoURL, tmpDir)
+
+	cmds := [][]string{{"git"}}
+	cmds[0] = append(cmds[0], cloneArgs...)
+	if subdir != "" {
+		cmds = append(cmds, []string{"git", "-C", tmpDir, "sparse-checkout", "set", subdir})
+	}
+
+	for _, args := range cmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("%s: %w", strings.Join(args[:2], " "), err)
+		}
+	}
 	return nil
 }
 
@@ -404,10 +432,9 @@ func materializeGithubFlakeRef(ref string) (string, func(), error) {
 	cleanup := func() { _ = os.RemoveAll(tmpDir) }
 
 	ux.Debugf("Cloning %s @ %s → %s", parsed.CloneURL(), parsed.Ref, tmpDir)
-	cmd := exec.Command("git", "clone", "--depth", "1", "--branch", parsed.Ref, parsed.CloneURL(), tmpDir)
-	if output, err := cmd.CombinedOutput(); err != nil {
+	if _, err := cloneNixhomeWithFallback(parsed.CloneURL(), parsed.Ref, parsed.Subdir, tmpDir); err != nil {
 		cleanup()
-		return "", func() {}, fmt.Errorf("git clone %s @ %s: %w\n%s", parsed.CloneURL(), parsed.Ref, err, output)
+		return "", func() {}, fmt.Errorf("git clone %s @ %s: %w", parsed.CloneURL(), parsed.Ref, err)
 	}
 
 	src := tmpDir

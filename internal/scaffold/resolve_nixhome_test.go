@@ -62,3 +62,23 @@ func TestResolveNixhome_DefaultSourceClonesRepo(t *testing.T) {
 		t.Errorf("source file: got %q, want %q", got, nixhomeRepo)
 	}
 }
+
+func TestResolveNixhome_FallsBackToMainWhenTagMissing(t *testing.T) {
+	repo := newLocalNixhomeRepo(t)
+	orig := nixhomeRepo
+	nixhomeRepo = "file://" + repo
+	t.Cleanup(func() { nixhomeRepo = orig })
+
+	buildDir := t.TempDir()
+	// v99.0.0 does not exist as a tag in the repo — should fall back to main.
+	if err := ResolveNixhome("", buildDir, "v99.0.0", false); err != nil {
+		t.Fatalf("ResolveNixhome with missing tag: %v", err)
+	}
+
+	dest := filepath.Join(buildDir, "nixhome")
+	for _, f := range []string{"stacks/base.nix", "modules/base.nix"} {
+		if _, err := os.Stat(filepath.Join(dest, f)); err != nil {
+			t.Errorf("expected %s in cloned nixhome after fallback: %v", f, err)
+		}
+	}
+}
