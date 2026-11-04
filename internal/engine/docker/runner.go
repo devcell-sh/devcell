@@ -339,6 +339,7 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 		lifecycle = "oneshot"
 	}
 	argv = append(argv, "--label", "devcell.lifecycle="+lifecycle)
+	argv = append(argv, "--label", "devcell.workspace="+c.WorkspaceName)
 	argv = append(argv, "--label", "devcell.policy="+policy.Label())
 
 	// Container-layout env vars. The cell-level ones (APP_NAME,

@@ -5,18 +5,18 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"text/tabwriter"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/lipgloss/table"
 	"gopkg.in/yaml.v3"
 )
 
 // OutputFormat controls how PrintTable and PrintData emit output.
-// Values: "text" (default lipgloss table), "json", "yaml".
+// Values: "text" (default padded table), "json", "yaml".
 var OutputFormat = "text"
 
 // PrintTable renders headers+rows in the current OutputFormat.
-// text: lipgloss bordered table. json/yaml: array of objects keyed by header.
+// text: borderless padded columns (docker ps / kubectl style).
+// json/yaml: array of objects keyed by header.
 func PrintTable(headers []string, rows [][]string) {
 	switch OutputFormat {
 	case "json":
@@ -31,12 +31,12 @@ func PrintTable(headers []string, rows [][]string) {
 		enc.Encode(data) //nolint:errcheck
 		enc.Close()      //nolint:errcheck
 	default:
-		t := table.New().
-			Border(lipgloss.NormalBorder()).
-			BorderStyle(TableBorder).
-			Headers(headers...).
-			Rows(rows...)
-		fmt.Println(t)
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+		fmt.Fprintln(w, strings.Join(headers, "\t"))
+		for _, row := range rows {
+			fmt.Fprintln(w, strings.Join(row, "\t"))
+		}
+		w.Flush() //nolint:errcheck
 	}
 }
 
@@ -58,9 +58,11 @@ func PrintData(v any) {
 }
 
 // headerKey converts a table header string to a JSON/YAML object key.
-// "APP_NAME" → "app_name", "RDP Port" → "rdp_port"
+// "APP_NAME" → "app_name", "RDP Port" → "rdp_port", "CPU%" → "cpu"
 func headerKey(h string) string {
-	return strings.ToLower(strings.ReplaceAll(h, " ", "_"))
+	h = strings.ToLower(strings.ReplaceAll(h, " ", "_"))
+	h = strings.TrimRight(h, "%")
+	return h
 }
 
 // rowsToMaps converts parallel header+row slices to a slice of string maps.
