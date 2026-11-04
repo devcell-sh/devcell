@@ -24,6 +24,9 @@
 # Install the project's own flake.nix into the cell. Default: false. Env: DEVCELL_FLAKE.
 # flake = false
 #
+# Use /<cellName> as the container workdir instead of the full host path. Default: false.
+# short_project_dir = false
+#
 # --- Runtime ---
 # Extra volume mounts: /path, /host:/container, /host:/container:ro.
 # volumes = ["~/data:/data:ro"]
@@ -192,8 +195,10 @@
 
 # --- Browser fingerprint (patchright stealth) ---
 # [stealth]
+# enabled = false                  # master switch. Default: false
 # arch = "arm"                     # arm, x86. Default: host architecture
 # platform = "Linux"               # Linux (default), macOS, Windows
+# useragent = ""                   # explicit UA override; default: auto-built from arch+platform
 
 # --- Extra environment variables forwarded into the container ---
 # Values support two expansion forms:
