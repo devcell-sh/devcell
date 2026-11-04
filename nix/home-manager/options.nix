@@ -68,6 +68,8 @@ in
     max_jobs = opt types.int;
     cores = opt types.int;
     threads = opt types.int;
+    chunk_size = opt types.str;
+    upload_jobs = opt types.int;
   };
   nix = {
     image = opt types.str;
