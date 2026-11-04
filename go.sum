@@ -100,8 +100,8 @@ github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/devcell-sh/go-diskoci v0.1.0 h1:smRDsbhId4CuVKd3pGoyH7JsKRFaCsOtGDJMry45rqk=
 github.com/devcell-sh/go-diskoci v0.1.0/go.mod h1:TnHyrwvNvtR/gdhXRIM07nzkI7QrDWw8m9Mg+exzrwo=
-github.com/devcell-sh/go-nixoci v0.3.0 h1:lnDAgyUQM4uLmZfYz6rqLitTzZ4UqCWd4rcHV37thQw=
-github.com/devcell-sh/go-nixoci v0.3.0/go.mod h1:YSZipF+SryYurcvQ5LvtRkWzkM/YJCDHeJYB+h/BZBg=
+github.com/devcell-sh/go-nixoci v0.4.0 h1:w01fFTXOkh5iv6g8uBaqCklIxzIF9qg2kjfUC30j22A=
+github.com/devcell-sh/go-nixoci v0.4.0/go.mod h1:YSZipF+SryYurcvQ5LvtRkWzkM/YJCDHeJYB+h/BZBg=
 github.com/devcell-sh/go-regedit v0.1.0 h1:+eT+eLZQZtDpKhzjlGBP2DdyNuUhFTX+8354jTw8W5Y=
 github.com/devcell-sh/go-regedit v0.1.0/go.mod h1:pWEerGIoAAVu00kuyFaXCmIzIWghcJYwiK8xGha1L5E=
 github.com/devcell-sh/go-wimlib v0.2.0 h1:mUQlTNTcKJlC29CLVHCUAcJV8XnOGlhvfn6lP25fDP8=
