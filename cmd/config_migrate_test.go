@@ -14,7 +14,7 @@ func runCellIn(t *testing.T, home string, args ...string) (string, error) {
 	t.Helper()
 	cmd := exec.Command(binaryPath, args...)
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }

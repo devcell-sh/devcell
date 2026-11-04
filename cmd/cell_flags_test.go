@@ -25,7 +25,7 @@ func runWithDefaultClaude(t *testing.T, args ...string) (string, string, int) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, binaryPath, args...)
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "HOME="+home, "DEVCELL_CELL_ID=1", "XDG_CONFIG_HOME=")
+	cmd.Env = testEnvWithHome(home)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
@@ -97,7 +97,7 @@ func TestCellStringFlag_MissingValueWithoutDefaultCommandExits1(t *testing.T) {
 	home := scaffoldedHome(t)
 	cmd := exec.Command(binaryPath, "--engine")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "HOME="+home, "DEVCELL_CELL_ID=1", "XDG_CONFIG_HOME=")
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	var exitErr *exec.ExitError
 	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
@@ -122,7 +122,7 @@ func TestCellStringFlag_CobraSubcommandShowsFlagHelp(t *testing.T) {
 	} {
 		cmd := exec.Command(binaryPath, tc.args...)
 		cmd.Dir = home
-		cmd.Env = append(os.Environ(), "HOME="+home, "DEVCELL_CELL_ID=1", "XDG_CONFIG_HOME=")
+		cmd.Env = testEnvWithHome(home)
 		out, err := cmd.CombinedOutput()
 		var exitErr *exec.ExitError
 		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {

@@ -16,7 +16,7 @@ func TestOpencode_NoArgs_InjectsDot(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "opencode", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opencode --dry-run failed: %v\noutput: %s", err, out)
@@ -39,7 +39,7 @@ func TestOpencode_WithArgs_NoDot(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "opencode", "--dry-run", "--model", "foo")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opencode --dry-run failed: %v\noutput: %s", err, out)
@@ -59,7 +59,7 @@ func TestOpencode_DebugOnly_InjectsDot(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "opencode", "--debug", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opencode --debug --dry-run failed: %v\noutput: %s", err, out)
@@ -84,7 +84,7 @@ func TestOpencode_ConfigContentEnvInjected(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "opencode", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opencode --dry-run failed: %v\noutput: %s", err, out)
@@ -130,7 +130,7 @@ models = ["deepseek-r1:32b", "qwen3:8b"]
 
 	cmd := exec.Command(binaryPath, "opencode", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opencode --dry-run failed: %v\noutput: %s", err, out)
@@ -180,7 +180,7 @@ func TestOpencode_ConfigContentNoModels(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "opencode", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opencode --dry-run failed: %v\noutput: %s", err, out)
@@ -233,7 +233,7 @@ models = ["qwen3:8b"]
 
 	cmd := exec.Command(binaryPath, "opencode", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home, "DEVCELL_WORKSPACE=main")
+	cmd.Env = testEnvWithHome(home, "DEVCELL_WORKSPACE=main")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opencode --dry-run failed: %v\noutput: %s", err, out)
@@ -289,7 +289,7 @@ models = ["deepseek-r1:32b"]
 
 	cmd := exec.Command(binaryPath, "opencode", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home, "DEVCELL_WORKSPACE=main")
+	cmd.Env = testEnvWithHome(home, "DEVCELL_WORKSPACE=main")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opencode --dry-run failed: %v\noutput: %s", err, out)
@@ -361,7 +361,7 @@ models = ["moonshotai/kimi-k3", "deepseek/deepseek-v4-pro"]
 
 	cmd := exec.Command(binaryPath, "opencode", "--openrouter", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home, "OPENROUTER_API_KEY=sk-or-test-key")
+	cmd.Env = testEnvWithHome(home, "OPENROUTER_API_KEY=sk-or-test-key")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opencode --openrouter --dry-run failed: %v\noutput: %s", err, out)
@@ -426,7 +426,7 @@ provider = "openrouter"
 
 	cmd := exec.Command(binaryPath, "opencode", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home, "OPENROUTER_API_KEY=sk-or-test-key")
+	cmd.Env = testEnvWithHome(home, "OPENROUTER_API_KEY=sk-or-test-key")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opencode --dry-run failed: %v\noutput: %s", err, out)

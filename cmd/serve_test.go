@@ -12,7 +12,7 @@ func TestServe_DryRun(t *testing.T) {
 	home := scaffoldedHome(t)
 
 	cmd := exec.Command(binaryPath, "serve", "--dry-run")
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("serve --dry-run failed: %v\noutput: %s", err, out)
@@ -29,7 +29,7 @@ func TestServe_PortFlag(t *testing.T) {
 	home := scaffoldedHome(t)
 
 	cmd := exec.Command(binaryPath, "serve", "--port", "9090", "--dry-run")
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("serve --port 9090 --dry-run failed: %v\noutput: %s", err, out)
@@ -46,7 +46,7 @@ func TestServe_DryRun_ShowsAPIKey(t *testing.T) {
 	home := scaffoldedHome(t)
 
 	cmd := exec.Command(binaryPath, "serve", "--dry-run")
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home, "DEVCELL_API_KEY=test-secret-123")
+	cmd.Env = testEnvWithHome(home, "DEVCELL_API_KEY=test-secret-123")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("serve --dry-run failed: %v\noutput: %s", err, out)
@@ -62,12 +62,13 @@ func TestServe_DryRun_ShowsAPIKey(t *testing.T) {
 func TestServe_DryRun_GeneratesKeyWhenUnset(t *testing.T) {
 	home := scaffoldedHome(t)
 
-	// Explicitly unset DEVCELL_API_KEY by filtering it out.
 	var env []string
 	for _, e := range os.Environ() {
-		if !strings.HasPrefix(e, "DEVCELL_API_KEY=") {
-			env = append(env, e)
+		k, _, _ := strings.Cut(e, "=")
+		if k == "DEVCELL_API_KEY" || k == "HOME" || k == "XDG_CONFIG_HOME" {
+			continue
 		}
+		env = append(env, e)
 	}
 	env = append(env, "DEVCELL_CELL_ID=1", "HOME="+home)
 

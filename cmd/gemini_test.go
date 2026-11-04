@@ -1,7 +1,6 @@
 package main_test
 
 import (
-	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -16,7 +15,7 @@ func TestGemini_DefaultFlags(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "gemini", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("gemini --dry-run failed: %v\noutput: %s", err, out)
@@ -39,7 +38,7 @@ func TestGemini_ForwardsUserArgs(t *testing.T) {
 	cmd := exec.Command(binaryPath, "gemini",
 		"--model=gemini-2.5-pro", "-p", "hi", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("gemini --dry-run failed: %v\noutput: %s", err, out)
@@ -62,7 +61,7 @@ func TestGemini_StripCellFlags(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "gemini", "--debug", "--ollama", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("gemini --debug --ollama --dry-run failed: %v\noutput: %s", err, out)

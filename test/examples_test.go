@@ -7,8 +7,10 @@ import (
 	"os"
 	osexec "os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/devcell-sh/devcell/internal/cfg"
 	"github.com/devcell-sh/devcell/internal/testutil"
@@ -180,6 +182,19 @@ func TestExamples_E2E(t *testing.T) {
 	}
 }
 
+// startupTimeout scales the container readiness timeout with available CPU
+// cores. The entrypoint (nix, mise, s6 init) is CPU-bound: 120s suffices on
+// 4+ cores but starves on the 2-core free GitHub runners.
+func startupTimeout() time.Duration {
+	const baseSec = 120 // calibrated for 4 cores
+	cpus := runtime.NumCPU()
+	sec := baseSec * 4 / cpus
+	if sec < baseSec {
+		sec = baseSec
+	}
+	return time.Duration(sec) * time.Second
+}
+
 // buildExampleImage builds an image for an example project by running
 // `cell build` from the example directory. Reuses existing images
 // when the tag (keyed to the current HEAD sha) already exists.
@@ -222,7 +237,7 @@ func startExampleContainer(t *testing.T, imageTag string) testcontainers.Contain
 		User: "0",
 		Cmd:  []string{"tail", "-f", "/dev/null"},
 		WaitingFor: wait.ForExec([]string{"pgrep", "tail"}).
-			WithStartupTimeout(120 * 1e9),
+			WithStartupTimeout(startupTimeout()),
 		Mounts: testcontainers.Mounts(
 			testcontainers.VolumeMount(thinVolumeName(), "/nix"),
 		),

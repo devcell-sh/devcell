@@ -1,7 +1,6 @@
 package main_test
 
 import (
-	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -21,10 +20,7 @@ func TestStart_DryRun(t *testing.T) {
 	home := scaffoldedHome(t)
 	cmd := exec.Command(binaryPath, "--dry-run", "--plain-text", "start")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(),
-		"DEVCELL_CELL_ID=0",
-		"HOME="+home,
-	)
+	cmd.Env = testEnvWithHome(home, "DEVCELL_CELL_ID=0")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("start --dry-run failed: %v\noutput: %s", err, out)

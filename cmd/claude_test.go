@@ -16,7 +16,7 @@ func TestClaude_OllamaFlag_InjectsEnv(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "claude", "--ollama", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("claude --ollama --dry-run failed: %v\noutput: %s", err, out)
@@ -37,7 +37,7 @@ func TestClaude_OllamaFlag_Stripped(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "claude", "--ollama", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("claude --ollama --dry-run failed: %v\noutput: %s", err, out)
@@ -61,7 +61,7 @@ func TestClaude_NoOllama_NoEnv(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "claude", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("claude --dry-run failed: %v\noutput: %s", err, out)
@@ -92,7 +92,7 @@ provider = "ollama"
 
 	cmd := exec.Command(binaryPath, "claude", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("claude --dry-run failed: %v\noutput: %s", err, out)
@@ -124,7 +124,7 @@ model = "ollama/qwen3:30b"
 
 	cmd := exec.Command(binaryPath, "claude", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("claude --dry-run failed: %v\noutput: %s", err, out)
@@ -156,7 +156,7 @@ model = "qwen3:30b"
 
 	cmd := exec.Command(binaryPath, "claude", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("claude --dry-run failed: %v\noutput: %s", err, out)
@@ -185,7 +185,7 @@ model = "deepseek-r1:32b"
 
 	cmd := exec.Command(binaryPath, "claude", "--ollama", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("claude --ollama --dry-run failed: %v\noutput: %s", err, out)
@@ -205,7 +205,7 @@ func TestClaude_OllamaNoModel_NoAnthropicModel(t *testing.T) {
 	// ollama not running in test env → auto-detect silently returns ""
 	cmd := exec.Command(binaryPath, "claude", "--ollama", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("claude --ollama --dry-run failed: %v\noutput: %s", err, out)
@@ -224,7 +224,7 @@ func TestClaude_OpenRouterFlag_InjectsEnv(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "claude", "--openrouter", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home, "OPENROUTER_API_KEY=sk-or-test-key")
+	cmd.Env = testEnvWithHome(home, "OPENROUTER_API_KEY=sk-or-test-key")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("claude --openrouter --dry-run failed: %v\noutput: %s", err, out)
@@ -251,7 +251,7 @@ func TestClaude_OpenRouterFlag_Stripped(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "claude", "--openrouter", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home, "OPENROUTER_API_KEY=sk-or-test-key")
+	cmd.Env = testEnvWithHome(home, "OPENROUTER_API_KEY=sk-or-test-key")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("claude --openrouter --dry-run failed: %v\noutput: %s", err, out)
@@ -281,7 +281,7 @@ provider = "openrouter"
 
 	cmd := exec.Command(binaryPath, "claude", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home, "OPENROUTER_API_KEY=sk-or-test-key")
+	cmd.Env = testEnvWithHome(home, "OPENROUTER_API_KEY=sk-or-test-key")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("claude --dry-run failed: %v\noutput: %s", err, out)
@@ -313,7 +313,7 @@ model = "openrouter/google/gemini-2.5-pro"
 
 	cmd := exec.Command(binaryPath, "claude", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home, "OPENROUTER_API_KEY=sk-or-test-key")
+	cmd.Env = testEnvWithHome(home, "OPENROUTER_API_KEY=sk-or-test-key")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("claude --dry-run failed: %v\noutput: %s", err, out)
@@ -363,7 +363,7 @@ models = ["moonshotai/kimi-k3", "google/gemini-2.5-pro", "x-ai/grok-4.6"]
 
 	cmd := exec.Command(binaryPath, "claude", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home, "OPENROUTER_API_KEY=sk-or-test-key")
+	cmd.Env = testEnvWithHome(home, "OPENROUTER_API_KEY=sk-or-test-key")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("claude --dry-run failed: %v\noutput: %s", err, out)
@@ -381,7 +381,7 @@ func TestClaude_OllamaWithUserArgs(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "claude", "--ollama", "--dry-run", "--resume")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("claude --ollama --dry-run --resume failed: %v\noutput: %s", err, out)

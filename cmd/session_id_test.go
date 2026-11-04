@@ -1,7 +1,6 @@
 package main_test
 
 import (
-	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -14,7 +13,7 @@ func TestClaude_SessionID_Injected(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "claude", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("claude --dry-run failed: %v\noutput: %s", err, out)
@@ -34,7 +33,7 @@ func TestClaude_SessionID_Deterministic(t *testing.T) {
 	run := func() string {
 		cmd := exec.Command(binaryPath, "claude", "--dry-run")
 		cmd.Dir = home
-		cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=42", "HOME="+home)
+		cmd.Env = testEnvWithHome(home, "DEVCELL_CELL_ID=42")
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("claude --dry-run failed: %v\noutput: %s", err, out)
@@ -60,7 +59,7 @@ func TestClaude_SessionID_DiffersByCellID(t *testing.T) {
 	runWithCellID := func(cellID string) string {
 		cmd := exec.Command(binaryPath, "claude", "--dry-run")
 		cmd.Dir = home
-		cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID="+cellID, "HOME="+home)
+		cmd.Env = testEnvWithHome(home, "DEVCELL_CELL_ID="+cellID)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("claude --dry-run failed: %v\noutput: %s", err, out)
@@ -83,7 +82,7 @@ func TestOpencode_NoSessionFlag(t *testing.T) {
 
 	cmd := exec.Command(binaryPath, "opencode", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(), "DEVCELL_CELL_ID=1", "HOME="+home)
+	cmd.Env = testEnvWithHome(home)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opencode --dry-run failed: %v\noutput: %s", err, out)

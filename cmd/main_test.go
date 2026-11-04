@@ -80,6 +80,21 @@ func TestPlainTextFlagInHelp(t *testing.T) {
 	}
 }
 
+// testEnvWithHome returns os.Environ() with HOME and XDG_CONFIG_HOME stripped,
+// then HOME=home, DEVCELL_CELL_ID=1, and any extras appended.
+func testEnvWithHome(home string, extras ...string) []string {
+	var env []string
+	for _, kv := range os.Environ() {
+		k, _, _ := strings.Cut(kv, "=")
+		if k == "HOME" || k == "XDG_CONFIG_HOME" {
+			continue
+		}
+		env = append(env, kv)
+	}
+	env = append(env, "DEVCELL_CELL_ID=1", "HOME="+home)
+	return append(env, extras...)
+}
+
 // scaffoldedHome creates a temp HOME with global devcell.toml and a project-level
 // devcell.toml so the CLI skips the first-run interactive prompt.
 // Returns home path. The home dir doubles as a project root (has devcell.toml)
@@ -220,10 +235,7 @@ func TestPlainTextNoSpinnerChars(t *testing.T) {
 	home := scaffoldedHome(t)
 	cmd := exec.Command(binaryPath, "--plain-text", "shell", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(),
-		"DEVCELL_CELL_ID=1",
-		"HOME="+home,
-	)
+	cmd.Env = testEnvWithHome(home)
 	out, _ := cmd.CombinedOutput()
 	s := string(out)
 	for _, ch := range spinnerChars {
@@ -240,10 +252,7 @@ func TestDebugNoSpinnerChars(t *testing.T) {
 	home := scaffoldedHome(t)
 	cmd := exec.Command(binaryPath, "--debug", "shell", "--dry-run")
 	cmd.Dir = home
-	cmd.Env = append(os.Environ(),
-		"DEVCELL_CELL_ID=1",
-		"HOME="+home,
-	)
+	cmd.Env = testEnvWithHome(home)
 	out, _ := cmd.CombinedOutput()
 	s := string(out)
 	for _, ch := range spinnerChars {

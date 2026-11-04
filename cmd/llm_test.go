@@ -19,15 +19,7 @@ func dryRunWithLLMConfig(t *testing.T, toml string, args ...string) string {
 	}
 	cmd := exec.Command(binaryPath, append(args, "--dry-run")...)
 	cmd.Dir = home
-	var env []string
-	for _, kv := range os.Environ() {
-		k, _, _ := strings.Cut(kv, "=")
-		if k == "HOME" || k == "XDG_CONFIG_HOME" {
-			continue
-		}
-		env = append(env, kv)
-	}
-	cmd.Env = append(env, "DEVCELL_CELL_ID=1", "HOME="+home, "OPENROUTER_API_KEY=sk-or-test-key")
+	cmd.Env = testEnvWithHome(home, "OPENROUTER_API_KEY=sk-or-test-key")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("%v --dry-run failed: %v\noutput: %s", args, err, out)
