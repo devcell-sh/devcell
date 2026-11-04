@@ -206,7 +206,7 @@ jobs:
       # (unless cancelled) so a partial build still refreshes the cache.
       - name: Publish nix cache
         if: ${{ !cancelled() && inputs.skip_nix_cache != true }}
-        timeout-minutes: 120
+        timeout-minutes: 75
         env:
           ARCH: ${{ matrix.arch }}
           HASH: ${{ github.sha }}

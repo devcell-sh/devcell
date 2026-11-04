@@ -116,7 +116,7 @@ jobs:
       # prior-step failure (partial volume is still useful).
       - name: Publish nix cache
         if: ${{ !cancelled() && inputs.skip_nix_cache != true }}
-        timeout-minutes: 45
+        timeout-minutes: 75
         env:
           ARCH: ${{ matrix.arch }}
           HASH: ${{ github.sha }}
