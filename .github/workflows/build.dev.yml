@@ -99,21 +99,11 @@ jobs:
     needs: secrets
     strategy:
       fail-fast: false
-      # Serialize amd64 + arm64 to avoid stressing GHCR + cache.nixos.org
-      # with two concurrent multi-GB push/pull pipelines from the same
-      # repo. Doubles wall-clock; halves peak network pressure.
-      max-parallel: 1
       matrix:
         include:
-          # amd64 temporarily disabled while we debug the post-base
-          # cache-publish hang on arm64. Re-enable once arm64 is healthy.
-          # - runner: ubuntu-24.04
-          #   arch: amd64
-          #   platform: linux/amd64
-          - runner: ubuntu-24.04-arm
-            arch: arm64
-            platform: linux/arm64
-    runs-on: ${{ matrix.runner }}
+          - arch: amd64
+            platform: linux/amd64
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
 
@@ -221,12 +211,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # amd64 disabled in step with docker-build above.
-          # - runner: ubuntu-24.04
-          #   arch: amd64
-          - runner: ubuntu-24.04-arm
-            arch: arm64
-    runs-on: ${{ matrix.runner }}
+          - arch: amd64
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
 
@@ -296,15 +282,9 @@ jobs:
         run: go test -v -timeout 2400s ./test/...
 
   examples-test:
-    name: Examples E2E (${{ matrix.arch }})
+    name: Examples E2E
     needs: docker-build
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: ubuntu-24.04-arm
-            arch: arm64
-    runs-on: ${{ matrix.runner }}
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
 
@@ -337,8 +317,8 @@ jobs:
         run: |
           HASH=${{ github.sha }}
           ./bin/devdevcell nix-store pull \
-            --image "${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}" \
-            --fallback "${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest" \
+            --image "${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-amd64-${HASH}" \
+            --fallback "${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-amd64-latest" \
             --volume "devcell-nix-store" \
           || echo "WARN: cache pull failed, examples will build from scratch"
 
@@ -368,19 +348,15 @@ jobs:
       - name: Create GHCR manifests (per stack + ultimate as canonical)
         run: |
           R=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}
-          # amd64 inputs commented out in step with docker-build matrix
-          # above — re-add the `${R}:v0.0.0-amd64-*` arguments when amd64
-          # is re-enabled. arm64-only manifests are still valid OCI
-          # indexes; tags resolve cleanly on arm64 hosts.
           docker buildx imagetools create \
             -t "${R}:v0.0.0-base" \
-            "${R}:v0.0.0-arm64-base"
+            "${R}:v0.0.0-amd64-base"
           docker buildx imagetools create \
             -t "${R}:v0.0.0-ultimate" \
             -t "${R}:v0.0.0" \
             -t "${R}:latest" \
             -t "${R}:dev" \
-            "${R}:v0.0.0-arm64-ultimate"
+            "${R}:v0.0.0-amd64-ultimate"
 
   devcell-build:
     name: Devcell CLI Dev Build
@@ -437,9 +413,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # amd64 disabled in step with docker-build matrix above.
-          # - runner: ubuntu-24.04
-          #   arch: amd64
           - runner: ubuntu-24.04-arm
             arch: arm64
     runs-on: ${{ matrix.runner }}
@@ -515,9 +488,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # amd64 disabled in step with docker-build matrix above.
-          # - runner: ubuntu-24.04
-          #   arch: amd64
           - runner: ubuntu-24.04-arm
             arch: arm64
     runs-on: ${{ matrix.runner }}

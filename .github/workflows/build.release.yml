@@ -35,13 +35,11 @@ jobs:
       max-parallel: 1
       matrix:
         include:
-          - runner: ubuntu-24.04
-            arch: amd64
+          - arch: amd64
             platform: linux/amd64
-          - runner: ubuntu-24.04-arm
-            arch: arm64
+          - arch: arm64
             platform: linux/arm64
-    runs-on: ${{ matrix.runner }}
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
 
@@ -57,6 +55,9 @@ jobs:
           sudo docker image prune -af
           df -h
 
+      - name: Set up QEMU (cross-arch builds)
+        if: matrix.arch != 'amd64'
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -80,7 +81,7 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      # task cell:build = swagger:generate → CGO_ENABLED=0 go build with ldflags
+      # task cell:build = swagger:generate -> CGO_ENABLED=0 go build with ldflags
       # for GitCommit + BuildDate. Single source of truth shared with local dev.
       - name: Build devcell binary
         run: task cell:build
@@ -99,10 +100,13 @@ jobs:
             --volume "devcell-nix-store-${{ matrix.arch }}" \
           || echo "WARN: cache pull failed, continuing with empty volume"
 
+      # DEVCELL_ARCH tells DetectArch() which platform to build for,
+      # enabling cross-arch builds (arm64 on x86 via QEMU).
       - name: Build thin image
         id: build
         env:
           DEVCELL_NIX_VOLUME: devcell-nix-store-${{ matrix.arch }}
+          DEVCELL_ARCH: ${{ matrix.arch }}
         run: |
           TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:${{ env.VERSION }}-${{ matrix.arch }}"
           ./bin/devcell build --image "$TAG" --debug
