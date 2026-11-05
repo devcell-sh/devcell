@@ -183,11 +183,10 @@ func TestExamples_E2E(t *testing.T) {
 }
 
 // startupTimeout scales the container readiness timeout with available CPU
-// cores. The entrypoint (nix, mise, s6 init) is CPU-bound: 300s suffices on
-// 4+ cores but starves on 2-core free GitHub runners; ARM64 runners need more
-// time than x86_64 for the same core count.
+// cores. The entrypoint (nix, mise, s6 init) is CPU-bound; ARM64 CI runners
+// routinely need 10-15 min for dev-stack images with full mise installs.
 func startupTimeout() time.Duration {
-	const baseSec = 300 // calibrated for 4-core ARM64 GitHub runners
+	const baseSec = 900 // calibrated for ARM64 GitHub runners with dev-stack entrypoint
 	cpus := runtime.NumCPU()
 	sec := baseSec * 4 / cpus
 	if sec < baseSec {

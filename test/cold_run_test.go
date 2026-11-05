@@ -106,7 +106,7 @@ nixhome = "`+localNixhome+`"
 		Image:      imageTag,
 		User:       "0",
 		Cmd:        []string{"tail", "-f", "/dev/null"},
-		WaitingFor: wait.ForExec([]string{"pgrep", "tail"}).WithStartupTimeout(120 * 1e9),
+		WaitingFor: wait.ForExec([]string{"pgrep", "tail"}).WithStartupTimeout(startupTimeout()),
 		Mounts: testcontainers.Mounts(
 			testcontainers.VolumeMount(volName, "/nix"),
 		),

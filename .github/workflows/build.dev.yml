@@ -293,7 +293,7 @@ jobs:
           DEVCELL_TEST_PROJECT_DIR: ${{ runner.temp }}/devcell-test
           MCP_SECRET_TEST_PASSWORD: fake-secret-ci-value
           MCP_SECRET_GITHUB_TOKEN: fake-token-ci-value
-        run: go test -v -timeout 1200s ./test/...
+        run: go test -v -timeout 2400s ./test/...
 
   examples-test:
     name: Examples E2E (${{ matrix.arch }})
@@ -345,7 +345,7 @@ jobs:
       - name: Run examples E2E tests
         env:
           DEVCELL_TEST_PROJECT_DIR: ${{ runner.temp }}/devcell-test
-        run: go test -v -timeout 1800s -run 'TestExamples' ./test/...
+        run: go test -v -timeout 5400s -run 'TestExamples' ./test/...
 
   docker-manifest:
     name: Docker Manifests
@@ -412,7 +412,7 @@ jobs:
       - name: Add tag
         run: |
           git tag -a ${{ env.RELEASE_VERSION }} -m "Development release"
-          git push origin ${{ github.ref_name }}
+          git push origin refs/tags/${{ env.RELEASE_VERSION }}
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
