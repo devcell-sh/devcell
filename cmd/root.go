@@ -376,6 +376,7 @@ var cellBoolFlags = map[string]bool{
 	"--no-1password":           true, // alias for --no-secrets (legacy, CELL-42)
 	"--local":                  true, // deprecated no-op: only skipped the retired libvirt auto-default
 	"--auto-cleanup":           true, // run the CELL-334 root reaper at cell start (CELL-390)
+	"--no-hygiene":             true, // skip automatic startup hygiene (stale root removal, registry cache wipe)
 	"--use-flake":              true, // opt-in to project-level flake.nix install (CELL-447)
 	"--no-flake":               true, // legacy, ignored (flake is off by default now)
 	"--skip-flake":             true, // legacy, ignored
@@ -588,6 +589,7 @@ func runOpts(c engine.Cell, binary string, defaultFlags, userArgs []string, extr
 		NoPorts:              scanFlag("--no-ports"),
 		UseFlake:             scanFlag("--use-flake"),
 		AutoCleanup:          scanFlag("--auto-cleanup"),
+		NoHygiene:            scanFlag("--no-hygiene"),
 		ForceInsecureNetwork: scanFlag("--force-insecure-network") || os.Getenv("DEVCELL_FORCE_INSECURE_NETWORK") == "1",
 		Solitary:             scanFlag("--solitary") || os.Getenv("DEVCELL_SOLITARY") == "1",
 	}

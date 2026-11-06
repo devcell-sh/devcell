@@ -116,6 +116,10 @@ type RunOpts struct {
 	// AutoCleanup reaps nix-store roots no running cell uses before the
 	// agent starts (--auto-cleanup). Docker only.
 	AutoCleanup bool
+	// NoHygiene disables automatic startup hygiene: stale GC root removal,
+	// orphaned metadata removal, and registry cache wipe (--no-hygiene).
+	// Docker only.
+	NoHygiene bool
 	// ForceInsecureNetwork disables proxy mode even when [network.proxy]
 	// enabled = true (--force-insecure-network). Docker only.
 	ForceInsecureNetwork bool

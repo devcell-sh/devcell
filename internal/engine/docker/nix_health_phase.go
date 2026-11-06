@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/devcell-sh/devcell/internal/ux"
@@ -13,14 +14,18 @@ import (
 
 // CELL-390: "Nix store" preflight phase — read-only health report on the
 // shared nix volume at every cell start. Non-fatal by design: any probe
-// failure degrades to a "skipped" detail, never blocks boot. Mutation
-// happens only behind the explicit --auto-cleanup opt-in, which runs the
+// failure degrades to a "skipped" detail, never blocks boot.
+//
+// Hygiene (default-on, --no-hygiene to disable): removes dangling GC root
+// symlinks and orphaned metadata, wipes the ephemeral registry blob cache.
+// Runs only when the probe detects stale roots, so clean volumes skip the
+// extra container. autoCleanup (--auto-cleanup) is the more aggressive
 // CELL-334 reaper (running-only retention).
 //
 // Every datapoint and decision is mirrored to ux.Debugf so `--debug` shows
 // the full check: volume, argv, raw probe output, parsed counts, cleanup
-// closures, and reap results. autoCleanup is --auto-cleanup.
-func nixStorePhase(ctx context.Context, pr ux.Phaser, thin bool, baseDir string, staleWarn, autoCleanup bool) error {
+// closures, and reap results.
+func nixStorePhase(ctx context.Context, pr ux.Phaser, thin bool, baseDir, hostHome string, staleWarn, autoCleanup, noHygiene bool) error {
 	if !thin {
 		ux.Debugf("nix health: skipped (not thin mode — no store volume)")
 		return nil
@@ -62,6 +67,9 @@ func nixStorePhase(ctx context.Context, pr ux.Phaser, thin bool, baseDir string,
 			if len(rowDetail)+len(extra) <= budget {
 				rowDetail += extra
 			}
+		}
+		if !noHygiene {
+			rowDetail += "; " + hygieneDetail(ctx, health, hostHome)
 		}
 		if autoCleanup {
 			rowDetail += "; " + autoCleanupDetail(ctx)
@@ -151,6 +159,54 @@ func closureCheckPhase(ctx context.Context, pr ux.Phaser, thin bool, imageTag st
 	}
 
 	return rebuild()
+}
+
+// hygieneDetail runs the zero-risk startup hygiene: stale GC root removal,
+// orphaned metadata removal, and registry blob cache wipe. Failures degrade
+// to debug output; a cell start must never break because hygiene did.
+func hygieneDetail(ctx context.Context, health NixStoreHealth, hostHome string) string {
+	if v := os.Getenv("DEVCELL_HYGIENE"); v == "false" || v == "0" {
+		ux.Debugf("hygiene: skipped (DEVCELL_HYGIENE=%s)", v)
+		return "hygiene skipped"
+	}
+
+	var parts []string
+
+	if health.StaleRoots > 0 {
+		volume := ThinStoreVolume()
+		argv := HygieneNixArgv(volume)
+		ux.Debugf("hygiene: running nix cleanup (stale=%d)", health.StaleRoots)
+		ux.Debugf("hygiene: argv=%s", DebugArgv(argv))
+
+		out, err := exec.CommandContext(ctx, argv[0], argv[1:]...).CombinedOutput()
+		ux.Debugf("hygiene: output=%q err=%v", strings.TrimSpace(string(out)), err)
+		if err != nil {
+			ux.Debugf("hygiene: nix cleanup failed: %v", err)
+		} else {
+			stale, orphaned := ParseHygieneResult(string(out))
+			if stale > 0 {
+				parts = append(parts, plural(stale, "stale root")+" removed")
+			}
+			if orphaned > 0 {
+				parts = append(parts, plural(orphaned, "orphaned meta")+" removed")
+			}
+		}
+	}
+
+	registryDir := filepath.Join(hostHome, ".devcell", "registry")
+	if info, err := os.Stat(registryDir); err == nil && info.IsDir() {
+		ux.Debugf("hygiene: wiping registry cache %s", registryDir)
+		if err := os.RemoveAll(registryDir); err != nil {
+			ux.Debugf("hygiene: registry wipe failed: %v", err)
+		} else {
+			parts = append(parts, "registry cleared")
+		}
+	}
+
+	if len(parts) == 0 {
+		return "hygiene clean"
+	}
+	return strings.Join(parts, ", ")
 }
 
 // autoCleanupDetail runs the CELL-334 reaper without prompting — the

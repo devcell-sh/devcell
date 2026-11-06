@@ -92,7 +92,7 @@ func TestRunOpts_MapsCellFlags(t *testing.T) {
 
 	t.Run("all set", func(t *testing.T) {
 		withOSArgs(t, "claude", "--build", "--background", "--dry-run", "--debug", "--nix-daemon",
-			"--no-ports", "--use-flake", "--auto-cleanup", "--no-secrets", "-c")
+			"--no-ports", "--use-flake", "--auto-cleanup", "--no-hygiene", "--no-secrets", "-c")
 		startDetach = true
 		t.Cleanup(func() { startDetach = false })
 
@@ -101,7 +101,7 @@ func TestRunOpts_MapsCellFlags(t *testing.T) {
 		want := engine.RunOpts{
 			Cell: c, Binary: "claude", DefaultFlags: []string{"--yolo"}, Args: []string{"-c"}, Env: env,
 			Rebuild: true, Background: true, DryRun: true, Debug: true, Detach: true, NoSecrets: true,
-			NixDaemon: true, NoPorts: true, UseFlake: true, AutoCleanup: true,
+			NixDaemon: true, NoPorts: true, UseFlake: true, AutoCleanup: true, NoHygiene: true,
 		}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("runOpts =\n  %+v\nwant\n  %+v", got, want)

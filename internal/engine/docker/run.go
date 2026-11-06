@@ -264,7 +264,8 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		}
 	}
 
-	// Orphan cleanup: remove stopped containers. Running containers are
+	// Orphan cleanup: remove stopped containers and reap stale oneshot
+	// containers globally. Running containers with active sessions are
 	// left alone so we can attach to them via docker exec.
 	// Phase-level timeout: orphan cleanup is best-effort housekeeping —
 	// a slow daemon must not block boot indefinitely.
@@ -272,6 +273,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		orphanCtx, orphanCancel := context.WithTimeout(ctx, 30*time.Second)
 		defer orphanCancel()
 		_ = CleanupOrphanedProxies(orphanCtx, c.CellName)
+		ReapStaleCellsSilent(orphanCtx, c.ContainerName)
 		if ContainerRunning(orphanCtx, c.ContainerName) {
 			return nil
 		}
@@ -280,7 +282,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		return err
 	}
 
-	if err := nixStorePhase(ctx, panel, thin, c.BaseDir, cellCfg.Cell.StaleWarningEnabled(), opts.AutoCleanup); err != nil {
+	if err := nixStorePhase(ctx, panel, thin, c.BaseDir, c.HostHome, cellCfg.Cell.StaleWarningEnabled(), opts.AutoCleanup, opts.NoHygiene); err != nil {
 		return err
 	}
 
@@ -573,6 +575,12 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	// On exit: auto-stopped if we started it (oneshot); left running if
 	// we attached to an existing container or it was started via `cell start`.
 
+	// Trap SIGHUP early so Go's default handler (terminate) doesn't kill
+	// us before our deferred cleanup can stop the container.
+	sighupCh := make(chan os.Signal, 1)
+	signal.Notify(sighupCh, syscall.SIGHUP)
+	defer signal.Stop(sighupCh)
+
 	sess, sessErr := cellrun.Begin(c.BaseDir, binary, userArgs)
 	if sessErr != nil {
 		ux.Debugf("cellrun begin: %v", sessErr)
@@ -595,6 +603,11 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	}
 
 	// ── Group 3: Boot ────────────────────────────────────────────────────
+
+	// cleanedUp prevents the deferred safety net from double-stopping a
+	// container that the normal auto-stop block already handled.
+	var cleanedUp bool
+
 	if !alreadyRunning {
 		panel.SetBoot("Boot", "Container", streak.Running, "Starting container")
 		startSpec := spec
@@ -620,6 +633,26 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 			return err
 		}
 		panel.SetBoot("Boot", "Container", streak.Done, "Container started")
+
+		// Safety net: if any exit path below skips the normal auto-stop
+		// block (boot interrupt, timeout, BeforeAttach failure, exec
+		// failure, or SIGHUP), stop the oneshot container so it doesn't
+		// dangle. The normal path sets cleanedUp=true to prevent double-stop.
+		defer func() {
+			if cleanedUp {
+				return
+			}
+			if ContainerLabel(context.Background(), c.ContainerName, "devcell.lifecycle") != "oneshot" {
+				return
+			}
+			ux.Debugf("defer: stopping orphaned oneshot container %s", c.ContainerName)
+			sCtx, sCancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer sCancel()
+			stopCmd := exec.CommandContext(sCtx, "docker", "stop", c.ContainerName)
+			stopCmd.Stdout = io.Discard
+			stopCmd.Stderr = io.Discard
+			_ = stopCmd.Run()
+		}()
 
 		// Watch JSONL events from docker logs for boot progress.
 		logWatcher := NewContainerLogWatcher(ctx, c.ContainerName, startTime)
@@ -690,7 +723,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	cmd.Stderr = os.Stderr
 
 	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	go func() {
 		for sig := range sigCh {
 			if cmd.Process != nil {
@@ -724,6 +757,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		stopCmd.Stderr = io.Discard
 		_ = stopCmd.Run()
 	}
+	cleanedUp = true
 
 	if proxyEnabled && !ContainerRunning(ctx, c.ContainerName) {
 		gwName := ProxySidecarName(c.CellName)
