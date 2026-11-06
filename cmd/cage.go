@@ -28,7 +28,7 @@ func startBootPopup(c config.Config, cellCfg cfg.CellConfig, opts engine.RunOpts
 	p, err := cage.StartPopup(cage.PopupSpec{
 		SocketPath: cage.SocketPath(c.CellName),
 		LogPath:    cage.StatePath(c.WorkspaceHome, "boot-"+c.CellName+".log"),
-		Title:      " " + c.WorkspaceName + "  " + c.CellName + " ",
+		Title:      " " + c.WorkspaceName + "  " + c.CellName + " (" + cellCfg.Cell.ResolvedStack() + ") ",
 		Accent:     theme.Accent,
 		Geometry:   geom,
 	})
