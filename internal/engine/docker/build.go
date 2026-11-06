@@ -328,13 +328,15 @@ func build(ctx context.Context, c engine.Cell, p buildParams) error {
 	cmd.Stdout = out
 	cmd.Stderr = out
 	if err := cmd.Run(); err != nil {
-		sp.Fail(buildLabel + " failed")
 		if BuilderOrphanedByCancel(err, ctx.Err()) {
+			sp.Fail(buildLabel + " interrupted — stopping builder")
 			// ctx is already cancelled; use a fresh one so the cleanup runs.
 			rmCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			_ = exec.CommandContext(rmCtx, "docker", "rm", "-f", containerName).Run()
 			cancel()
+			return fmt.Errorf("thin build: interrupted")
 		}
+		sp.Fail(buildLabel + " failed")
 		if !ux.Verbose && buf.Len() > 0 {
 			fmt.Fprint(os.Stderr, buf.String())
 		}
