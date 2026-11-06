@@ -9,48 +9,26 @@ import (
 	"github.com/devcell-sh/devcell/internal/engine/docker"
 )
 
-// `cell build prune` (default mode, no --pure, no --force) runs the
-// same Docker prune sequence as the user's cleandocker zsh function:
-//
-//	docker rm -f $(docker ps -aq) 2>/dev/null || true
-//	docker system prune -af
-//	docker volume prune -f
-//	docker buildx prune -af
-//
-// This sequence is identical on macOS and Linux native — the Docker daemon
-// surface is the same on both. No sudo. No host-specific branching.
+// `cell build prune` (default mode, no --force) removes only stopped
+// containers, unused images, volumes, and BuildKit cache. Running
+// containers are never touched — the nuclear `docker rm -f` is --force only.
 func TestBuildDockerPruneSteps_Default_RunsCleandockerSequenceOnBothOSes(t *testing.T) {
 	for _, goos := range []string{"darwin", "linux"} {
 		t.Run(goos, func(t *testing.T) {
 			steps := docker.BuildDockerPruneSteps(docker.PruneOpts{GOOS: goos})
 
-			if len(steps) != 4 {
-				t.Fatalf("want 4 steps, got %d: %+v", len(steps), steps)
-			}
-
-			// Step 1: must remove ALL containers. Uses Func (pure Go)
-			// instead of sh -c so devcell works on hosts without sh in PATH.
-			if steps[0].Func == nil {
-				t.Errorf("step 1 must have Func set (pure Go, no sh dependency)")
-			}
-			step1 := strings.Join(steps[0].Argv, " ")
-			if !strings.Contains(step1, "docker") {
-				t.Errorf("step 1 Argv (display) should mention docker: %q", step1)
-			}
-			if !steps[0].IgnoreError {
-				t.Errorf("step 1 (docker rm) must IgnoreError — empty container list errors")
-			}
-
-			// Steps 2-4 are exact argvs.
-			wantTail := [][]string{
-				{"docker", "system", "prune", "-af"},
+			want := [][]string{
+				{"docker", "container", "prune", "-f"},
+				{"docker", "image", "prune", "-af"},
 				{"docker", "volume", "prune", "-f"},
 				{"docker", "buildx", "prune", "-af"},
 			}
-			for i, want := range wantTail {
-				got := steps[i+1].Argv
-				if !equalArgv(got, want) {
-					t.Errorf("step %d: got %v, want %v", i+2, got, want)
+			if len(steps) != len(want) {
+				t.Fatalf("want %d steps, got %d: %+v", len(want), len(steps), steps)
+			}
+			for i, w := range want {
+				if !equalArgv(steps[i].Argv, w) {
+					t.Errorf("step %d: got %v, want %v", i+1, steps[i].Argv, w)
 				}
 			}
 
@@ -61,13 +39,27 @@ func TestBuildDockerPruneSteps_Default_RunsCleandockerSequenceOnBothOSes(t *test
 				}
 			}
 
-			// No DryRun in default mode — these are real commands.
+			// No DryRun in default mode.
 			for i, s := range steps {
 				if s.DryRun {
 					t.Errorf("step %d marked DryRun in default mode: %v", i+1, s.Argv)
 				}
 			}
 		})
+	}
+}
+
+// Default prune must never force-remove running containers.
+func TestBuildDockerPruneSteps_Default_NeverKillsRunningContainers(t *testing.T) {
+	steps := docker.BuildDockerPruneSteps(docker.PruneOpts{GOOS: "darwin"})
+	for i, s := range steps {
+		argv := strings.Join(s.Argv, " ")
+		if strings.Contains(argv, "rm -f") {
+			t.Errorf("step %d force-removes containers in default mode: %v", i+1, s.Argv)
+		}
+		if s.Func != nil {
+			t.Errorf("step %d has Func override in default mode — all steps should be plain Argv", i+1)
+		}
 	}
 }
 
@@ -598,17 +590,30 @@ func TestRunPrune_DryRunStepsAreNotExecuted(t *testing.T) {
 }
 
 func TestRunPrune_IgnoreErrorStepDoesNotAbortLoop(t *testing.T) {
+	opts := docker.PruneOpts{GOOS: "linux"}
+	allSteps := append(docker.BuildDockerPruneSteps(opts), docker.BuildNixPruneSteps(opts)...)
+
+	// Find the first IgnoreError step so we can inject a failure there.
+	ignoreIdx := -1
+	for i, s := range allSteps {
+		if s.IgnoreError {
+			ignoreIdx = i
+			break
+		}
+	}
+	if ignoreIdx == -1 {
+		t.Skip("no IgnoreError step in current plan; nothing to test")
+	}
+
 	calls := 0
 	exec := func(step docker.PruneStep) error {
 		calls++
-		// Step 1 (docker rm) has IgnoreError=true. Simulate failure.
-		if calls == 1 {
-			return fmt.Errorf("docker rm: no containers")
+		if calls == ignoreIdx+1 {
+			return fmt.Errorf("simulated failure on IgnoreError step")
 		}
 		return nil
 	}
-	opts := docker.PruneOpts{GOOS: "linux"}
-	totalSteps := len(docker.BuildDockerPruneSteps(opts)) + len(docker.BuildNixPruneSteps(opts))
+	totalSteps := len(allSteps)
 	err := docker.RunPrune(docker.RunPruneArgs{
 		Opts:    opts,
 		Exec:    exec,
@@ -618,7 +623,7 @@ func TestRunPrune_IgnoreErrorStepDoesNotAbortLoop(t *testing.T) {
 		IsTTY:   true,
 	})
 	if err != nil {
-		t.Errorf("step 1 failure with IgnoreError=true must not propagate: %v", err)
+		t.Errorf("IgnoreError step failure must not propagate: %v", err)
 	}
 	if calls != totalSteps {
 		t.Errorf("want all %d steps attempted, got %d", totalSteps, calls)

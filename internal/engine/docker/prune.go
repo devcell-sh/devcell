@@ -171,12 +171,8 @@ type PruneStep struct {
 func BuildDockerPruneSteps(opts PruneOpts) []PruneStep {
 	if !opts.Force {
 		return []PruneStep{
-			{
-				Argv:        []string{"docker", "rm", "-f", "$(docker ps -aq)"},
-				Func:        dockerRemoveAllContainers,
-				IgnoreError: true,
-			},
-			{Argv: []string{"docker", "system", "prune", "-af"}},
+			{Argv: []string{"docker", "container", "prune", "-f"}},
+			{Argv: []string{"docker", "image", "prune", "-af"}},
 			{Argv: []string{"docker", "volume", "prune", "-f"}},
 			{Argv: []string{"docker", "buildx", "prune", "-af"}},
 		}
@@ -404,9 +400,10 @@ func BuildPrunePrompt(opts PruneOpts) string {
 
 	if !opts.Force {
 		return "⚠  This will:\n" +
-			"   Docker: remove stopped containers, unused images, volumes, BuildKit cache.\n" +
+			"   Docker: remove stopped containers, unused images, dangling volumes, BuildKit cache.\n" +
+			"           Running containers are not touched.\n" +
 			"   Nix:    remove orphaned profile generations and unreferenced store paths.\n" +
-			"           Running containers and their closures are protected.\n" +
+			"           Running containers' nix closures are protected.\n" +
 			"   Target: local Docker daemon + " + DefaultThinStoreVolume + " volume (/nix)\n" +
 			tail
 	}
