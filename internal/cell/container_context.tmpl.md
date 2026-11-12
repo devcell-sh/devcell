@@ -96,3 +96,11 @@ export CGO_LDFLAGS="-L$PKG/lib"
 
 `pkg-config` works if the library provides a `.pc` file — the nix profile puts them in
 `~/.local/state/nix/profiles/profile/lib/pkgconfig/` or `share/pkgconfig/`. Set `PKG_CONFIG_PATH` accordingly if needed.
+{{- if .PeerMemory}}
+
+## Peer agent memories
+
+Your peer coding agent's memories are available via the `read_peer_memory` MCP tool.
+Use it to check what conventions, preferences, and decisions the other agent has learned about this project.
+Call it at the start of a session to load shared project context.
+{{- end}}

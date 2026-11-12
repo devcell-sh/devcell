@@ -34,14 +34,15 @@ type volumeMount struct {
 }
 
 type contextData struct {
-	CellName          string
-	ProjectDir        string
-	HostDir           string
+	CellName        string
+	ProjectDir      string
+	HostDir         string
 	HasProjectAlias bool
-	HomeDir           string
-	HostHome          string
-	ConfigDir         string
-	Volumes           []volumeMount
+	HomeDir         string
+	HostHome        string
+	ConfigDir       string
+	Volumes         []volumeMount
+	PeerMemory      bool
 }
 
 // ContainerContext returns the auto-generated filesystem/runtime preamble
@@ -76,14 +77,15 @@ func ContainerContext(c config.Config, cellCfg cfg.CellConfig) string {
 	}
 
 	data := contextData{
-		CellName:          c.CellName,
-		ProjectDir:        projectDir,
-		HostDir:           c.BaseDir,
+		CellName:        c.CellName,
+		ProjectDir:      projectDir,
+		HostDir:         c.BaseDir,
 		HasProjectAlias: projectDir != c.BaseDir,
-		HomeDir:           "/home/" + c.HostUser,
-		HostHome:          c.HostHome,
-		ConfigDir:         c.ConfigDir,
-		Volumes:           vols,
+		HomeDir:         "/home/" + c.HostUser,
+		HostHome:        c.HostHome,
+		ConfigDir:       c.ConfigDir,
+		Volumes:         vols,
+		PeerMemory:      cellCfg.Agents.ResolvedPeerMemory(),
 	}
 
 	var buf bytes.Buffer

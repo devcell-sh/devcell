@@ -57,7 +57,16 @@
 
         vendorHash = "sha256-tMM5iFj8s/sMhrY76lv5hqjsquSPvzzLkrtB332rJX4=";
 
-        subPackages = ["cmd"];
+        nativeBuildInputs = [ pkgs.pkg-config ];
+        buildInputs = [
+          (if pkgs.stdenv.isx86_64 then pkgs.wimlib
+           else (pkgs.wimlib.override { syslinux = null; }).overrideAttrs {
+             preBuild = "";
+             postInstall = "";
+           })
+        ];
+
+        subPackages = ["cmd" "cmd/peer-memory-mcp"];
 
         # Stamp version.Version / GitCommit / BuildDate into the binary
         # so `devcell --version` reports the flake's tag/commit instead of
@@ -90,7 +99,7 @@
           EOF
         '';
 
-        # Rename the binary from "cmd" to "devcell" and create cell symlink.
+        # Rename the main binary from "cmd" to "devcell" and create cell symlink.
         postInstall = ''
           mv $out/bin/cmd $out/bin/devcell
           ln -s devcell $out/bin/cell
