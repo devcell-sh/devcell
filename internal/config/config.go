@@ -30,8 +30,10 @@ type Config struct {
 	VNCPort       string
 	RDPPort       string
 	BaseDir       string
+	HostBaseDir   string // host-side override for bind mounts; when set, mounts use this as the source while container paths still derive from BaseDir
 	HostUser      string
 	HostUID       int // host user's numeric UID, passed to container for bind-mount parity
+	HostGID       int // host user's numeric GID, passed to container for bind-mount parity
 	HostHome      string
 	LocalMode     bool // DEVCELL_LOCAL_MODE=true — always rebuild image on run
 }
@@ -81,6 +83,7 @@ func LoadFromOS() (Config, error) {
 	}
 	c := Load(cwd, os.Getenv)
 	c.HostUID = os.Getuid()
+	c.HostGID = os.Getgid()
 	_, err1 := os.Stat(filepath.Join(cwd, "devcell.toml"))
 	_, err2 := os.Stat(filepath.Join(cwd, ".devcell.toml"))
 	c.BuildDir = ResolveBuildDir(cwd, c.ConfigDir, err1 == nil || err2 == nil)
@@ -143,6 +146,16 @@ func ResolveWorkspaceName(getenv func(string) string) string {
 // yields /devcell/<hostPath>.
 func (c Config) ProjectMountPath() string {
 	return "/" + c.WorkspaceName + c.BaseDir
+}
+
+// ResolvedHostBaseDir returns the host-side path for bind mounts.
+// When HostBaseDir is set (e.g. solitary clone), that path is used as
+// the mount source while container paths still derive from BaseDir.
+func (c Config) ResolvedHostBaseDir() string {
+	if c.HostBaseDir != "" {
+		return c.HostBaseDir
+	}
+	return c.BaseDir
 }
 
 func resolvePortPrefix(getenv func(string) string, cellID string) string {

@@ -67,6 +67,8 @@ func hostConfig(c engine.Cell) config.Config {
 		RDPPort:       c.RDPPort,
 		BaseDir:       c.BaseDir,
 		HostUser:      c.HostUser,
+		HostUID:       c.HostUID,
+		HostGID:       c.HostGID,
 		HostHome:      c.HostHome,
 	}
 }

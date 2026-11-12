@@ -38,6 +38,8 @@ func TestEngineCell_FillsEveryField(t *testing.T) {
 		RDPPort:       "35989",
 		BaseDir:       "/home/u/proj",
 		HostUser:      "u",
+		HostUID:       1000,
+		HostGID:       1000,
 		HostHome:      "/home/u",
 	}
 	cellCfg := cfg.CellConfig{
@@ -52,6 +54,8 @@ func TestEngineCell_FillsEveryField(t *testing.T) {
 		WorkspaceHome: "/home/u/.devcell/dev",
 		HostHome:      "/home/u",
 		HostUser:      "u",
+		HostUID:       1000,
+		HostGID:       1000,
 		BaseDir:       "/home/u/proj",
 		ConfigDir:     "/home/u/.config/devcell",
 		BuildDir:      "/home/u/proj/.devcell",

@@ -43,6 +43,8 @@ type Cell struct {
 	WorkspaceHome string         // the workspace's home on the host, ~/.devcell/<WorkspaceName>
 	HostHome      string         // host user's home directory
 	HostUser      string         // host user's login name ($USER); docker creates the same user in the container
+	HostUID       int            // host user's numeric UID, passed to container for bind-mount parity
+	HostGID       int            // host user's numeric GID, passed to container for bind-mount parity
 	BaseDir       string         // project directory on the host
 	ConfigDir     string         // global config dir: $XDG_CONFIG_HOME/devcell or ~/.config/devcell
 	BuildDir      string         // build context: <BaseDir>/.devcell when the project has a devcell.toml, else ConfigDir
@@ -127,6 +129,10 @@ type RunOpts struct {
 	// strips dangerous caps/mounts/privileged, and isolates the container
 	// from the host (--solitary). Docker only.
 	Solitary bool
+
+	// Experiments is the resolved set of enabled experiments. The engine
+	// uses it to gate features that need an experiment flag (e.g. storage-unified).
+	Experiments map[string]bool
 
 	// NewBootView, when set, builds the boot panel the engine reports
 	// progress to instead of the inline ux.BootPanel (CELL-657: the cage

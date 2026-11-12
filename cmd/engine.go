@@ -82,6 +82,8 @@ func engineCell(c config.Config, cellCfg cfg.CellConfig) engine.Cell {
 		WorkspaceHome: c.WorkspaceHome,
 		HostHome:      c.HostHome,
 		HostUser:      c.HostUser,
+		HostUID:       c.HostUID,
+		HostGID:       c.HostGID,
 		BaseDir:       c.BaseDir,
 		ConfigDir:     c.ConfigDir,
 		BuildDir:      c.BuildDir,
