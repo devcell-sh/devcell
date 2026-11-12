@@ -255,25 +255,23 @@ func captureDesktop() (goimage.Image, error) {
 	return img, nil
 }
 
-// startGUIStack sources the 50-gui.sh entrypoint fragment to bring up
+// startGUIStack runs the s6 gui-config service to bring up
 // Xvfb, the window manager (icewm or fluxbox), x11vnc, and xrdp.
 func startGUIStack() error {
 	home := getDevcellHome()
 	script := fmt.Sprintf(`#!/bin/bash
 set -e
-export DEVCELL_GUI_ENABLED=true
 export HOST_USER=$(whoami)
 export APP_NAME=test
 export DEVCELL_HOME=%s
 export USER=$(whoami)
-log() { echo "[gui-setup] $*"; }
-source /etc/devcell/entrypoint.d/50-gui.sh
+/etc/s6-rc/source/gui-config/up
 `, home)
 	cmd := osexec.Command("bash", "-c", script)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("50-gui.sh: %w", err)
+		return fmt.Errorf("gui-config s6 service: %w", err)
 	}
 
 	// Wait up to 30s for xrdp to be listening on port 3389 (0x0D3D).

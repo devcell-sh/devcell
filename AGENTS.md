@@ -36,7 +36,7 @@ Every behavioral change to `cmd/`, `internal/`, or `nixhome/modules/llm/*.nix` l
 
 Applies to: a new flag, env var, TOML key, or CLI subcommand (`cmd/*_test.go`); a new `internal/*` function with observable behavior (same package); a new MCP server or docker argv field (`internal/engine/docker/*_test.go`); a new system-prompt source (`internal/cell/*_test.go`); a change to another engine's argv, options or capability table (`internal/engine/**/*_test.go`); a new experimental feature (`internal/experiments/*_test.go` for the registry entry, plus the gated code path's own package).
 
-No new test required for: pure refactors, docs, dependency bumps, nix module additions (nixhome now lives in `devcell-sh/community-home`), or entrypoint shell fragments (covered by `test/`).
+No new test required for: pure refactors, docs, dependency bumps, nix module additions (nixhome now lives in `devcell-sh/community-home`), or s6 service scripts (covered by `test/`).
 
 Integration tests in `test/` split into short and long buckets by image-build cost: see [docs/testing.md](docs/testing.md).
 

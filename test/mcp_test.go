@@ -381,7 +381,7 @@ func TestMcp_PatchrightUndetected(t *testing.T) {
 // is wired correctly in the container. Full detection assertions are in JS.
 // Runs across all 3 variants (DEVCELL_TEST_VARIANT=thin/pure/impure).
 
-// TestThinEntrypoint_MiseFound verifies the entrypoint's 10-mise.sh fragment can find
+// TestThinEntrypoint_MiseFound verifies the s6 mise service can find
 // the mise binary regardless of which profile path it's at. In thin mode, mise is at
 // /nix/var/nix/profiles/per-user/root/profile/bin/mise, not the hardcoded
 // /opt/devcell/.local/state/nix/profiles/profile/bin/mise.
@@ -400,7 +400,7 @@ func TestThinEntrypoint_MiseFound(t *testing.T) {
 	}
 	t.Logf("mise found at: %s", strings.TrimSpace(out))
 
-	// The entrypoint fragment should NOT fail with "No such file or directory"
+	// The s6 mise service should NOT fail with "No such file or directory"
 	out, _ = containerExec(t, c, []string{"sh", "-c",
 		"grep -c 'No such file or directory' /tmp/entrypoint.log 2>/dev/null || echo 0"})
 	count := strings.TrimSpace(out)

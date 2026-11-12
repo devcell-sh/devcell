@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"os/exec"
+	"sync"
 	"time"
 
 	"github.com/devcell-sh/devcell/internal/ux"
@@ -48,6 +49,13 @@ func NewContainerLogWatcher(ctx context.Context, container string, since time.Ti
 		close(w.done)
 		return w
 	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		ux.Debugf("container log watcher: stderr pipe: %v", err)
+		close(w.out)
+		close(w.done)
+		return w
+	}
 
 	if err := cmd.Start(); err != nil {
 		ux.Debugf("container log watcher: start: %v", err)
@@ -59,7 +67,17 @@ func NewContainerLogWatcher(ctx context.Context, container string, since time.Ti
 	go func() {
 		defer close(w.done)
 		defer close(w.out)
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			scanner := bufio.NewScanner(stderr)
+			for scanner.Scan() {
+				ux.Debugf("container stderr: %s", scanner.Text())
+			}
+		}()
 		watchReader(stdout, w.out)
+		wg.Wait()
 		_ = cmd.Wait()
 	}()
 
@@ -89,6 +107,7 @@ func watchReader(r io.Reader, out chan<- ContainerEvent) {
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 || line[0] != '{' {
+			ux.Debugf("container stdout: %s", line)
 			continue
 		}
 		var ev ContainerEvent

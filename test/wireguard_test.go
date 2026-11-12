@@ -53,69 +53,12 @@ type ipConfigResponse struct {
 
 // wgBootScript returns a bash script that:
 // 1. Creates /run/secrets tmpfs (normally added by runner --tmpfs)
-// 2. Injects the WireGuard entrypoint fragment
-// 3. Writes the WG config file
-// 4. Execs the entrypoint with innerCmd
+// 2. Writes the WG config file
+// 3. Runs WireGuard setup inline (same logic as the s6 wireguard service)
+// 4. Execs innerCmd
 func wgBootScript(wgConf, innerCmd string) string {
 	return `set -e
 mkdir -p /run/secrets && chmod 700 /run/secrets
-
-mkdir -p /etc/devcell/entrypoint.d
-cat > /etc/devcell/entrypoint.d/26-wireguard.sh << 'WGFRAG'
-#!/usr/bin/env bash
-[ "${DEVCELL_WG_ENABLED:-}" = "1" ] || return 0
-command -v notify >/dev/null 2>&1 && notify wireguard.starting
-
-WG_DIR="/home/$HOST_USER/.devcell/$DEVCELL_CELL_NAME/.wg"
-if [ ! -d "$WG_DIR" ] || [ -z "$(ls -A "$WG_DIR"/*.conf 2>/dev/null)" ]; then
-  log "wireguard: no .conf files in $WG_DIR, skipping"
-  command -v notify >/dev/null 2>&1 && notify wireguard.ready
-  return 0
-fi
-
-if [ -z "${WG_PRIVATE_KEY:-}" ]; then
-  echo "wireguard: WG_PRIVATE_KEY must be set when wireguard is enabled" >&2
-  exit 1
-fi
-
-echo "$WG_PRIVATE_KEY" > /run/secrets/wg-private-key
-chmod 600 /run/secrets/wg-private-key
-
-if [ -n "${WG_PRESHARED_KEY:-}" ]; then
-  echo "$WG_PRESHARED_KEY" > /run/secrets/wg-preshared-key
-  chmod 600 /run/secrets/wg-preshared-key
-fi
-
-WQ_WRAPPER=$(readlink -f "$(command -v wg-quick)")
-WQ_UNWRAPPED=$(grep "exec -a" "$WQ_WRAPPER" | grep -oP '/nix/store/[^"]+' | head -1)
-cp "$WQ_UNWRAPPED" /tmp/wg-quick-patched
-sed -i 's|cmd sysctl -q net.ipv4.conf.all.src_valid_mark=1|true|' /tmp/wg-quick-patched
-chmod +x /tmp/wg-quick-patched
-sed "s|$WQ_UNWRAPPED|/tmp/wg-quick-patched|" "$WQ_WRAPPER" > /tmp/wg-quick
-chmod +x /tmp/wg-quick
-
-for conf in "$WG_DIR"/*.conf; do
-  [ -f "$conf" ] || continue
-  name=$(basename "$conf" .conf)
-
-  dns=$(grep -oP '^\s*DNS\s*=\s*\K\S+' "$conf")
-  conf_nodns="/tmp/${name}.conf"
-  grep -v '^\s*DNS\s*=' "$conf" > "$conf_nodns"
-
-  /tmp/wg-quick up "$conf_nodns" 2>&1 | while IFS= read -r line; do log "wireguard[$name]: $line"; done
-  rm -f "$conf_nodns"
-
-  if [ -n "$dns" ]; then
-    echo "nameserver $dns" > /etc/resolv.conf
-    log "wireguard[$name]: DNS set to $dns"
-  fi
-
-  log "wireguard: $name up"
-done
-
-command -v notify >/dev/null 2>&1 && notify wireguard.ready
-WGFRAG
-chmod +x /etc/devcell/entrypoint.d/26-wireguard.sh
 
 mkdir -p /home/$HOST_USER/.devcell/$DEVCELL_CELL_NAME/.wg
 cat > /home/$HOST_USER/.devcell/$DEVCELL_CELL_NAME/.wg/wg0.conf << 'WGCONF'
@@ -123,7 +66,49 @@ cat > /home/$HOST_USER/.devcell/$DEVCELL_CELL_NAME/.wg/wg0.conf << 'WGCONF'
 WGCONF
 chmod 600 /home/$HOST_USER/.devcell/$DEVCELL_CELL_NAME/.wg/wg0.conf
 
-exec /opt/devcell/.local/bin/entrypoint.sh ` + innerCmd
+# Inline WireGuard setup (mirrors the s6 wireguard oneshot)
+if [ "${DEVCELL_WG_ENABLED:-}" = "1" ]; then
+  WG_DIR="/home/$HOST_USER/.devcell/$DEVCELL_CELL_NAME/.wg"
+
+  if [ -z "${WG_PRIVATE_KEY:-}" ]; then
+    echo "wireguard: WG_PRIVATE_KEY must be set when wireguard is enabled" >&2
+    exit 1
+  fi
+
+  echo "$WG_PRIVATE_KEY" > /run/secrets/wg-private-key
+  chmod 600 /run/secrets/wg-private-key
+
+  if [ -n "${WG_PRESHARED_KEY:-}" ]; then
+    echo "$WG_PRESHARED_KEY" > /run/secrets/wg-preshared-key
+    chmod 600 /run/secrets/wg-preshared-key
+  fi
+
+  WQ_WRAPPER=$(readlink -f "$(command -v wg-quick)")
+  WQ_UNWRAPPED=$(grep "exec -a" "$WQ_WRAPPER" | grep -oP '/nix/store/[^"]+' | head -1)
+  cp "$WQ_UNWRAPPED" /tmp/wg-quick-patched
+  sed -i 's|cmd sysctl -q net.ipv4.conf.all.src_valid_mark=1|true|' /tmp/wg-quick-patched
+  chmod +x /tmp/wg-quick-patched
+  sed "s|$WQ_UNWRAPPED|/tmp/wg-quick-patched|" "$WQ_WRAPPER" > /tmp/wg-quick
+  chmod +x /tmp/wg-quick
+
+  for conf in "$WG_DIR"/*.conf; do
+    [ -f "$conf" ] || continue
+    name=$(basename "$conf" .conf)
+
+    dns=$(grep -oP '^\s*DNS\s*=\s*\K\S+' "$conf")
+    conf_nodns="/tmp/${name}.conf"
+    grep -v '^\s*DNS\s*=' "$conf" > "$conf_nodns"
+
+    /tmp/wg-quick up "$conf_nodns" 2>&1
+    rm -f "$conf_nodns"
+
+    if [ -n "$dns" ]; then
+      echo "nameserver $dns" > /etc/resolv.conf
+    fi
+  done
+fi
+
+exec ` + innerCmd
 }
 
 // wgBaseArgs returns docker run args with thin volume if needed.
@@ -224,7 +209,7 @@ func wgRandomKey(t *testing.T) string {
 // the container with WG_PRIVATE_KEY and WG_PRESHARED_KEY, and verifies:
 //
 //  1. both env vars are visible inside the container,
-//  2. the fragment wrote both /run/secrets files with mode 600,
+//  2. the s6 secrets service wrote both /run/secrets files with mode 600,
 //  3. the kernel peer carries the preshared key (`wg show ... preshared-keys`).
 //
 // No live peer is needed: the interface comes up without a handshake.
@@ -437,33 +422,29 @@ func TestWireguard_S6ServiceWiring(t *testing.T) {
 		t.Fatal("config missing peer public key")
 	}
 
-	// 3. Boot container: write config, then exec real entrypoint.
-	// The entrypoint starts s6 which runs the wireguard oneshot.
-	// The verify script runs as CMD after all s6 oneshots complete.
+	// 3. Boot container: write config, run s6 wireguard service directly, verify.
 	bootScript := `set -e
 mkdir -p /run/secrets && chmod 700 /run/secrets
-mkdir -p /home/$HOST_USER/.devcell/$DEVCELL_CELL_NAME/.wg
-cat > /home/$HOST_USER/.devcell/$DEVCELL_CELL_NAME/.wg/wg0.conf << 'DEVCELL_WGCONF_EOF'
+mkdir -p /home/$HOST_USER/.devcell/$DEVCELL_WORKSPACE/.wg
+cat > /home/$HOST_USER/.devcell/$DEVCELL_WORKSPACE/.wg/wg0.conf << 'DEVCELL_WGCONF_EOF'
 ` + confStr + `DEVCELL_WGCONF_EOF
-chmod 600 /home/$HOST_USER/.devcell/$DEVCELL_CELL_NAME/.wg/wg0.conf
+chmod 600 /home/$HOST_USER/.devcell/$DEVCELL_WORKSPACE/.wg/wg0.conf
 
-cat > /tmp/wg-verify.sh << 'VERIFY'
-#!/bin/bash
+# Run the s6 wireguard oneshot directly
+/etc/s6-rc/source/wireguard/up
+
+# Verify
 echo "WGENV:"
 env | grep -o '^WG_[A-Z_]*' | sort
 echo "SECRETS:"
-sudo -n ls -l /run/secrets/wg-* 2>&1
+ls -l /run/secrets/wg-* 2>&1
 echo "S6TYPE:$(cat /etc/s6-rc/source/wireguard/type 2>/dev/null || echo NOT_FOUND)"
-echo "S6UPSH:$(test -x /etc/s6-rc/source/wireguard/up.sh && echo exists || echo missing)"
+echo "S6UP:$(test -x /etc/s6-rc/source/wireguard/up && echo exists || echo missing)"
 echo "WGSHOW:"
-sudo -n wg show wg0 2>&1 || echo "WG_NOT_FOUND"
+wg show wg0 2>&1 || echo "WG_NOT_FOUND"
 echo "PSK:"
-sudo -n wg show wg0 preshared-keys 2>&1 || echo "PSK_NOT_FOUND"
-echo "DONE"
-VERIFY
-chmod +x /tmp/wg-verify.sh
-
-exec /opt/devcell/.local/bin/entrypoint.sh /tmp/wg-verify.sh`
+wg show wg0 preshared-keys 2>&1 || echo "PSK_NOT_FOUND"
+echo "DONE"`
 
 	args := wgBaseArgs(img, map[string]string{
 		"HOST_USER":           "testuser",
@@ -510,8 +491,8 @@ exec /opt/devcell/.local/bin/entrypoint.sh /tmp/wg-verify.sh`
 	if !strings.Contains(output, "S6TYPE:oneshot") {
 		t.Error("s6 wireguard service type is not 'oneshot'")
 	}
-	if !strings.Contains(output, "S6UPSH:exists") {
-		t.Error("s6 wireguard up.sh not found or not executable")
+	if !strings.Contains(output, "S6UP:exists") {
+		t.Error("s6 wireguard up script not found or not executable")
 	}
 
 	// wg0 interface created with peer

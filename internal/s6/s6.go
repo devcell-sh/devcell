@@ -136,6 +136,10 @@ DEVCELL_HOME=%q
 # so the CMD after privilege drop inherits them even when it is not a shell.
 export PATH="$SESSION_HOME/go/bin:$SESSION_HOME/.local/state/nix/profiles/profile/bin:$SESSION_HOME/.local/state/nix/profiles/project/bin:$SESSION_HOME/.local/share/mise/shims:$SESSION_HOME/.local/bin:/run/wrappers/bin:/nix/var/nix/profiles/devcell-tools/bin:$DEVCELL_HOME/.local/state/nix/profiles/profile/bin:$DEVCELL_HOME/.local/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin"
 
+# _log writes human-readable progress to stderr so docker logs captures it
+# even when the container dies mid-boot.
+_log() { printf '[entrypoint] %%s\n' "$*" >&2; }
+
 _notify() {
   local _name="$1" _msg="${2:-}"
   # JSONL system event to docker logs (suppressed when PID 1 stdout is a TTY)
@@ -151,64 +155,88 @@ _notify() {
   fi
 }
 
+_log "PID=$$ PATH=$PATH"
 _notify entrypoint.ready
 
 # 1. Write s6 envdir vars
+_log "step 1: writing s6 envdir vars"
 mkdir -p "$S6_ENV"
 echo "$HOST_USER" > "$S6_ENV/HOST_USER"
 echo "$SESSION_HOME" > "$S6_ENV/SESSION_HOME"
 echo "$DEVCELL_HOME" > "$S6_ENV/DEVCELL_HOME"
 
 # 2. Create session user (gosu prerequisite)
-# HOST_UID (from env) ensures the container user's UID matches the host user
-# that owns bind-mounted directories, preventing EACCES on traversal.
+# HOST_UID and HOST_GID (from env) ensure the container user's identity
+# matches the host user that owns bind-mounted directories, preventing
+# EACCES on traversal (krunkit does not remap UIDs on bind mounts).
+# Direct /etc/passwd append instead of the shadow-utils binary, which
+# lives on the nix-store volume and may not be on PATH yet.
+_log "step 2: session user (HOST_USER=$HOST_USER HOST_UID=${HOST_UID:-<unset>} HOST_GID=${HOST_GID:-<unset>})"
 if ! id "$HOST_USER" >/dev/null 2>&1; then
+  _log "step 2: user $HOST_USER not found, creating"
   chmod 644 /etc/passwd /etc/shadow /etc/group 2>/dev/null || true
-  _useradd_flags="-m -s /bin/zsh"
-  if [ -n "${HOST_UID:-}" ] && [ "$HOST_UID" -gt 0 ] 2>/dev/null; then
-    _useradd_flags="$_useradd_flags --uid $HOST_UID"
+  _uid="${HOST_UID:-1000}"
+  _gid="${HOST_GID:-$_uid}"
+  if ! getent group "$_gid" >/dev/null 2>&1; then
+    echo "${HOST_USER}:x:${_gid}:" >> /etc/group
   fi
-  useradd $_useradd_flags "$HOST_USER" 2>/dev/null || true
+  echo "${HOST_USER}:x:${_uid}:${_gid}::${SESSION_HOME}:/bin/zsh" >> /etc/passwd
+  echo "${HOST_USER}:!:1::::::" >> /etc/shadow 2>/dev/null || true
+  mkdir -p "$SESSION_HOME"
+  chown "${_uid}:${_gid}" "$SESSION_HOME"
   echo "$HOST_USER ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+  _log "step 2: created uid=$_uid gid=$_gid home=$SESSION_HOME"
+else
+  _log "step 2: user $HOST_USER already exists ($(id "$HOST_USER"))"
 fi
 
 # 3. Essential directories
+_log "step 3: essential directories"
 mkdir -p "$SESSION_HOME/.local/bin" "$SESSION_HOME/go/bin" "$SESSION_HOME/tmp"
 chown -h "$HOST_USER" "$SESSION_HOME/.local" "$SESSION_HOME/.local/bin" \
     "$SESSION_HOME/go" "$SESSION_HOME/go/bin" "$SESSION_HOME/tmp" 2>/dev/null || true
 
 # 4. s6 services via s6-rc (idiomatic: svscan + rc-init + rc change)
 if [ -d "$S6_COMPILED" ]; then
+  _log "step 4: s6 compiled db found at $S6_COMPILED"
   _notify s6.starting
 
   mkdir -p "$S6_SCAN"
 
-  # Redirect service output so longruns don't flood the agent terminal.
   S6_LOG="/var/log/s6"
   mkdir -p "$S6_LOG"
 
   if ! command -v s6-svscan >/dev/null 2>&1; then
+    _log "step 4: s6-svscan not on PATH, skipping"
     _notify s6.warn "s6 binaries not on PATH, skipping activation"
   else
-    # Start supervision tree (s6-svscan supervises all longruns)
-    s6-svscan "$S6_SCAN" >"$S6_LOG/svscan.log" 2>&1 &
+    _log "step 4: starting s6-svscan ($(command -v s6-svscan))"
+    # Supervision tree: tee to log file and stderr so docker logs captures it.
+    s6-svscan "$S6_SCAN" 2>&1 | tee "$S6_LOG/svscan.log" >&2 &
+    _SVSCAN_PID=$!
+    _log "step 4: s6-svscan started (pid=$_SVSCAN_PID)"
 
     # Initialize s6-rc live state. -t 5000: bail after 5s if svscan
     # hasn't created the supervision tree (prevents infinite hang).
-    if s6-rc-init -t 5000 -c "$S6_COMPILED" -l "$S6_LIVE" "$S6_SCAN"; then
+    _log "step 4: s6-rc-init"
+    if s6-rc-init -t 5000 -c "$S6_COMPILED" -l "$S6_LIVE" "$S6_SCAN" 2>&1; then
+      _log "step 4: s6-rc-init succeeded, bringing up services"
       # Bring up all services in dependency order (parallel, readiness-aware).
       # -t 300000: 5m global timeout. The previous 30s budget was too short
       # for cold starts with slow oneshots (nix-packages, project-flake,
       # mise-packages). On failure, retry once: s6-rc change is idempotent
       # and only brings up services not yet active.
-      if s6-rc -l "$S6_LIVE" -t 300000 -u change user >>"$S6_LOG/rc-change.log" 2>&1; then
-        :
-      elif s6-rc -l "$S6_LIVE" -t 300000 -u change user >>"$S6_LOG/rc-change.log" 2>&1; then
+      if s6-rc -l "$S6_LIVE" -t 300000 -u change user 2>&1 | tee -a "$S6_LOG/rc-change.log" >&2; then
+        _log "step 4: s6-rc change succeeded"
+      elif s6-rc -l "$S6_LIVE" -t 300000 -u change user 2>&1 | tee -a "$S6_LOG/rc-change.log" >&2; then
+        _log "step 4: s6-rc change recovered on retry"
         _notify s6.warn "Service activation recovered on retry (see $S6_LOG/)"
       else
+        _log "step 4: s6-rc change failed (non-fatal)"
         _notify s6.warn "Service activation failed (non-fatal, see $S6_LOG/)"
       fi
     else
+      _log "step 4: s6-rc-init failed (non-fatal)"
       _notify s6.warn "rc-init failed (non-fatal, see $S6_LOG/)"
     fi
   fi
@@ -219,14 +247,19 @@ if [ -d "$S6_COMPILED" ]; then
     chmod 0711 "$d" 2>/dev/null || true
   done
   _notify s6.ready
+  _log "step 4: s6 ready"
+else
+  _log "step 4: no compiled db at $S6_COMPILED, skipping s6"
 fi
 
 # 5. Fix ownership for root-created files, signal ready
+_log "step 5: fixing ownership"
 find "$SESSION_HOME" -maxdepth 2 -user root -not -path "*/tmp/*" \
   -exec chown "$HOST_USER" {} + 2>/dev/null || true
 touch %q
 
 _notify boot.ready
+_log "step 6: boot ready, exec gosu $HOST_USER $*"
 
 # 6. Drop to session user, hand off to CMD
 exec gosu "$HOST_USER" "$@"`,

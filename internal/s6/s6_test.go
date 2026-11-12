@@ -315,32 +315,44 @@ func TestEntrypointSnippet(t *testing.T) {
 		t.Error("must fix ownership of root-created files")
 	}
 
-	// Must make /etc/passwd writable before useradd
+	// Must make /etc/passwd writable before user creation
 	chmodPos := strings.Index(script, "chmod")
 	if chmodPos < 0 || !strings.Contains(script, "/etc/passwd") {
-		t.Error("must chmod /etc/passwd writable before useradd")
+		t.Error("must chmod /etc/passwd writable before user creation")
 	}
 
-	// Must create session user before gosu
-	if !strings.Contains(script, "useradd") {
-		t.Error("must create session user inline")
+	// Must create session user via direct /etc/passwd append (useradd is not
+	// available before the nix-store volume mounts).
+	if !strings.Contains(script, ">> /etc/passwd") {
+		t.Error("must append user entry directly to /etc/passwd (useradd unavailable at entrypoint time)")
 	}
-	if chmodPos >= 0 {
-		useraddPos := strings.Index(script, "useradd")
-		if useraddPos >= 0 && chmodPos > useraddPos {
-			t.Error("chmod /etc/passwd must precede useradd")
-		}
+	if !strings.Contains(script, ">> /etc/shadow") {
+		t.Error("must append shadow entry directly to /etc/shadow")
 	}
 
-	// useradd must use HOST_UID to match host bind-mount ownership
-	if !strings.Contains(script, "--uid") || !strings.Contains(script, "HOST_UID") {
-		t.Error("useradd must pass --uid $HOST_UID to match host file ownership")
+	// User creation must use HOST_UID and HOST_GID from env to match
+	// host bind-mount ownership (krunkit does not remap UIDs).
+	if !strings.Contains(script, "HOST_UID") {
+		t.Error("must use HOST_UID for user creation")
+	}
+	if !strings.Contains(script, "HOST_GID") {
+		t.Error("must use HOST_GID for user creation")
+	}
+
+	// Must create group entry when the GID is unoccupied
+	if !strings.Contains(script, ">> /etc/group") {
+		t.Error("must create group entry in /etc/group when GID is unoccupied")
+	}
+
+	// Must NOT rely on useradd (unavailable before nix-store volume mount)
+	if strings.Contains(script, "useradd") {
+		t.Error("must not use useradd — binary lives on nix-store volume which may not be mounted at entrypoint time")
 	}
 
 	// User creation must come before gosu exec
-	useraddPos := strings.Index(script, "useradd")
+	passwdPos := strings.Index(script, ">> /etc/passwd")
 	gosuPos := strings.Index(script, "exec gosu")
-	if useraddPos < 0 || gosuPos < 0 || useraddPos > gosuPos {
+	if passwdPos < 0 || gosuPos < 0 || passwdPos > gosuPos {
 		t.Error("user creation must precede gosu exec")
 	}
 

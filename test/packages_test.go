@@ -17,7 +17,7 @@ import (
 // [packages.node] tools are installed by mise at container start and run.
 //
 // Uses the nixhome checkout from nixhomeDir() (DEVCELL_NIXHOME), which must
-// contain modules/fragments/11-mise-packages.sh.
+// contain the s6 mise-packages service.
 func TestPackages_MiseInstallsToolsAtStart(t *testing.T) {
 	if testing.Short() {
 		t.Skip("long: builds its own image with `cell build` (~10 min)")
@@ -26,8 +26,8 @@ func TestPackages_MiseInstallsToolsAtStart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(nixhome, "modules", "fragments", "11-mise-packages.sh")); err != nil {
-		t.Skipf("nixhome at %s lacks 11-mise-packages.sh; set DEVCELL_NIXHOME to a checkout that has it", nixhome)
+	if _, err := os.Stat(filepath.Join(nixhome, "modules", "s6", "mise-packages", "up")); err != nil {
+		t.Skipf("nixhome at %s lacks s6/mise-packages service; set DEVCELL_NIXHOME to a checkout that has it", nixhome)
 	}
 	cellBin, err := ensureCellBinary()
 	if err != nil {

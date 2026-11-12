@@ -213,19 +213,19 @@ documents = ["op://devcell-test/secrets"]
 // TestCellShell_ContainerRowsArriveAfterCellReady is the end-to-end check
 // for CELL-263 sd_notify wiring. After ✓ Cell ready, the host should render
 // at least one container-side row (e.g. "Mise ready") driven by a
-// notify "STATUS=..." call from a nixhome fragment. Without this assertion
+// notify "STATUS=..." call from an s6 service. Without this assertion
 // we can't tell from CI whether:
 //
 //   - the bind-mount + NOTIFY_SOCKET env reach the container
-//   - socat is bundled in the image (required by 00-notify.sh)
-//   - fragments are actually emitting notify lines
+//   - socat is bundled in the image (required by the notify helper)
+//   - s6 services are actually emitting notify lines
 //   - the host listener+consumer renders them
 //
 // If this test fails, the most common causes (rank-ordered) are:
 //  1. Thin image was built before CELL-263 — rebuild with `cell build`
 //  2. socat missing in nixhome/modules/base.nix (silent notify() no-op)
 //  3. NOTIFY_SOCKET env not reaching the container (BuildArgv bug)
-//  4. Fragment didn't source 00-notify.sh first (alphabetical sort issue)
+//  4. s6 service didn't import the notify helper (dependency issue)
 func TestCellShell_ContainerRowsArriveAfterCellReady(t *testing.T) {
 	if testing.Short() {
 		t.Skip("long: drives `cell shell` against a real container image — " +
@@ -284,9 +284,9 @@ func TestCellShell_ContainerRowsArriveAfterCellReady(t *testing.T) {
 	promptIdx := indexOfAny(stripped, promptSentinels)
 	postCellReady := stripped[cellReadyIdx:promptIdx]
 
-	// At least one container-side STATUS string from a fragment must appear
+	// At least one container-side STATUS string from an s6 service must appear
 	// between Cell ready and the shell prompt. We don't pin the exact name
-	// (depends on which fragments fire — GUI is conditional, Mise depends
+	// (depends on which services run: GUI is conditional, Mise depends
 	// on having .tool-versions, etc.) — any one of these is sufficient to
 	// prove the notify chain works.
 	containerSideMarkers := []string{
@@ -318,7 +318,7 @@ func TestCellShell_ContainerRowsArriveAfterCellReady(t *testing.T) {
 	}
 }
 
-// writeMinimalDevcellTOML writes a devcell.toml with the given fragment
+// writeMinimalDevcellTOML writes a devcell.toml with the given section
 // appended after a minimal `[cell]` header in a fresh per-test directory.
 // Returns the directory path — the caller chdir's into it via cmd.Dir.
 func writeMinimalDevcellTOML(t *testing.T, opSection string) string {

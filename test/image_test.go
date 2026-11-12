@@ -24,9 +24,9 @@ import (
 
 // --- Entrypoint ---
 
-// TestEntrypoint_Fragments verifies entrypoint fragments and GUI services
+// TestEntrypoint_S6Services verifies s6 services and GUI services
 // on the pre-built image. No rebuild — uses DEVCELL_TEST_IMAGE directly.
-func TestEntrypoint_Fragments(t *testing.T) {
+func TestEntrypoint_S6Services(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping in short mode")
 	}
@@ -34,15 +34,15 @@ func TestEntrypoint_Fragments(t *testing.T) {
 	probeGUI(t)
 	c := startRdpContainer(t)
 
-	t.Run("fragment_staged", func(t *testing.T) {
-		out, code := containerExec(t, c, []string{"ls", "-la", "/etc/devcell/entrypoint.d/50-gui.sh"})
+	t.Run("service_staged", func(t *testing.T) {
+		out, code := containerExec(t, c, []string{"cat", "/etc/s6-rc/source/gui-config/type"})
 		if code != 0 {
-			t.Fatalf("FAIL: 50-gui.sh not found in /etc/devcell/entrypoint.d/ (exit %d)", code)
+			t.Fatalf("FAIL: s6 gui-config service not found in /etc/s6-rc/source/ (exit %d)", code)
 		}
-		if !strings.Contains(out, "x") {
-			t.Errorf("FAIL: 50-gui.sh should be executable: %s", out)
+		if !strings.Contains(out, "oneshot") {
+			t.Errorf("FAIL: gui-config should be a oneshot service, got: %s", out)
 		}
-		t.Logf("PASS: %s", out)
+		t.Logf("PASS: gui-config service type = %s", strings.TrimSpace(out))
 	})
 
 	t.Run("xvfb_running", func(t *testing.T) {

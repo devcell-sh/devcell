@@ -14,7 +14,7 @@
 // races or crashes — surfacing to the user as a SIGTRAP and "Target page,
 // context or browser has been closed".
 //
-// The boot-time 22-chromium-singleton.sh fragment only sweeps at container
+// The boot-time chromium-cleanup s6 service only sweeps at container
 // startup, so a chromium that crashes between MCP calls poisons every
 // subsequent launch within the same container generation. This test
 // verifies the per-launch sweep wired into the patchright-mcp-cell wrapper:
