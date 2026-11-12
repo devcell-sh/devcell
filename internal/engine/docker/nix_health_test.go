@@ -46,7 +46,7 @@ func TestVolumeScripts_NoSedNoLs(t *testing.T) {
 	scripts := map[string]string{
 		"NixHealthProbeScript":  docker.NixHealthProbeScript,
 		"NixDFReportScript":     docker.NixDFReportScript,
-		"SafeNixGCScript":       docker.SafeNixGCScript,
+		"NixReapSweepScript":    docker.NixReapSweepScript,
 		"NixGCRootReportScript": docker.NixGCRootReportScript,
 	}
 	for name, s := range scripts {

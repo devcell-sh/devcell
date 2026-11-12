@@ -91,8 +91,8 @@ func TestNewBuildParams(t *testing.T) {
 			buildParams{stack: "base", image: "devcell-user:x"}},
 		{"DEVCELL_BUILD_IMAGE", engine.BuildOpts{Cell: cell}, env("DEVCELL_BUILD_IMAGE", "devcell-user:env"),
 			buildParams{stack: "base", image: "devcell-user:env"}},
-		{"--update recreates the nix volume", engine.BuildOpts{Cell: cell, Update: true}, env(),
-			buildParams{stack: "base", recreateVolume: true}},
+		{"--update sets updateFlake", engine.BuildOpts{Cell: cell, Update: true}, env(),
+			buildParams{stack: "base", updateFlake: true}},
 		{"--build-threads", engine.BuildOpts{Cell: cell, BuildThreads: 16}, env(),
 			buildParams{stack: "base", threads: 16}},
 	}

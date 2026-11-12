@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"strconv"
 	"strings"
 )
 
@@ -17,7 +18,11 @@ import (
 // nixRootsListScript emits one line per devcell root and one per meta:
 //
 //	root name=<file> stale=0|1
-//	meta hash=<h> project=<p> stack=<s> nixpkgs=<rev>
+//	meta hash=<h> cell=<c> stack=<s> nixpkgs=<rev> size=<bytes>
+//
+// size is the closure size (sum of nix-store --query --size over the
+// transitive closure). Zero when the profile link is stale or absent.
+// nix-store queries are read-only (no GC root mutation, unlike --print-dead).
 const nixRootsListScript = `for l in /nix/var/nix/gcroots/devcell/*-profile /nix/var/nix/gcroots/devcell/*-generation; do
   [ -L "$l" ] || continue
   if [ -e "$l" ]; then s=0; else s=1; fi
@@ -25,7 +30,23 @@ const nixRootsListScript = `for l in /nix/var/nix/gcroots/devcell/*-profile /nix
 done
 for m in /nix/var/nix/gcroots/devcell/*-meta; do
   [ -f "$m" ] || continue
-  echo "meta hash=$(basename "$m" | cut -d- -f1) project=$(grep '^project=' "$m" 2>/dev/null | cut -d= -f2) stack=$(grep '^stack=' "$m" 2>/dev/null | cut -d= -f2) nixpkgs=$(grep '^nixpkgs=' "$m" 2>/dev/null | cut -d= -f2)"
+  h=$(basename "$m" | cut -d- -f1)
+  c=$(grep '^cell=' "$m" 2>/dev/null | cut -d= -f2)
+  [ -z "$c" ] && c=$(grep '^project=' "$m" 2>/dev/null | cut -d= -f2)
+  sz=0
+  p="/nix/var/nix/gcroots/devcell/${h}-profile"
+  if [ -L "$p" ] && [ -e "$p" ]; then
+    t=$(readlink -f "$p")
+    for _s in $(nix-store -qR "$t" 2>/dev/null | xargs nix-store --query --size 2>/dev/null); do
+      sz=$((sz + _s))
+    done
+  fi
+  echo "meta hash=$h cell=$c stack=$(grep '^stack=' "$m" 2>/dev/null | cut -d= -f2) nixpkgs=$(grep '^nixpkgs=' "$m" 2>/dev/null | cut -d= -f2) size=$sz"
+done
+_vb=$(du -sb /nix 2>/dev/null | cut -f1)
+echo "volume_bytes=${_vb:-0}"
+du -sb /nix/store/* 2>/dev/null | sort -rn | head -10 | while read -r _sb _sp; do
+  echo "top bytes=$_sb name=$(basename "$_sp")"
 done`
 
 // NixDFReportScript is the health probe plus the root/meta listing —
@@ -40,18 +61,27 @@ type NixRootEntry struct {
 
 // NixRootMeta is the parsed -meta file for one root hash.
 type NixRootMeta struct {
-	Hash    string
-	Project string
-	Stack   string
-	Nixpkgs string
+	Hash         string
+	Cell         string // comma-separated cell names sharing this hash
+	Stack        string
+	Nixpkgs      string
+	ClosureBytes int64 // sum of nix-store --query --size over the closure; 0 if stale/unknown
+}
+
+// NixStorePath is one of the top store paths by size.
+type NixStorePath struct {
+	Name  string
+	Bytes int64
 }
 
 // NixStoreReport is the full parsed df report for the nix volume.
 type NixStoreReport struct {
-	Volume string
-	Health NixStoreHealth
-	Roots  []NixRootEntry
-	Metas  []NixRootMeta
+	Volume      string
+	VolumeBytes int64 // du -sb /nix; 0 if unavailable
+	Health      NixStoreHealth
+	Roots       []NixRootEntry
+	Metas       []NixRootMeta
+	TopPaths    []NixStorePath
 }
 
 // ParseNixStoreReport parses combined probe + listing output.
@@ -63,6 +93,10 @@ func ParseNixStoreReport(volume, out string) (NixStoreReport, error) {
 	r := NixStoreReport{Volume: volume, Health: health}
 	for _, line := range strings.Split(out, "\n") {
 		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "volume_bytes=") {
+			r.VolumeBytes, _ = strconv.ParseInt(strings.TrimPrefix(line, "volume_bytes="), 10, 64)
+			continue
+		}
 		kind, rest, ok := strings.Cut(line, " ")
 		if !ok {
 			continue
@@ -80,12 +114,23 @@ func ParseNixStoreReport(volume, out string) (NixStoreReport, error) {
 			}
 		case "meta":
 			if kv["hash"] != "" {
+				cell := kv["cell"]
+				if cell == "" {
+					cell = kv["project"] // backwards compat with pre-cell metas
+				}
+				closureBytes, _ := strconv.ParseInt(kv["size"], 10, 64)
 				r.Metas = append(r.Metas, NixRootMeta{
-					Hash:    kv["hash"],
-					Project: kv["project"],
-					Stack:   kv["stack"],
-					Nixpkgs: kv["nixpkgs"],
+					Hash:         kv["hash"],
+					Cell:         cell,
+					Stack:        kv["stack"],
+					Nixpkgs:      kv["nixpkgs"],
+					ClosureBytes: closureBytes,
 				})
+			}
+		case "top":
+			if kv["name"] != "" {
+				b, _ := strconv.ParseInt(kv["bytes"], 10, 64)
+				r.TopPaths = append(r.TopPaths, NixStorePath{Name: kv["name"], Bytes: b})
 			}
 		}
 	}
@@ -138,8 +183,8 @@ func FormatNixStoreSection(r NixStoreReport, w io.Writer) {
 		hash, _, _ := strings.Cut(root.Name, "-")
 		if m, ok := metaByHash[hash]; ok && strings.HasSuffix(root.Name, "-profile") {
 			parts := []string{}
-			if m.Project != "" {
-				parts = append(parts, "project="+m.Project)
+			if m.Cell != "" {
+				parts = append(parts, "cell="+m.Cell)
 			}
 			if m.Stack != "" {
 				parts = append(parts, "stack="+m.Stack)

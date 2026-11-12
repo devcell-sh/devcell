@@ -19,7 +19,7 @@ var buildCmd = &cobra.Command{
 }
 
 func init() {
-	buildCmd.Flags().Bool("update", false, "update nix flake inputs and rebuild without cache")
+	buildCmd.Flags().Bool("update", false, "update nix flake inputs to latest revisions before building")
 	buildCmd.Flags().String("stack", "", "override [cell].stack for this build (base, dev, go, node, python, fullstack, electronics, ultimate, bbb)")
 	buildCmd.Flags().String("image", "", "override the built image tag (e.g. devcell-user:dev-thin); env DEVCELL_BUILD_IMAGE has lower precedence")
 	buildCmd.Flags().Bool("force", false, "recreate VM even if it already exists (tart only)")

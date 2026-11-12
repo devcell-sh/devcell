@@ -494,8 +494,8 @@ func TestThinBuildArgv_StampsMetadataFile(t *testing.T) {
 	if !strings.Contains(script, "${HM_PROFILE_HASH}-meta") {
 		t.Error("builder must stamp a ${HM_PROFILE_HASH}-meta file alongside the GC root")
 	}
-	if !strings.Contains(script, "myproject") {
-		t.Error("metadata file must contain the project name for attribution")
+	if !strings.Contains(script, "cell=") {
+		t.Error("metadata file must contain the cell= field (populated at boot by s6 gcroot)")
 	}
 }
 
@@ -542,8 +542,8 @@ func TestThinBuildArgv_RuntimePathExcludesSharedProfileSlot(t *testing.T) {
 
 // home-manager activation (via the sudo shim) stages nix-managed agent
 // configs to /etc/claude-code, /etc/codex, /etc/opencode, /etc/gemini inside
-// the builder. The thin image must carry them, otherwise the entrypoint
-// fragments (30-claude.sh etc.) silently skip the MCP merge.
+// the builder. The thin image must carry them, otherwise the s6 oneshot
+// services (claude-config etc.) silently skip the MCP merge.
 func TestThinBuildArgv_ExportsAgentEtcDirs(t *testing.T) {
 	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
@@ -1312,7 +1312,7 @@ func TestBuilderOrphanedByCancel(t *testing.T) {
 func TestThinBuildArgv_HomeManagerTargetX86(t *testing.T) {
 	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", "base", "", "myproject")
 	script := argv[len(argv)-1]
-	want := "home-manager switch --flake /opt/nixhome#devcell-local\n"
+	want := "home-manager switch --flake /opt/nixhome#devcell-local"
 	if !strings.Contains(script, want) {
 		t.Errorf("x86_64 with hmTarget=local must produce %q in script", want)
 	}
@@ -1325,7 +1325,7 @@ func TestThinBuildArgv_HomeManagerTargetX86(t *testing.T) {
 func TestThinBuildArgv_HomeManagerTargetAarch64(t *testing.T) {
 	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "aarch64", "base", "", "myproject")
 	script := argv[len(argv)-1]
-	want := "home-manager switch --flake /opt/nixhome#devcell-local-aarch64\n"
+	want := "home-manager switch --flake /opt/nixhome#devcell-local-aarch64"
 	if !strings.Contains(script, want) {
 		t.Errorf("aarch64 with hmTarget=local must produce %q in script", want)
 	}

@@ -25,11 +25,11 @@ import (
 
 // buildParams is a thin-image build resolved from engine.BuildOpts.
 type buildParams struct {
-	stack          string // --stack, else DEVCELL_STACK, else Cell.Stack
-	explicitStack  bool   // the stack was overridden or set in [cell] stack; the progress label names it
-	image          string // tag to build: --image, else DEVCELL_BUILD_IMAGE, else "" for UserImageTagThin
-	recreateVolume bool   // --update: remove the nix-store volume first so the build repopulates it
-	threads        int    // --build-threads, exported as DEVCELL_BUILD_THREADS; 0 leaves it alone
+	stack         string // --stack, else DEVCELL_STACK, else Cell.Stack
+	explicitStack bool   // the stack was overridden or set in [cell] stack; the progress label names it
+	image         string // tag to build: --image, else DEVCELL_BUILD_IMAGE, else "" for UserImageTagThin
+	updateFlake   bool   // --update: run nix flake update before building
+	threads       int    // --build-threads, exported as DEVCELL_BUILD_THREADS; 0 leaves it alone
 }
 
 // newBuildParams resolves opts for build. getenv is os.Getenv outside tests.
@@ -43,11 +43,11 @@ func newBuildParams(opts engine.BuildOpts, getenv func(string) string) (buildPar
 		image = getenv("DEVCELL_BUILD_IMAGE")
 	}
 	return buildParams{
-		stack:          opts.Cell.WithStack(override).Stack,
-		explicitStack:  override != "" || opts.Cell.Config.Cell.StackExplicit(),
-		image:          image,
-		recreateVolume: opts.Update,
-		threads:        opts.BuildThreads,
+		stack:         opts.Cell.WithStack(override).Stack,
+		explicitStack: override != "" || opts.Cell.Config.Cell.StackExplicit(),
+		image:         image,
+		updateFlake:   opts.Update,
+		threads:       opts.BuildThreads,
 	}, nil
 }
 
@@ -172,6 +172,15 @@ func build(ctx context.Context, c engine.Cell, p buildParams) error {
 		}
 	}
 
+	// ── Flake input update ──────────────────────────────────────────────
+	// --update: run `nix flake update` so inputs (nixpkgs rev, community-home)
+	// advance to their latest revisions before the build evaluates them.
+	if p.updateFlake {
+		if err := updateFlakeLockWithSpinner(c.BuildDir, false, "Updating nix flake inputs"); err != nil {
+			return err
+		}
+	}
+
 	// What we hand ThinBuildArgv is the OVERLAY dir (.devcell), mounted at
 	// /opt/nixhome inside the builder. home-manager target becomes
 	// `devcell-local` (matches GenerateFlakeNix's homeConfigurations output).
@@ -198,19 +207,13 @@ func build(ctx context.Context, c engine.Cell, p buildParams) error {
 		sp.Success(pullLabel)
 	}
 
-	// ── Volume management ──────────────────────────────────────────────────
-	// Docker auto-populates named volumes from the image on first mount when
-	// the volume is empty. Don't pre-create — let docker run create it
-	// implicitly so auto-populate fires correctly.
-	if p.recreateVolume {
-		_ = exec.CommandContext(ctx, "docker", "volume", "rm", "-f", volumeName).Run()
-	}
-
 	// ── Nix cache hydration ───────────────────────────────────────────────
 	// On first build (volume empty), pull the pre-built /nix store from GHCR
 	// so home-manager switch is incremental instead of from-scratch (~5 min → ~1 min).
 	// Non-fatal: if the cache is unavailable, the build proceeds normally.
-	if !p.recreateVolume {
+	// Runs even with --update: nix is content-addressed, so the existing
+	// store paths are valid cache regardless of flake input changes.
+	{
 		hydrated := VolumeHydrated(volumeName, ThinEntrypointSentinel,
 			func(v string) bool { return VolumeExists(ctx, v) },
 			func(v, p string) bool { return VolumeContains(ctx, v, p) },

@@ -338,10 +338,10 @@ func TestCollectLiveClosures_ResolvesContainersConcurrently(t *testing.T) {
 // CELL-334 secondary: PROTECTED must be collected from BOTH *-profile and
 // *-generation roots — generations carry home-manager-files, the very
 // closure CELL-320 exists to protect.
-func TestSafeNixGCScript_CollectsProtectedFromBothRootKinds(t *testing.T) {
-	if !strings.Contains(docker.SafeNixGCScript,
+func TestNixReapSweepScript_CollectsProtectedFromBothRootKinds(t *testing.T) {
+	if !strings.Contains(docker.NixReapSweepScript,
 		"/nix/var/nix/gcroots/devcell/*-profile /nix/var/nix/gcroots/devcell/*-generation") {
-		t.Error("SafeNixGCScript must collect PROTECTED from both *-profile and *-generation globs (CELL-334)")
+		t.Error("NixReapSweepScript must collect PROTECTED from both *-profile and *-generation globs (CELL-334)")
 	}
 }
 

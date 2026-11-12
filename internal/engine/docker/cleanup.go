@@ -41,9 +41,9 @@ type ClosureFailure struct {
 	Err       error
 }
 
-// storeHash extracts the nix store hash from a store path
+// StoreHash extracts the nix store hash from a store path
 // (/nix/store/abc123-name → abc123). Empty input yields "".
-func storeHash(storePath string) string {
+func StoreHash(storePath string) string {
 	base := path.Base(storePath)
 	if i := strings.Index(base, "-"); i > 0 {
 		return base[:i]
@@ -131,14 +131,14 @@ func CollectLiveClosures(
 	return closures, failures, nil
 }
 
-// liveHashes returns the deduplicated hash set of all live closures, in
+// LiveHashes returns the deduplicated hash set of all live closures, in
 // first-seen order.
-func liveHashes(closures []LiveClosure) []string {
+func LiveHashes(closures []LiveClosure) []string {
 	seen := make(map[string]bool)
 	var hashes []string
 	for _, c := range closures {
 		for _, p := range []string{c.ProfilePath, c.GenerationPath} {
-			h := storeHash(p)
+			h := StoreHash(p)
 			if h != "" && !seen[h] {
 				seen[h] = true
 				hashes = append(hashes, h)
@@ -159,10 +159,10 @@ func StampRootsScript(closures []LiveClosure) string {
 	var b strings.Builder
 	b.WriteString("set -e\nmkdir -p /nix/var/nix/gcroots/devcell\n")
 	for _, c := range closures {
-		if h := storeHash(c.ProfilePath); h != "" {
+		if h := StoreHash(c.ProfilePath); h != "" {
 			fmt.Fprintf(&b, "ln -sfT %q /nix/var/nix/gcroots/devcell/%s-profile\n", c.ProfilePath, h)
 		}
-		if h := storeHash(c.GenerationPath); h != "" {
+		if h := StoreHash(c.GenerationPath); h != "" {
 			fmt.Fprintf(&b, "ln -sfT %q /nix/var/nix/gcroots/devcell/%s-generation\n", c.GenerationPath, h)
 		}
 	}
@@ -175,7 +175,7 @@ func StampRootsScript(closures []LiveClosure) string {
 // -meta files are touched — never auto/ roots (namespace-local, CELL-330)
 // and never the store itself (that's `cell build prune`'s job).
 func BuildCleanupScript(closures []LiveClosure) string {
-	live := " " + strings.Join(liveHashes(closures), " ") + " "
+	live := " " + strings.Join(LiveHashes(closures), " ") + " "
 	return `set -e
 LIVE="` + live + `"
 REAPED=0
@@ -282,7 +282,7 @@ func RunCleanup(a RunCleanupArgs) error {
 // volume-resident targets both resolve (CELL-333 lesson).
 func BuildCleanupSteps(closures []LiveClosure) []PruneStep {
 	return []PruneStep{
-		{Argv: []string{
+		{Label: "Reaping stale GC roots", Argv: []string{
 			"docker", "run", "--rm",
 			"-v", DefaultThinStoreVolume + ":/nix",
 			NixCoreImage,

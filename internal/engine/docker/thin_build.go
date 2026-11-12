@@ -514,7 +514,16 @@ fi
 export PATH="/nix/var/nix/profiles/devcell-tools/bin:$PATH"
 
 echo "Running home-manager switch (nix store on volume)..."
-home-manager switch --flake %s#devcell-%s%s
+HM_EXTRA_FLAGS=""
+if [ -n "${DEVCELL_NIX_OVERRIDE_INPUTS:-}" ]; then
+  IFS=',' read -ra _overrides <<< "$DEVCELL_NIX_OVERRIDE_INPUTS"
+  for _ov in "${_overrides[@]}"; do
+    _key="${_ov%%=*}"
+    _val="${_ov#*=}"
+    HM_EXTRA_FLAGS="$HM_EXTRA_FLAGS --override-input $_key $_val"
+  done
+fi
+home-manager switch --flake %s#devcell-%s%s $HM_EXTRA_FLAGS
 
 # Capture the just-switched home-manager-path as an immutable /nix/store
 # realpath. home-manager's installPackages writes to the nix-profile-daemon
@@ -553,7 +562,7 @@ if [ -n "$HM_GENERATION" ] && [ -d "$HM_GENERATION" ]; then
   ln -sfT "$HM_GENERATION" /nix/var/nix/gcroots/devcell/${HM_PROFILE_HASH}-generation
 fi
 cat > /nix/var/nix/gcroots/devcell/${HM_PROFILE_HASH}-meta <<METAEOF
-project=%s
+cell=
 stack=$DEVCELL_STACK
 modules=$DEVCELL_MODULES
 profile=$HM_PROFILE
@@ -593,7 +602,7 @@ cp -a /opt/devcell/ "$CTX/opt_devcell/"
 cp -a /etc/devcell/ "$CTX/etc_devcell/"
 cp -a /etc/fonts/ "$CTX/etc_fonts/" 2>/dev/null || mkdir -p "$CTX/etc_fonts/"
 # Agent configs staged by home-manager activation (via the sudo shim) —
-# entrypoint fragments (30-claude.sh etc.) merge these into user configs.
+# s6 oneshot services (claude-config etc.) merge these into user configs.
 cp -a /etc/claude-code/ "$CTX/etc_claude_code/" 2>/dev/null || mkdir -p "$CTX/etc_claude_code/"
 cp -a /etc/codex/ "$CTX/etc_codex/" 2>/dev/null || mkdir -p "$CTX/etc_codex/"
 cp -a /etc/opencode/ "$CTX/etc_opencode/" 2>/dev/null || mkdir -p "$CTX/etc_opencode/"
@@ -667,8 +676,7 @@ echo "Done — thin image: %s"`,
 		stack,                          // export DEVCELL_STACK
 		modules,                        // export DEVCELL_MODULES
 		flakeArg, hmTarget, archSuffix, // home-manager switch
-		projectName, // ${HM_PROFILE_HASH}-meta: project=<projectName>
-		coreImage,   // FROM <coreImage> (inner Dockerfile)
+		coreImage, // FROM <coreImage> (inner Dockerfile)
 		hmTarget,    // ENV DEVCELL_PROFILE=devcell-<hmTarget>
 		stack,       // ENV DEVCELL_STACK
 		modules,     // ENV DEVCELL_MODULES
@@ -714,6 +722,21 @@ echo "Done — thin image: %s"`,
 	}
 	if v := strings.TrimSpace(os.Getenv("DEVCELL_BUILD_THREADS")); v != "" {
 		args = append(args, "-e", "DEVCELL_BUILD_THREADS="+v)
+	}
+	if v := strings.TrimSpace(os.Getenv("DEVCELL_NIX_OVERRIDE_INPUTS")); v != "" {
+		args = append(args, "-e", "DEVCELL_NIX_OVERRIDE_INPUTS="+v)
+		// Mount local paths referenced in overrides so nix can access them.
+		for _, ov := range strings.Split(v, ",") {
+			parts := strings.SplitN(ov, "=", 2)
+			if len(parts) == 2 {
+				ref := parts[1]
+				if strings.HasPrefix(ref, "path:") {
+					localPath := strings.TrimPrefix(ref, "path:")
+					localPath = DockerHostPath(localPath)
+					args = append(args, "-v", localPath+":"+localPath+":ro")
+				}
+			}
+		}
 	}
 	args = append(args,
 		"-v", "/var/run/docker.sock:/var/run/docker.sock",

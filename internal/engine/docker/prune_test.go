@@ -207,36 +207,35 @@ func TestBuildNixPruneSteps_Default_LinuxSafeGC(t *testing.T) {
 		}
 	}
 
-	// The safe GC step runs via docker run with the nix volume (CELL-333).
-	var script string
+	// Reap/sweep and GC run as separate docker-run steps (CELL-333).
+	var scripts []string
 	for _, s := range steps {
 		joined := strings.Join(s.Argv, " ")
 		if strings.Contains(joined, "docker") && strings.Contains(joined, "run") {
 			for i, a := range s.Argv {
 				if a == "-c" && i+1 < len(s.Argv) {
-					script = s.Argv[i+1]
+					scripts = append(scripts, s.Argv[i+1])
 				}
 			}
 		}
 	}
-	if script == "" {
+	if len(scripts) == 0 {
 		t.Fatalf("no docker run step with sh -c found: %+v", steps)
 	}
 
-	// Script must reference project GC roots and use safe nix-store --gc.
-	mustContain := []string{
-		"gcroots/devcell",
-		"nix-store --gc",
+	// One step must do the project-aware reap/sweep.
+	allScripts := strings.Join(scripts, "\n---\n")
+	if !strings.Contains(allScripts, "gcroots/devcell") {
+		t.Error("safe GC plan missing gcroots/devcell reap step")
 	}
-	for _, want := range mustContain {
-		if !strings.Contains(script, want) {
-			t.Errorf("safe GC script missing %q", want)
-		}
+	// One step must run nix-store --gc.
+	if !strings.Contains(allScripts, "nix-store --gc") {
+		t.Error("safe GC plan missing nix-store --gc step")
 	}
 
-	// Script must NOT use blanket nix-collect-garbage -d — that's force mode.
-	if strings.Contains(script, "nix-collect-garbage") {
-		t.Errorf("safe GC script must not use nix-collect-garbage (use --force for blanket cleanup)")
+	// No step must use blanket nix-collect-garbage -d — that's force mode.
+	if strings.Contains(allScripts, "nix-collect-garbage") {
+		t.Errorf("safe GC plan must not use nix-collect-garbage (use --force for blanket cleanup)")
 	}
 }
 
@@ -429,6 +428,61 @@ func TestBuildPrunePrompt_AllModesContainWarningAndTarget(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBuildPrunePrompt_ShowsSizesWhenAvailable(t *testing.T) {
+	opts := docker.PruneOpts{
+		GOOS: "linux",
+		DiskUsage: docker.DiskUsage{
+			Images:     docker.DiskUsageRow{Size: "11.5GB", Reclaimable: "10.16GB (88%)", Total: 8, Active: 5},
+			Containers: docker.DiskUsageRow{Size: "983.4MB", Reclaimable: "0B (0%)", Total: 17, Active: 17},
+			Volumes:    docker.DiskUsageRow{Size: "101.7GB", Reclaimable: "1.005GB (0%)", Total: 5, Active: 2},
+			BuildCache: docker.DiskUsageRow{Size: "5.6GB"},
+			Pinned: []string{
+				"17 running container(s) pin their images and volumes",
+				"5 of 8 images in use, 3 unused",
+				"2 of 5 volumes in use (includes nix store)",
+			},
+		},
+	}
+	prompt := docker.BuildPrunePrompt(opts)
+	for _, want := range []string{
+		"Current disk usage:",
+		"Images:", "11.5GB", "reclaimable: 10.16GB (88%)",
+		"Containers:", "983.4MB",
+		"Volumes:", "101.7GB", "reclaimable: 1.005GB (0%)",
+		"Build cache:", "5.6GB",
+		"Non-reclaimable:",
+		"17 running container(s) pin their images and volumes",
+		"5 of 8 images in use, 3 unused",
+		"2 of 5 volumes in use (includes nix store)",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt missing %q\nfull prompt:\n%s", want, prompt)
+		}
+	}
+}
+
+func TestBuildPrunePrompt_OmitsSizesWhenEmpty(t *testing.T) {
+	opts := docker.PruneOpts{GOOS: "linux"}
+	prompt := docker.BuildPrunePrompt(opts)
+	if strings.Contains(prompt, "Current disk usage:") {
+		t.Errorf("should not show sizes when DiskUsage is empty\nfull prompt:\n%s", prompt)
+	}
+}
+
+func TestBuildPrunePrompt_NoPinnedWhenNothingActive(t *testing.T) {
+	opts := docker.PruneOpts{
+		GOOS: "linux",
+		DiskUsage: docker.DiskUsage{
+			Images:  docker.DiskUsageRow{Size: "500MB", Reclaimable: "500MB (100%)", Total: 2, Active: 0},
+			Volumes: docker.DiskUsageRow{Size: "1GB", Reclaimable: "1GB (100%)", Total: 1, Active: 0},
+		},
+	}
+	prompt := docker.BuildPrunePrompt(opts)
+	if strings.Contains(prompt, "Non-reclaimable:") {
+		t.Errorf("should not show non-reclaimable when nothing is active\nfull prompt:\n%s", prompt)
 	}
 }
 
@@ -655,19 +709,19 @@ func TestRunPrune_NonIgnoredErrorAborts(t *testing.T) {
 	}
 }
 
-// CELL-334: SafeNixGCScript should report stale roots (roots with metadata
+// CELL-334: NixReapSweepScript should report stale roots (roots with metadata
 // files that have no matching running container). This enables drift detection.
-func TestSafeNixGCScript_ReportsStaleRoots(t *testing.T) {
-	if !strings.Contains(docker.SafeNixGCScript, "-meta") {
-		t.Error("SafeNixGCScript must read *-meta files to identify stale roots for cleanup (CELL-334)")
+func TestNixReapSweepScript_ReportsStaleRoots(t *testing.T) {
+	if !strings.Contains(docker.NixReapSweepScript, "-meta") {
+		t.Error("NixReapSweepScript must read *-meta files to identify stale roots for cleanup (CELL-334)")
 	}
 }
 
-// CELL-334: SafeNixGCScript must clean up stale roots (roots whose -meta
+// CELL-334: NixReapSweepScript must clean up stale roots (roots whose -meta
 // file shows a project that no longer has a running container).
-func TestSafeNixGCScript_CleansStaleRoots(t *testing.T) {
-	if !strings.Contains(docker.SafeNixGCScript, "STALE") {
-		t.Error("SafeNixGCScript must track and report stale root count (CELL-334)")
+func TestNixReapSweepScript_CleansStaleRoots(t *testing.T) {
+	if !strings.Contains(docker.NixReapSweepScript, "STALE") {
+		t.Error("NixReapSweepScript must track and report stale root count (CELL-334)")
 	}
 }
 
@@ -684,22 +738,18 @@ func TestNixGCRootReportScript_ContainsDriftWarning(t *testing.T) {
 
 // CELL-334: Linux default nix prune plan must include a root report step
 // before the GC step.
-func TestBuildNixPruneSteps_Default_LinuxIncludesReportStep(t *testing.T) {
+func TestBuildNixPruneSteps_Default_LinuxOmitsReportStep(t *testing.T) {
 	opts := docker.PruneOpts{
 		GOOS: "linux",
 		Pure: true,
 	}
 	steps := docker.BuildNixPruneSteps(opts)
 
-	var hasReport bool
 	for _, s := range steps {
 		joined := strings.Join(s.Argv, " ")
 		if strings.Contains(joined, "GC Root Report") {
-			hasReport = true
+			t.Error("nix prune plan must not include a report step — report is shown in preflight")
 		}
-	}
-	if !hasReport {
-		t.Error("Linux nix prune plan must include a GC root report step (CELL-334)")
 	}
 }
 
@@ -736,14 +786,14 @@ func TestBuildNixPruneSteps_Default_LinuxRunsInContainer(t *testing.T) {
 	}
 }
 
-// CELL-330: SafeNixGCScript must NOT touch gcroots/auto/ — those symlinks
+// CELL-330: NixReapSweepScript must NOT touch gcroots/auto/ — those symlinks
 // point into per-container paths (/opt/devcell, /tmp/...) that are valid
 // inside the originating container but dangle from the host or any other
 // container. Deleting "broken" auto roots from the wrong namespace reaps
 // live containers' indirect roots.
-func TestSafeNixGCScript_DoesNotTouchAutoRoots(t *testing.T) {
-	if strings.Contains(docker.SafeNixGCScript, "gcroots/auto") {
-		t.Error("SafeNixGCScript must not reference gcroots/auto/ — " +
+func TestNixReapSweepScript_DoesNotTouchAutoRoots(t *testing.T) {
+	if strings.Contains(docker.NixReapSweepScript, "gcroots/auto") {
+		t.Error("NixReapSweepScript must not reference gcroots/auto/ — " +
 			"auto roots are namespace-local and deleting them from " +
 			"a different container is destructive (CELL-330)")
 	}
@@ -777,8 +827,8 @@ func TestBuildNixPruneSteps_Default_DarwinRunsInContainerOnNixVolume(t *testing.
 		}
 	}
 
-	// The safe GC script must run via docker run with the nix volume mounted.
-	var script string
+	// Reap/sweep and GC run as separate docker-run steps on the nix volume.
+	var scripts []string
 	sawVolume := false
 	for _, s := range steps {
 		joined := strings.Join(s.Argv, " ")
@@ -787,7 +837,7 @@ func TestBuildNixPruneSteps_Default_DarwinRunsInContainerOnNixVolume(t *testing.
 			sawVolume = true
 			for i, a := range s.Argv {
 				if a == "-c" && i+1 < len(s.Argv) {
-					script = s.Argv[i+1]
+					scripts = append(scripts, s.Argv[i+1])
 				}
 			}
 		}
@@ -796,10 +846,14 @@ func TestBuildNixPruneSteps_Default_DarwinRunsInContainerOnNixVolume(t *testing.
 		t.Fatalf("no docker run step mounting %s:/nix found: %+v",
 			docker.DefaultThinStoreVolume, steps)
 	}
-	if !strings.Contains(script, "gcroots/devcell") || !strings.Contains(script, "nix-store --gc") {
-		t.Errorf("darwin safe GC must use the project-aware script (gcroots/devcell + nix-store --gc), got: %q", script)
+	allScripts := strings.Join(scripts, "\n---\n")
+	if !strings.Contains(allScripts, "gcroots/devcell") {
+		t.Error("darwin safe GC plan missing gcroots/devcell reap step")
 	}
-	if strings.Contains(script, "nix-collect-garbage") {
+	if !strings.Contains(allScripts, "nix-store --gc") {
+		t.Error("darwin safe GC plan missing nix-store --gc step")
+	}
+	if strings.Contains(allScripts, "nix-collect-garbage") {
 		t.Errorf("darwin default prune must not blanket nix-collect-garbage (that's --force)")
 	}
 }
@@ -818,6 +872,55 @@ func TestBuildDockerPruneSteps_Default_NoHostShellDependency(t *testing.T) {
 }
 
 // RunPrune must call Func when set, not exec Argv.
+// RunPrune must call OnStepStart with each step's Label before executing it,
+// so the caller can update progress (spinner text). DryRun steps are also
+// reported (they appear in the output), but their label is prefixed to
+// distinguish them from executed steps.
+func TestRunPrune_OnStepStartCalledPerStep(t *testing.T) {
+	var labels []string
+	err := docker.RunPrune(docker.RunPruneArgs{
+		Opts:    docker.PruneOpts{GOOS: "linux"},
+		Exec:    func(step docker.PruneStep) error { return nil },
+		Out:     &strings.Builder{},
+		In:      strings.NewReader("y\n"),
+		SkipYes: false,
+		IsTTY:   true,
+		OnStepStart: func(label string) {
+			labels = append(labels, label)
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunPrune err: %v", err)
+	}
+	if len(labels) == 0 {
+		t.Fatal("OnStepStart was never called")
+	}
+	// Every Docker and Nix step should have a non-empty label.
+	for i, l := range labels {
+		if l == "" {
+			t.Errorf("step %d has empty label", i)
+		}
+	}
+}
+
+// Every PruneStep built by BuildDockerPruneSteps and BuildNixPruneSteps
+// must carry a non-empty Label for progress display.
+func TestPruneSteps_AllHaveLabels(t *testing.T) {
+	for _, goos := range []string{"darwin", "linux"} {
+		opts := docker.PruneOpts{GOOS: goos, HomeDir: "/home/test"}
+		for i, step := range docker.BuildDockerPruneSteps(opts) {
+			if step.Label == "" {
+				t.Errorf("%s docker step %d has no Label: %v", goos, i, step.Argv)
+			}
+		}
+		for i, step := range docker.BuildNixPruneSteps(opts) {
+			if step.Label == "" {
+				t.Errorf("%s nix step %d has no Label: %v", goos, i, step.Argv)
+			}
+		}
+	}
+}
+
 func TestRunPrune_FuncStepExecuted(t *testing.T) {
 	called := false
 	steps := []docker.PruneStep{{

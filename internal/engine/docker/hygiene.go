@@ -7,7 +7,7 @@ import (
 
 // HygieneNixScript removes dangling GC root symlinks and orphaned metadata
 // files from /nix/var/nix/gcroots/devcell/. This is the zero-risk subset of
-// SafeNixGCScript: it never touches profile generations, never runs
+// NixReapSweepScript: it never touches profile generations, never runs
 // nix-store --gc, and never modifies the store itself. Only symlinks whose
 // targets no longer exist are removed.
 //
