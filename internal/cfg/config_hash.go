@@ -85,5 +85,20 @@ func ConfigHash(c CellConfig) string {
 	fmt.Fprintf(h, "proxy.presets=%s\n", strings.Join(proxyPresets, ","))
 	fmt.Fprintf(h, "proxy.allow_host_network=%v\n", c.Network.Proxy.ResolvedAllowHostNetwork())
 
+	// Storage
+	fmt.Fprintf(h, "storage.cache_dir=%s\n", c.Storage.ResolvedCacheDir())
+	fmt.Fprintf(h, "storage.shared_cache=%v\n", c.Storage.ResolvedSharedCache())
+
+	// Solitary
+	fmt.Fprintf(h, "solitary.enabled=%v\n", c.Solitary.ResolvedEnabled())
+	fmt.Fprintf(h, "solitary.directories.project=%s\n", c.Solitary.Directories.ResolvedProject())
+	fmt.Fprintf(h, "solitary.directories.home=%s\n", c.Solitary.Directories.ResolvedHome())
+	fmt.Fprintf(h, "solitary.directories.mounts=%s\n", c.Solitary.Directories.ResolvedMounts())
+	fmt.Fprintf(h, "solitary.secrets=%v\n", c.Solitary.ResolvedSecrets())
+	fmt.Fprintf(h, "solitary.use_worktree=%v\n", c.Solitary.ResolvedUseWorktree())
+
+	// Agents
+	fmt.Fprintf(h, "agents.peer_memory=%v\n", c.Agents.ResolvedPeerMemory())
+
 	return fmt.Sprintf("%x", h.Sum(nil))[:12]
 }

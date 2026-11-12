@@ -195,6 +195,27 @@
 # [ports]
 # publish_ip = "127.0.0.1"
 
+# --- Storage cache settings ---
+# [storage]
+# cache_dir = "~/.cache/devcell"   # host cache root. Default: ~/.cache/devcell. Env: DEVCELL_CACHE_DIR
+# shared_cache = true              # share build/nix caches across cells. Default: true
+
+# --- Cross-agent behavior ---
+# [agents]
+# peer_memory = false              # expose peer agent's memories via MCP. Default: false
+
+# --- Solitary mode (locked-down agent sandbox) ---
+# Also activatable via --solitary flag or DEVCELL_SOLITARY=1.
+# [solitary]
+# enabled = false                  # enable solitary mode from config. Default: false
+# use_worktree = false             # use git worktree for project clone. Default: false (not yet implemented)
+# secrets = false                  # load 1Password secrets into the container. Default: false
+#
+# [solitary.directories]
+# project = "clone"                # "clone" (copy), "empty", or "bind" (passthrough). Default: "clone"
+# home = "empty"                   # "empty" or "bind" (passthrough). Default: "empty"
+# mounts = "empty"                 # "empty" or "bind" (passthrough). Default: "empty"
+
 # --- Browser fingerprint (patchright stealth) ---
 # [stealth]
 # enabled = false                  # master switch. Default: false

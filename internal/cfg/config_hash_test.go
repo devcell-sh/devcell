@@ -77,3 +77,71 @@ func TestConfigHash_ChangesOnGUI(t *testing.T) {
 		t.Fatal("different GUI settings must produce different hashes")
 	}
 }
+
+func TestConfigHash_ChangesOnStorageSharedCache(t *testing.T) {
+	shared := true
+	private := false
+	a := CellConfig{Storage: StorageSection{SharedCache: &shared}}
+	b := CellConfig{Storage: StorageSection{SharedCache: &private}}
+	if ConfigHash(a) == ConfigHash(b) {
+		t.Fatal("different storage.shared_cache must produce different hashes")
+	}
+}
+
+func TestConfigHash_ChangesOnStorageCacheDir(t *testing.T) {
+	a := CellConfig{Storage: StorageSection{CacheDir: "/a"}}
+	b := CellConfig{Storage: StorageSection{CacheDir: "/b"}}
+	if ConfigHash(a) == ConfigHash(b) {
+		t.Fatal("different storage.cache_dir must produce different hashes")
+	}
+}
+
+func TestConfigHash_ChangesOnSolitaryProject(t *testing.T) {
+	clone := SolitaryClone
+	empty := SolitaryEmpty
+	a := CellConfig{Solitary: SolitarySection{Directories: SolitaryDirectories{Project: &clone}}}
+	b := CellConfig{Solitary: SolitarySection{Directories: SolitaryDirectories{Project: &empty}}}
+	if ConfigHash(a) == ConfigHash(b) {
+		t.Fatal("different solitary.directories.project must produce different hashes")
+	}
+}
+
+func TestConfigHash_ChangesOnSolitaryHome(t *testing.T) {
+	clone := SolitaryClone
+	empty := SolitaryEmpty
+	a := CellConfig{Solitary: SolitarySection{Directories: SolitaryDirectories{Home: &clone}}}
+	b := CellConfig{Solitary: SolitarySection{Directories: SolitaryDirectories{Home: &empty}}}
+	if ConfigHash(a) == ConfigHash(b) {
+		t.Fatal("different solitary.directories.home must produce different hashes")
+	}
+}
+
+func TestConfigHash_ChangesOnSolitaryMounts(t *testing.T) {
+	clone := SolitaryClone
+	empty := SolitaryEmpty
+	a := CellConfig{Solitary: SolitarySection{Directories: SolitaryDirectories{Mounts: &clone}}}
+	b := CellConfig{Solitary: SolitarySection{Directories: SolitaryDirectories{Mounts: &empty}}}
+	if ConfigHash(a) == ConfigHash(b) {
+		t.Fatal("different solitary.directories.mounts must produce different hashes")
+	}
+}
+
+func TestConfigHash_ChangesOnSolitarySecrets(t *testing.T) {
+	on := true
+	off := false
+	a := CellConfig{Solitary: SolitarySection{Secrets: &on}}
+	b := CellConfig{Solitary: SolitarySection{Secrets: &off}}
+	if ConfigHash(a) == ConfigHash(b) {
+		t.Fatal("different solitary.secrets must produce different hashes")
+	}
+}
+
+func TestConfigHash_ChangesOnAgentsPeerMemory(t *testing.T) {
+	on := true
+	off := false
+	a := CellConfig{Agents: AgentsSection{PeerMemory: &on}}
+	b := CellConfig{Agents: AgentsSection{PeerMemory: &off}}
+	if ConfigHash(a) == ConfigHash(b) {
+		t.Fatal("different agents.peer_memory must produce different hashes")
+	}
+}

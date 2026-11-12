@@ -175,6 +175,12 @@ var Deprecations = []Deprecation{
 		Replacement: "[llm.providers]",
 		Message:     `use [llm.providers.ollama] models = ["qwen3:8b"] instead`,
 	},
+	{
+		Path:        []string{"agents", "shared_memory"},
+		Name:        "[agents] shared_memory",
+		Replacement: "[agents] peer_memory",
+		Message:     `use [agents] peer_memory = true instead`,
+	},
 }
 
 // DeprecatedUse records a deprecated key found in a specific config file.

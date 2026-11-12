@@ -3281,6 +3281,39 @@ func TestMerge_WireguardDedupByName(t *testing.T) {
 	}
 }
 
+func TestMerge_WireguardImpliesModule(t *testing.T) {
+	project := cfg.CellConfig{
+		Wireguard: []cfg.WireguardEntry{{Name: "wg0", Enabled: true, Config: "[Interface]\n[Peer]"}},
+	}
+	merged := cfg.Merge(cfg.CellConfig{}, project)
+	found := false
+	for _, m := range merged.Cell.Modules {
+		if m == "wireguard" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Merge with enabled [[wireguard]] should imply wireguard module, got modules=%v", merged.Cell.Modules)
+	}
+}
+
+func TestMerge_WireguardModuleNotDuplicated(t *testing.T) {
+	project := cfg.CellConfig{
+		Wireguard: []cfg.WireguardEntry{{Name: "wg0", Enabled: true, Config: "[Interface]\n[Peer]"}},
+	}
+	project.Cell.Modules = []string{"wireguard"}
+	merged := cfg.Merge(cfg.CellConfig{}, project)
+	count := 0
+	for _, m := range merged.Cell.Modules {
+		if m == "wireguard" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("Merge should not duplicate wireguard module, got modules=%v", merged.Cell.Modules)
+	}
+}
+
 func TestWireguardEnabled_NoneEnabled(t *testing.T) {
 	c := cfg.CellConfig{
 		Wireguard: []cfg.WireguardEntry{{Name: "tun", Enabled: false, Config: "c"}},
@@ -3972,5 +4005,252 @@ func TestMerge_ShortProjectDir_ProjectWins(t *testing.T) {
 	merged := cfg.Merge(global, project)
 	if merged.Cell.ShortProjectDir == nil || !*merged.Cell.ShortProjectDir {
 		t.Errorf("project should win, got %v", merged.Cell.ShortProjectDir)
+	}
+}
+
+// ── Storage ──────────────────────────────────────────────────────────────
+
+func TestMerge_StorageCacheDirProjectWins(t *testing.T) {
+	global := cfg.CellConfig{Storage: cfg.StorageSection{CacheDir: "/global/cache"}}
+	project := cfg.CellConfig{Storage: cfg.StorageSection{CacheDir: "/project/cache"}}
+	merged := cfg.Merge(global, project)
+	if merged.Storage.CacheDir != "/project/cache" {
+		t.Errorf("project cache_dir should win, got %q", merged.Storage.CacheDir)
+	}
+}
+
+func TestMerge_StorageSharedCacheFalseWins(t *testing.T) {
+	gTrue := true
+	pFalse := false
+	global := cfg.CellConfig{Storage: cfg.StorageSection{SharedCache: &gTrue}}
+	project := cfg.CellConfig{Storage: cfg.StorageSection{SharedCache: &pFalse}}
+	merged := cfg.Merge(global, project)
+	if merged.Storage.SharedCache == nil || *merged.Storage.SharedCache != false {
+		t.Errorf("project shared_cache=false should win, got %v", merged.Storage.SharedCache)
+	}
+}
+
+func TestMerge_StorageDefaultsWhenUnset(t *testing.T) {
+	merged := cfg.Merge(cfg.CellConfig{}, cfg.CellConfig{})
+	dir := merged.Storage.ResolvedCacheDir()
+	if !strings.HasSuffix(dir, ".cache/devcell") {
+		t.Errorf("default cache dir should end with .cache/devcell, got %q", dir)
+	}
+	if !merged.Storage.ResolvedSharedCache() {
+		t.Errorf("default shared_cache should be true")
+	}
+}
+
+func TestStorageSection_ResolvedCacheDir_Tilde(t *testing.T) {
+	s := cfg.StorageSection{CacheDir: "~/my-cache"}
+	dir := s.ResolvedCacheDir()
+	if strings.HasPrefix(dir, "~/") {
+		t.Errorf("tilde should be expanded, got %q", dir)
+	}
+	if !strings.HasSuffix(dir, "/my-cache") {
+		t.Errorf("should end with /my-cache, got %q", dir)
+	}
+}
+
+func TestStorageSection_ResolvedCacheDir_Absolute(t *testing.T) {
+	s := cfg.StorageSection{CacheDir: "/custom/path"}
+	if s.ResolvedCacheDir() != "/custom/path" {
+		t.Errorf("absolute path should be returned as-is, got %q", s.ResolvedCacheDir())
+	}
+}
+
+func TestLoadFile_StorageSection(t *testing.T) {
+	dir := t.TempDir()
+	writeTOML(t, dir, "devcell.toml", `
+[storage]
+cache_dir = "/tmp/test-cache"
+shared_cache = false
+`)
+	c, err := cfg.LoadFile(filepath.Join(dir, "devcell.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Storage.CacheDir != "/tmp/test-cache" {
+		t.Errorf("cache_dir: want /tmp/test-cache, got %q", c.Storage.CacheDir)
+	}
+	if c.Storage.SharedCache == nil || *c.Storage.SharedCache != false {
+		t.Errorf("shared_cache: want false, got %v", c.Storage.SharedCache)
+	}
+}
+
+func TestMerge_AgentsPeerMemoryProjectWins(t *testing.T) {
+	gFalse := false
+	pTrue := true
+	global := cfg.CellConfig{Agents: cfg.AgentsSection{PeerMemory: &gFalse}}
+	project := cfg.CellConfig{Agents: cfg.AgentsSection{PeerMemory: &pTrue}}
+	merged := cfg.Merge(global, project)
+	if merged.Agents.PeerMemory == nil || *merged.Agents.PeerMemory != true {
+		t.Errorf("project peer_memory=true should win, got %v", merged.Agents.PeerMemory)
+	}
+}
+
+func TestMerge_AgentsPeerMemoryDefaultFalse(t *testing.T) {
+	merged := cfg.Merge(cfg.CellConfig{}, cfg.CellConfig{})
+	if merged.Agents.ResolvedPeerMemory() {
+		t.Errorf("default peer_memory should be false")
+	}
+}
+
+func TestMerge_AgentsPeerMemoryGlobalInheritsWhenProjectUnset(t *testing.T) {
+	gTrue := true
+	global := cfg.CellConfig{Agents: cfg.AgentsSection{PeerMemory: &gTrue}}
+	project := cfg.CellConfig{}
+	merged := cfg.Merge(global, project)
+	if !merged.Agents.ResolvedPeerMemory() {
+		t.Errorf("global peer_memory=true should inherit when project is unset")
+	}
+}
+
+func TestLoadFile_AgentsPeerMemory(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/devcell.toml"
+	os.WriteFile(path, []byte(`
+[agents]
+peer_memory = true
+`), 0o644)
+	c, err := cfg.LoadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Agents.ResolvedPeerMemory() {
+		t.Errorf("agents.peer_memory should be true")
+	}
+}
+
+func TestLoadFile_AgentsSharedMemoryDeprecated(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/devcell.toml"
+	os.WriteFile(path, []byte(`
+[agents]
+shared_memory = true
+`), 0o644)
+	c, err := cfg.LoadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Agents.ResolvedPeerMemory() {
+		t.Errorf("deprecated shared_memory should be merged into peer_memory")
+	}
+	found := false
+	for _, d := range c.DeprecatedUses {
+		if d.Name == "[agents] shared_memory" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("shared_memory should produce a deprecation warning")
+	}
+}
+
+// --- [solitary] section tests ---
+
+func TestLoadFile_SolitarySection(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/devcell.toml"
+	os.WriteFile(path, []byte(`
+[solitary]
+enabled = true
+use_worktree = true
+
+[solitary.directories]
+project = "empty"
+home = "bind"
+mounts = "bind"
+`), 0o644)
+	c, err := cfg.LoadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Solitary.ResolvedEnabled() {
+		t.Errorf("enabled should be true when explicitly set")
+	}
+	if c.Solitary.Directories.ResolvedProject() != cfg.SolitaryEmpty {
+		t.Errorf("project should be empty when explicitly set")
+	}
+	if c.Solitary.Directories.ResolvedHome() != cfg.SolitaryBind {
+		t.Errorf("home should be bind when explicitly set")
+	}
+	if c.Solitary.Directories.ResolvedMounts() != cfg.SolitaryBind {
+		t.Errorf("mounts should be bind when explicitly set")
+	}
+	if !c.Solitary.ResolvedUseWorktree() {
+		t.Errorf("use_worktree should be true when explicitly set")
+	}
+}
+
+func TestSolitarySection_Defaults(t *testing.T) {
+	var s cfg.SolitarySection
+	if s.ResolvedEnabled() {
+		t.Errorf("default enabled should be false")
+	}
+	if s.Directories.ResolvedProject() != cfg.SolitaryClone {
+		t.Errorf("default project should be clone")
+	}
+	if s.Directories.ResolvedHome() != cfg.SolitaryEmpty {
+		t.Errorf("default home should be empty")
+	}
+	if s.Directories.ResolvedMounts() != cfg.SolitaryEmpty {
+		t.Errorf("default mounts should be empty")
+	}
+	if s.ResolvedUseWorktree() {
+		t.Errorf("default use_worktree should be false")
+	}
+	if s.ResolvedSecrets() {
+		t.Errorf("default secrets should be false")
+	}
+}
+
+func TestLoadFile_SolitarySecrets(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/devcell.toml"
+	os.WriteFile(path, []byte(`
+[solitary]
+secrets = true
+`), 0o644)
+	c, err := cfg.LoadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Solitary.ResolvedSecrets() {
+		t.Errorf("secrets should be true when explicitly set")
+	}
+}
+
+func TestMerge_SolitaryProjectDirWins(t *testing.T) {
+	gEmpty := cfg.SolitaryEmpty
+	pClone := cfg.SolitaryClone
+	global := cfg.CellConfig{Solitary: cfg.SolitarySection{Directories: cfg.SolitaryDirectories{Project: &gEmpty}}}
+	project := cfg.CellConfig{Solitary: cfg.SolitarySection{Directories: cfg.SolitaryDirectories{Project: &pClone}}}
+	merged := cfg.Merge(global, project)
+	if merged.Solitary.Directories.ResolvedProject() != cfg.SolitaryClone {
+		t.Errorf("project-level project=clone should win")
+	}
+}
+
+func TestMerge_SolitaryGlobalInheritsWhenProjectUnset(t *testing.T) {
+	gEmpty := cfg.SolitaryEmpty
+	global := cfg.CellConfig{Solitary: cfg.SolitarySection{Directories: cfg.SolitaryDirectories{Project: &gEmpty}}}
+	project := cfg.CellConfig{}
+	merged := cfg.Merge(global, project)
+	if merged.Solitary.Directories.ResolvedProject() != cfg.SolitaryEmpty {
+		t.Errorf("global project=empty should inherit when project-level is unset")
+	}
+}
+
+func TestMerge_SolitaryDefaultWhenBothUnset(t *testing.T) {
+	merged := cfg.Merge(cfg.CellConfig{}, cfg.CellConfig{})
+	if merged.Solitary.Directories.ResolvedProject() != cfg.SolitaryClone {
+		t.Errorf("default project should be clone when both layers unset")
+	}
+	if merged.Solitary.Directories.ResolvedHome() != cfg.SolitaryEmpty {
+		t.Errorf("default home should be empty when both layers unset")
+	}
+	if merged.Solitary.Directories.ResolvedMounts() != cfg.SolitaryEmpty {
+		t.Errorf("default mounts should be empty when both layers unset")
 	}
 }

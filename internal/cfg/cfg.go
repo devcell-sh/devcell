@@ -509,6 +509,15 @@ func mergeCellPorts(c *CellConfig) {
 	}
 }
 
+// mergeAgentsPeerMemory copies the deprecated shared_memory value into
+// peer_memory when the new key is unset. Both spellings work during
+// the deprecation window.
+func mergeAgentsPeerMemory(c *CellConfig) {
+	if c.Agents.PeerMemory == nil && c.Agents.SharedMemory != nil {
+		c.Agents.PeerMemory = c.Agents.SharedMemory
+	}
+}
+
 // mergeCellMcps appends [cell] mcps entries into [mcp] enabled,
 // deduplicating by value. Existing [mcp] enabled entries take precedence.
 func mergeCellMcps(c *CellConfig) {
@@ -1166,6 +1175,120 @@ type NetworkSection struct {
 	Proxy NetworkProxySection `toml:"proxy"`
 }
 
+// SolitaryDirMode controls how a directory is isolated in solitary mode.
+type SolitaryDirMode string
+
+const (
+	// SolitaryClone copies the original directory into .devcell/solitary/.
+	SolitaryClone SolitaryDirMode = "clone"
+	// SolitaryEmpty mounts a fresh empty directory from .devcell/solitary/.
+	SolitaryEmpty SolitaryDirMode = "empty"
+	// SolitaryBind passes the original host path through (no isolation).
+	SolitaryBind SolitaryDirMode = "bind"
+)
+
+// SolitaryDirectories holds [solitary.directories] per-dir isolation modes.
+type SolitaryDirectories struct {
+	Project *SolitaryDirMode `toml:"project"` // "clone" (default), "empty", or "bind"
+	Home    *SolitaryDirMode `toml:"home"`    // "empty" (default) or "bind"
+	Mounts  *SolitaryDirMode `toml:"mounts"`  // "empty" (default) or "bind"
+}
+
+func (d SolitaryDirectories) ResolvedProject() SolitaryDirMode {
+	if d.Project == nil {
+		return SolitaryClone
+	}
+	return *d.Project
+}
+
+func (d SolitaryDirectories) ResolvedHome() SolitaryDirMode {
+	if d.Home == nil {
+		return SolitaryEmpty
+	}
+	return *d.Home
+}
+
+func (d SolitaryDirectories) ResolvedMounts() SolitaryDirMode {
+	if d.Mounts == nil {
+		return SolitaryEmpty
+	}
+	return *d.Mounts
+}
+
+// SolitarySection holds [solitary] config for solitary-mode behavior.
+type SolitarySection struct {
+	Enabled     *bool               `toml:"enabled"`      // enable solitary mode from config; default: false; CLI --solitary / DEVCELL_SOLITARY=1 override
+	Directories SolitaryDirectories `toml:"directories"`  // per-directory isolation modes
+	UseWorktree *bool               `toml:"use_worktree"` // use git worktree for project clone; default: false (stubbed)
+	Secrets     *bool               `toml:"secrets"`      // load 1Password secrets into the container; default: false
+}
+
+// ResolvedEnabled returns false (default) unless explicitly set to true.
+func (s SolitarySection) ResolvedEnabled() bool {
+	if s.Enabled == nil {
+		return false
+	}
+	return *s.Enabled
+}
+
+// ResolvedSecrets returns false (default) unless explicitly set to true.
+func (s SolitarySection) ResolvedSecrets() bool {
+	if s.Secrets == nil {
+		return false
+	}
+	return *s.Secrets
+}
+
+// ResolvedUseWorktree returns false (default) unless explicitly set to true.
+func (s SolitarySection) ResolvedUseWorktree() bool {
+	if s.UseWorktree == nil {
+		return false
+	}
+	return *s.UseWorktree
+}
+
+// AgentsSection holds [agents] config for cross-agent behavior.
+type AgentsSection struct {
+	PeerMemory   *bool `toml:"peer_memory"`   // enable peer-memory MCP; nil = unset -> false
+	SharedMemory *bool `toml:"shared_memory"` // deprecated: use peer_memory
+}
+
+// ResolvedPeerMemory returns whether peer memory sharing is enabled. Default: false.
+func (a AgentsSection) ResolvedPeerMemory() bool {
+	if a.PeerMemory != nil {
+		return *a.PeerMemory
+	}
+	return false
+}
+
+// StorageSection holds [storage] config.
+type StorageSection struct {
+	CacheDir    string `toml:"cache_dir"`    // host cache root; default: ~/.cache/devcell
+	SharedCache *bool  `toml:"shared_cache"` // nil = unset -> true when experiment enabled
+}
+
+// ResolvedCacheDir returns the absolute host cache directory.
+// Expands ~/; defaults to ~/.cache/devcell.
+func (s StorageSection) ResolvedCacheDir() string {
+	if s.CacheDir != "" {
+		if strings.HasPrefix(s.CacheDir, "~/") {
+			home, _ := os.UserHomeDir()
+			return filepath.Join(home, s.CacheDir[2:])
+		}
+		return s.CacheDir
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".cache", "devcell")
+}
+
+// ResolvedSharedCache returns whether caches are shared. Default: true.
+func (s StorageSection) ResolvedSharedCache() bool {
+	if s.SharedCache != nil {
+		return *s.SharedCache
+	}
+	return true
+}
+
 // CellConfig is the merged configuration from all TOML layers.
 type CellConfig struct {
 	Cell      CellSection
@@ -1183,6 +1306,9 @@ type CellConfig struct {
 	GUI       GUISection     `toml:"gui"`
 	Theme     ThemeSection   `toml:"theme"`
 	Network   NetworkSection `toml:"network"`
+	Storage   StorageSection  `toml:"storage"`
+	Solitary  SolitarySection `toml:"solitary"`
+	Agents    AgentsSection   `toml:"agents"`
 	Env       map[string]string
 	Mise      map[string]string `toml:"mise"` // [mise] — keys map to MISE_<UPPER_KEY> env vars
 	Volumes   []VolumeMount
@@ -1247,6 +1373,7 @@ func loadBytes(data []byte, path string) (CellConfig, error) {
 	mergeCellPorts(&c)
 	mergeCellMcps(&c)
 	mergeSecrets(&c)
+	mergeAgentsPeerMemory(&c)
 	mergePackagesNode(&c.Packages)
 	if err := validatePythonVersions(c.Packages.Python); err != nil {
 		return CellConfig{}, err
@@ -1719,7 +1846,44 @@ func Merge(global, project CellConfig) CellConfig {
 	// allow_host_network=AND.
 	out.Network = mergeNetwork(global.Network, project.Network)
 
+	// Storage: project scalars win
+	out.Storage = global.Storage
+	if project.Storage.CacheDir != "" {
+		out.Storage.CacheDir = project.Storage.CacheDir
+	}
+	if project.Storage.SharedCache != nil {
+		out.Storage.SharedCache = project.Storage.SharedCache
+	}
+
+	// Solitary: project wins when non-nil
+	out.Solitary = global.Solitary
+	if project.Solitary.Enabled != nil {
+		out.Solitary.Enabled = project.Solitary.Enabled
+	}
+	if project.Solitary.Directories.Project != nil {
+		out.Solitary.Directories.Project = project.Solitary.Directories.Project
+	}
+	if project.Solitary.Directories.Home != nil {
+		out.Solitary.Directories.Home = project.Solitary.Directories.Home
+	}
+	if project.Solitary.Directories.Mounts != nil {
+		out.Solitary.Directories.Mounts = project.Solitary.Directories.Mounts
+	}
+	if project.Solitary.UseWorktree != nil {
+		out.Solitary.UseWorktree = project.Solitary.UseWorktree
+	}
+	if project.Solitary.Secrets != nil {
+		out.Solitary.Secrets = project.Solitary.Secrets
+	}
+
+	// Agents: project wins when non-nil
+	out.Agents = global.Agents
+	if project.Agents.PeerMemory != nil {
+		out.Agents.PeerMemory = project.Agents.PeerMemory
+	}
+
 	migrateGUIField(&out)
+	ApplyImpliedModules(&out)
 	return out
 }
 

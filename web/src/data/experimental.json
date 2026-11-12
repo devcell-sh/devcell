@@ -22,5 +22,13 @@
     "doc": "README.md#engines-and-guests",
     "ticket": "",
     "state": "active"
+  },
+  {
+    "name": "storage-unified",
+    "group": "storage",
+    "summary": "unified shared cache: Go mod/build, npm, uv and winkit caches shared across cells via host bind mounts",
+    "doc": "",
+    "ticket": "",
+    "state": "active"
   }
 ]

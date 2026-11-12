@@ -33,10 +33,16 @@ var (
 		Summary: "Windows guest (--os windows or winpe): a Windows PE + WSL VM run by the winkit engine on vz or QEMU",
 		Doc:     "README.md#engines-and-guests",
 	}
+	// SharedCache enables the unified storage subsystem: shared build-tool
+	// caches (Go, npm, uv) across cells via host-side bind mounts.
+	SharedCache = Experiment{
+		Name:    "storage-unified",
+		Summary: "unified shared cache: Go mod/build, npm, uv and winkit caches shared across cells via host bind mounts",
+	}
 )
 
 // all is the iteration order for List, docs and error messages.
-var all = []Experiment{Cage, BootPopup, Windows}
+var all = []Experiment{Cage, BootPopup, Windows, SharedCache}
 
 // List returns every registered experiment, active or not.
 func List() []Experiment { return append([]Experiment(nil), all...) }

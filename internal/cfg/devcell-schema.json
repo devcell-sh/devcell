@@ -4,6 +4,21 @@
   "additionalProperties": false,
   "description": "devcell project configuration (devcell.toml) and global defaults (~/.config/devcell/devcell.toml). Generated from internal/cfg.CellConfig; do not edit.",
   "properties": {
+    "agents": {
+      "additionalProperties": false,
+      "properties": {
+        "peer_memory": {
+          "description": "enable peer-memory MCP; nil = unset -\u003e false",
+          "type": "boolean"
+        },
+        "shared_memory": {
+          "deprecated": true,
+          "description": "deprecated: use peer_memory. Deprecated: use [agents] peer_memory = true instead (replacement: [agents] peer_memory)",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
     "aws": {
       "additionalProperties": false,
       "properties": {
@@ -728,6 +743,43 @@
       },
       "type": "object"
     },
+    "solitary": {
+      "additionalProperties": false,
+      "properties": {
+        "directories": {
+          "additionalProperties": false,
+          "description": "per-directory isolation modes",
+          "properties": {
+            "home": {
+              "description": "\"empty\" (default) or \"bind\"",
+              "type": "string"
+            },
+            "mounts": {
+              "description": "\"empty\" (default) or \"bind\"",
+              "type": "string"
+            },
+            "project": {
+              "description": "\"clone\" (default), \"empty\", or \"bind\"",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "enabled": {
+          "description": "enable solitary mode from config; default: false; CLI --solitary / DEVCELL_SOLITARY=1 override",
+          "type": "boolean"
+        },
+        "secrets": {
+          "description": "load 1Password secrets into the container; default: false",
+          "type": "boolean"
+        },
+        "use_worktree": {
+          "description": "use git worktree for project clone; default: false (stubbed)",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
     "stealth": {
       "additionalProperties": false,
       "properties": {
@@ -746,6 +798,20 @@
         "useragent": {
           "description": "explicit UA override; default: auto-built from arch+platform",
           "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "storage": {
+      "additionalProperties": false,
+      "properties": {
+        "cache_dir": {
+          "description": "host cache root; default: ~/.cache/devcell",
+          "type": "string"
+        },
+        "shared_cache": {
+          "description": "nil = unset -\u003e true when experiment enabled",
+          "type": "boolean"
         }
       },
       "type": "object"

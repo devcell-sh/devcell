@@ -151,6 +151,24 @@ in
       image = opt types.str;
     };
   };
+  storage = {
+    cache_dir = opt types.str;
+    shared_cache = opt types.bool;
+  };
+  solitary = {
+    enabled = opt types.bool;
+    directories = {
+      project = opt types.str;
+      home = opt types.str;
+      mounts = opt types.str;
+    };
+    use_worktree = opt types.bool;
+    secrets = opt types.bool;
+  };
+  agents = {
+    peer_memory = opt types.bool;
+    shared_memory = opt types.bool;
+  };
   env = opt (types.attrsOf types.str);
   mise = opt (types.attrsOf types.str);
   volumes = opt (types.listOf (types.submodule {

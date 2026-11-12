@@ -214,6 +214,7 @@ Off by default. Turn one on with `--experimental=<name>`, `DEVCELL_EXPERIMENTAL=
 | `ui-cage` | one-line bottom bar (workspace, cell name, clocks) drawn by a host tmux session around the agent | [docs/cage.md](docs/cage.md) | CELL-655 |
 | `ui-boot-popup` | boot panel in a centred tmux popup, closed before the agent starts (needs ui-cage) | [docs/cage.md](docs/cage.md) | CELL-657 |
 | `engine-windows` | Windows guest (--os windows or winpe): a Windows PE + WSL VM run by the winkit engine on vz or QEMU | [README.md#engines-and-guests](README.md#engines-and-guests) | - |
+| `storage-unified` | unified shared cache: Go mod/build, npm, uv and winkit caches shared across cells via host bind mounts | - | - |
 <!-- experiments:end -->
 
 Run `devcell experimental` to see what is on. Details, lifecycle and how to add one: [docs/experimental.md](docs/experimental.md).
