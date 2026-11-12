@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -22,8 +23,10 @@ import (
 	"github.com/devcell-sh/devcell/internal/cfg"
 	"github.com/devcell-sh/devcell/internal/config"
 	"github.com/devcell-sh/devcell/internal/engine"
+	"github.com/devcell-sh/devcell/internal/experiments"
 	"github.com/devcell-sh/devcell/internal/op"
 	"github.com/devcell-sh/devcell/internal/s6"
+	"github.com/devcell-sh/devcell/internal/storage"
 	"github.com/devcell-sh/devcell/internal/telemetry"
 	"github.com/devcell-sh/devcell/internal/ux"
 )
@@ -50,18 +53,32 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	useCell(opts.Cell)
 
 	if opts.Solitary {
-		ux.Debugf("solitary: policy-driven full network lockdown")
+		dirs := cellCfg.Solitary.Directories
+
+		// ── Solitary: log what differs from normal mode ──────────────
+		fmt.Println(ux.StyleMuted.Render("  solitary: locked-down agent sandbox"))
+		fmt.Println(ux.StyleMuted.Render("  solitary: directories: project=" + string(dirs.ResolvedProject()) +
+			" home=" + string(dirs.ResolvedHome()) +
+			" mounts=" + string(dirs.ResolvedMounts())))
+
+		if !cellCfg.Solitary.ResolvedSecrets() {
+			opts.NoSecrets = true
+			fmt.Println(ux.StyleMuted.Render("  solitary: secrets=off (set [solitary] secrets = true to enable)"))
+		} else {
+			fmt.Println(ux.StyleMuted.Render("  solitary: secrets=on"))
+		}
+
 		overrides := policySummary(cellCfg)
-		for _, s := range overrides {
-			ux.Debugf("solitary: %s", s)
-		}
-		ux.Debugf("solitary: proxy force-enabled, host network blocked, ports suppressed")
 		if len(overrides) > 0 {
-			fmt.Println(ux.StyleMuted.Render("  solitary: " + strings.Join(overrides, "; ")))
+			fmt.Println(ux.StyleMuted.Render("  solitary: policy overrides: " + strings.Join(overrides, "; ")))
 		}
+
+		fmt.Println(ux.StyleMuted.Render("  solitary: network: proxy=on, host-network=off, ports=suppressed"))
+
 		if opts.ForceInsecureNetwork {
-			ux.Debugf("solitary: --force-insecure-network ignored (solitary wins)")
+			fmt.Println(ux.StyleMuted.Render("  solitary: --force-insecure-network ignored (solitary wins)"))
 		}
+
 		// Force-enable proxy in the config so the sidecar setup reads it.
 		enabled := true
 		cellCfg.Network.Proxy.Enabled = &enabled
@@ -71,7 +88,42 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 			cellCfg.Network.Proxy.Presets = cfg.SolitaryPolicy().DefaultPresets()
 		}
 		opts.Cell.Config = cellCfg
+
+		// ── Solitary: isolate directories ────────────────────────────
+		prefix := solitaryRunPrefix(c.CellID)
+
+		switch dirs.ResolvedProject() {
+		case cfg.SolitaryClone:
+			cloned, err := cloneProject(c, prefix)
+			if err != nil {
+				return fmt.Errorf("solitary project clone: %w", err)
+			}
+			fmt.Println(ux.StyleMuted.Render("  solitary: project cloned to " + cloned.HostBaseDir))
+			c = cloned
+		case cfg.SolitaryEmpty:
+			dir, err := createSolitaryDir(c.BaseDir, prefix, "project")
+			if err != nil {
+				return fmt.Errorf("solitary empty project: %w", err)
+			}
+			c.HostBaseDir = dir
+			fmt.Println(ux.StyleMuted.Render("  solitary: empty project at " + dir))
+		case cfg.SolitaryBind:
+			ux.Debugf("solitary: project=bind (passthrough, no isolation)")
+		}
+
+		switch dirs.ResolvedHome() {
+		case cfg.SolitaryEmpty:
+			dir, err := createSolitaryDir(c.BaseDir, prefix, "home")
+			if err != nil {
+				return fmt.Errorf("solitary empty home: %w", err)
+			}
+			c.WorkspaceHome = dir
+			fmt.Println(ux.StyleMuted.Render("  solitary: empty home at " + dir))
+		case cfg.SolitaryBind:
+			ux.Debugf("solitary: home=bind (passthrough, no isolation)")
+		}
 	}
+
 	forceInsecure := opts.ForceInsecureNetwork && !opts.Solitary
 
 	thin := true
@@ -110,6 +162,14 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 			func(v string) bool { return VolumeExists(ctx, v) },
 			func(v, p string) bool { return VolumeContains(ctx, v, p) }):
 			needsBuild, reason = true, " /nix volume is missing or unpopulated — rebuilding (thin mode, CELL-38)"
+		default:
+			if missing := MissingImpliedModules(
+				ImageLabel(ctx, imageTag(), "devcell.packages"),
+				cfg.ImpliedModules(cellCfg),
+			); len(missing) > 0 {
+				needsBuild = true
+				reason = fmt.Sprintf(" Image missing required module(s) %v — rebuilding", missing)
+			}
 		}
 		if needsBuild {
 			if reason != "" {
@@ -522,7 +582,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	// Write the Go-generated init script into bootDir.
 	{
 		env := s6.LinuxSessionEnv(c.HostUser)
-		script := "#!/bin/bash\nset -e\n" + s6.EntrypointSnippet(env) + "\n"
+		script := "#!/bin/bash\nset -eo pipefail\n" + s6.EntrypointSnippet(env) + "\n"
 		initPath := filepath.Join(bootDir, "entrypoint.sh")
 		if err := os.WriteFile(initPath, []byte(script), 0o755); err != nil {
 			return fmt.Errorf("write init script: %w", err)
@@ -537,6 +597,83 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		trustFlake = ResolveTrustFlake(c.BaseDir, c.WorkspaceHome)
 	}
 
+	// Storage plan (experiment-gated, Docker only)
+	var storagePlan *storage.Plan
+	expSet := experiments.Set(opts.Experiments)
+	if expSet.Enabled(experiments.SharedCache) {
+		if opts.Solitary {
+			ux.Debugf("storage: shared cache skipped (solitary mode)")
+		} else {
+			in := storage.Input{
+				CacheDir:      cellCfg.Storage.ResolvedCacheDir(),
+				SharedCache:   cellCfg.Storage.ResolvedSharedCache(),
+				WorkspaceName: c.WorkspaceName,
+				CellName:      c.CellName,
+				BaseDir:       c.BaseDir,
+				StackTag:      cell.StackTag(cellCfg.Cell.ResolvedStack(), cellCfg.Cell.Modules),
+			}
+			plan := storage.Resolve(in)
+			if err := storage.EnsureHostDirs(plan); err != nil {
+				return fmt.Errorf("storage cache dirs: %w", err)
+			}
+
+			home, _ := os.UserHomeDir()
+			devcellHome := filepath.Join(home, ".devcell")
+
+			// Migrate old unified cache (~/.devcell/cache) to XDG (~/.cache/devcell)
+			oldUnified := storage.OldUnifiedCacheDir(home)
+			if migrated, migrateErr := storage.MigrateUnifiedCache(oldUnified, in.CacheDir); migrateErr != nil {
+				ux.Debugf("unified cache migration: %v", migrateErr)
+			} else if migrated {
+				ux.Debugf("migrated unified cache %s -> %s", oldUnified, in.CacheDir)
+			}
+
+			if oldDirs, findErr := storage.FindOldWinkitCaches(devcellHome); findErr == nil && len(oldDirs) > 0 {
+				for _, old := range oldDirs {
+					ux.Debugf("migrating winkit cache %s -> %s", old, plan.Winkit.HostPath)
+					if migrateErr := storage.MigrateWinkitCache(old, plan.Winkit.HostPath); migrateErr != nil {
+						ux.Debugf("winkit cache migration: %v", migrateErr)
+					}
+				}
+			}
+
+			mackitDst := storage.MackitPath(in.CacheDir)
+			if oldDir, ok := storage.FindOldMackitCache(home); ok {
+				ux.Debugf("migrating mackit cache %s -> %s", oldDir, mackitDst)
+				if migrateErr := storage.MigrateMackitCache(oldDir, mackitDst); migrateErr != nil {
+					ux.Debugf("mackit cache migration: %v", migrateErr)
+				}
+			}
+
+			oldCaches := storage.FindOldWorkspaceCaches(c.WorkspaceHome)
+			if len(oldCaches) > 0 {
+				for _, d := range oldCaches {
+					rel, _ := filepath.Rel(c.WorkspaceHome, d)
+					ux.Deprecated(os.Stderr, rel, "unified storage now manages this cache; run `cell clean cache` or remove manually")
+				}
+				if isatty.IsTerminal(os.Stdin.Fd()) {
+					fmt.Printf("\n Old caches found in %s\n", c.WorkspaceHome)
+					for _, d := range oldCaches {
+						rel, _ := filepath.Rel(c.WorkspaceHome, d)
+						fmt.Printf("   %s\n", rel)
+					}
+					fmt.Printf(" Clean old caches? [y/N] ")
+					var answer string
+					fmt.Scanln(&answer)
+					if strings.HasPrefix(strings.ToLower(strings.TrimSpace(answer)), "y") {
+						if cleanErr := storage.CleanOldWorkspaceCaches(oldCaches); cleanErr != nil {
+							ux.Debugf("old cache cleanup: %v", cleanErr)
+						} else {
+							fmt.Println(" Old caches removed")
+						}
+					}
+				}
+			}
+
+			storagePlan = &plan
+		}
+	}
+
 	spec := newRunSpec(opts, c)
 	spec.DefaultFlags = defaultFlags
 	spec.ExtraEnv = extraEnv
@@ -546,6 +683,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	spec.InheritEnv = inheritEnv
 	spec.BootDir = bootDir
 	spec.KVMAutoDetected = kvmAutoDetected
+	spec.StoragePlan = storagePlan
 	spec.TTY = isatty.IsTerminal(os.Stdin.Fd())
 
 	if dryRun {
@@ -620,9 +758,18 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 			func() bool { return ContainerRunning(ctx, c.ContainerName) },
 			func() error {
 				startArgv := BuildArgv(startSpec, OsFS, exec.LookPath)
+				ux.Debugf("docker run argv: %v", startArgv)
 				cmd := exec.CommandContext(ctx, startArgv[0], startArgv[1:]...)
-				cmd.Stderr = os.Stderr
-				return cmd.Run()
+				var stderrBuf bytes.Buffer
+				cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf)
+				err := cmd.Run()
+				if stderrBuf.Len() > 0 {
+					ux.Debugf("docker run stderr: %s", stderrBuf.String())
+				}
+				if err != nil {
+					ux.Debugf("docker run error: %v", err)
+				}
+				return err
 			},
 		); err != nil {
 			panel.SetBoot("Boot", "Container", streak.Error, "start failed")
@@ -750,12 +897,28 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 
 	// Auto-stop: if we started this container (not attached) and it's
 	// labeled oneshot, stop it now so the user doesn't have to `cell stop`.
+	// A second Ctrl+C during the stop skips it so the user isn't stuck.
 	if !alreadyRunning && ContainerLabel(ctx, c.ContainerName, "devcell.lifecycle") == "oneshot" {
 		ux.Debugf("auto-stopping oneshot container %s", c.ContainerName)
-		stopCmd := exec.CommandContext(ctx, "docker", "stop", c.ContainerName)
+		fmt.Printf("\n  Stopping container... (Ctrl+C to exit %s but keep this cell running)\n", binary)
+		stopCtx, stopCancel := context.WithCancel(context.Background())
+		abortCh := make(chan os.Signal, 1)
+		signal.Notify(abortCh, syscall.SIGINT, syscall.SIGTERM)
+		go func() {
+			select {
+			case <-abortCh:
+				stopCancel()
+			case <-stopCtx.Done():
+			}
+		}()
+		stopCmd := exec.CommandContext(stopCtx, "docker", "stop", c.ContainerName)
 		stopCmd.Stdout = io.Discard
 		stopCmd.Stderr = io.Discard
-		_ = stopCmd.Run()
+		if err := stopCmd.Run(); err != nil && stopCtx.Err() != nil {
+			fmt.Print("  Skipped — container left running\n")
+		}
+		signal.Stop(abortCh)
+		stopCancel()
 	}
 	cleanedUp = true
 

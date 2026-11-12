@@ -2,6 +2,7 @@ package docker_test
 
 import (
 	"context"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -24,6 +25,7 @@ func baseConfig() config.Config {
 		return m[k]
 	})
 	c.HostUID = os.Getuid()
+	c.HostGID = os.Getgid()
 	return c
 }
 
@@ -272,7 +274,9 @@ func TestArgv_MandatoryEnvVars(t *testing.T) {
 		"APP_NAME=myproject-3",
 		"HOST_USER=bob",
 		"HOST_UID=" + strconv.Itoa(os.Getuid()),
+		"HOST_GID=" + strconv.Itoa(os.Getgid()),
 		"HOME=/home/bob",
+		"TMPDIR=/tmp",
 		"IS_SANDBOX=1",
 		"WORKSPACE=/devcell/home/bob/myproject",
 		"EXT_VNC_PORT=350",
@@ -1391,6 +1395,13 @@ func TestArgv_PassesHostProjectDir(t *testing.T) {
 	}
 }
 
+func TestArgv_PassesProjectName(t *testing.T) {
+	argv := buildArgv(t)
+	if !hasConsecutive(argv, "-e", "DEVCELL_PROJECT_NAME=myproject") {
+		t.Errorf("should pass DEVCELL_PROJECT_NAME for gcroot meta stamping, argv: %v", argv)
+	}
+}
+
 // --- DEVCELL_ARCH override ---
 
 func TestDetectArch_RespectsEnvOverrideAmd64(t *testing.T) {
@@ -2364,5 +2375,54 @@ func TestArgv_ProjectMountNesting_SkipsDescendant(t *testing.T) {
 	// BaseDir itself should still be present.
 	if !hasArg(argv, "/home/bob/myproject:/home/bob/myproject") {
 		t.Errorf("BaseDir mount should still be present: %v", argv)
+	}
+}
+
+func TestTmpdir_SocketRoundTrip(t *testing.T) {
+	// Validates that /tmp supports Unix sockets, which SSHFS-backed dirs don't.
+	// BuildArgv sets TMPDIR=/tmp; this test verifies that target is socket-capable.
+	sock := filepath.Join("/tmp", "devcell-test-"+strconv.Itoa(os.Getpid())+".sock")
+	t.Cleanup(func() { os.Remove(sock) })
+
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatalf("listen on %s: %v", sock, err)
+	}
+	defer ln.Close()
+
+	const msg = "ping"
+	done := make(chan error, 1)
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			done <- err
+			return
+		}
+		defer conn.Close()
+		buf := make([]byte, len(msg))
+		n, err := conn.Read(buf)
+		if err != nil {
+			done <- err
+			return
+		}
+		if string(buf[:n]) != msg {
+			done <- net.UnknownNetworkError("got " + string(buf[:n]) + ", want " + msg)
+			return
+		}
+		done <- nil
+	}()
+
+	conn, err := net.Dial("unix", sock)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	if _, err := conn.Write([]byte(msg)); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	if err := <-done; err != nil {
+		t.Fatalf("server: %v", err)
 	}
 }

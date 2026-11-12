@@ -524,6 +524,12 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 	if err != nil {
 		return err
 	}
+
+	// [storage] requires the storage-unified experiment.
+	if (cellCfg.Storage.CacheDir != "" || cellCfg.Storage.SharedCache != nil) && !exp.Enabled(experiments.SharedCache) {
+		return fmt.Errorf(`[storage] requires experiment "storage-unified": add experimental = ["storage-unified"] to [cell], or set DEVCELL_EXPERIMENTAL=storage-unified`)
+	}
+
 	dryRun := scanFlag("--dry-run")
 
 	// CELL-655: the cage is a host tmux session with a one-line bar; devcell
@@ -546,6 +552,7 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 	}
 
 	opts := runOpts(engineCell(c, cellCfg), binary, defaultFlags, userArgs, extraEnv)
+	opts.Experiments = exp
 	// The bar already names the workspace and cell.
 	opts.HideBanner = cage.Active()
 	// thin: docker runs thin images; the VM engines report false.
@@ -591,7 +598,7 @@ func runOpts(c engine.Cell, binary string, defaultFlags, userArgs []string, extr
 		AutoCleanup:          scanFlag("--auto-cleanup"),
 		NoHygiene:            scanFlag("--no-hygiene"),
 		ForceInsecureNetwork: scanFlag("--force-insecure-network") || os.Getenv("DEVCELL_FORCE_INSECURE_NETWORK") == "1",
-		Solitary:             scanFlag("--solitary") || os.Getenv("DEVCELL_SOLITARY") == "1",
+		Solitary:             scanFlag("--solitary") || os.Getenv("DEVCELL_SOLITARY") == "1" || c.Config.Solitary.ResolvedEnabled(),
 	}
 }
 

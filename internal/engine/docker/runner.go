@@ -24,6 +24,7 @@ import (
 	"github.com/devcell-sh/devcell/internal/cell"
 	"github.com/devcell-sh/devcell/internal/cfg"
 	"github.com/devcell-sh/devcell/internal/config"
+	"github.com/devcell-sh/devcell/internal/storage"
 	"github.com/devcell-sh/devcell/internal/ux"
 )
 
@@ -209,6 +210,7 @@ type RunSpec struct {
 	ProxyEnabled    bool                // when true, use internal network and inject proxy env vars
 	KVMAutoDetected bool                // daemon host has /dev/kvm; set by the boot-checklist probe
 	Policy          cfg.Policy          // isolation policy; nil defaults to OpenPolicy
+	StoragePlan     *storage.Plan       // nil when experiment off or solitary
 }
 
 func (s RunSpec) getenv(key string) string {
@@ -348,12 +350,14 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	e := func(k, v string) { argv = append(argv, "-e", k+"="+v) }
 	e("HOST_USER", c.HostUser)
 	e("HOST_UID", strconv.Itoa(c.HostUID))
+	e("HOST_GID", strconv.Itoa(c.HostGID))
 	e("HOME", "/home/"+c.HostUser)
 	e("TERM", os.Getenv("TERM"))
 	e("HISTFILE", "/home/"+c.HostUser+"/zsh_history_"+c.CellName)
-	e("TMPDIR", "/home/"+c.HostUser+"/tmp")
+	e("TMPDIR", "/tmp")
 	e("CODEX_OSS_BASE_URL", envOrDefault("CODEX_OSS_BASE_URL", "http://host.docker.internal:1234/v1"))
 	e("DEVCELL_HOST_PROJECT_DIR", c.BaseDir)
+	e("DEVCELL_PROJECT_NAME", c.ProjectName)
 	shortProjectPath := "/" + c.WorkspaceName + "/" + c.ProjectName
 	e("DEVCELL_PROJECT_MOUNTS", strings.Join([]string{
 		c.BaseDir,
@@ -448,9 +452,18 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	e("DEVCELL_STEALTH_ARCH", spec.CellCfg.Stealth.ResolvedArch())
 	e("DEVCELL_STEALTH_PLATFORM", spec.CellCfg.Stealth.ResolvedPlatform())
 
-	// [mcp] enabled — runtime MCP server selection (fragments filter at start)
-	if len(spec.CellCfg.Mcp.Enabled) > 0 {
-		e("DEVCELL_MCP_ENABLED", strings.Join(spec.CellCfg.Mcp.Enabled, ","))
+	// [agents] peer_memory — peer-memory MCP for cross-agent memory sharing
+	if spec.CellCfg.Agents.ResolvedPeerMemory() {
+		e("DEVCELL_PEER_MEMORY", "true")
+	}
+
+	// [mcp] enabled — runtime MCP server selection (s6 services filter at start)
+	mcpEnabled := append([]string(nil), spec.CellCfg.Mcp.Enabled...)
+	if spec.CellCfg.Agents.ResolvedPeerMemory() {
+		mcpEnabled = append(mcpEnabled, "peer-memory")
+	}
+	if len(mcpEnabled) > 0 {
+		e("DEVCELL_MCP_ENABLED", strings.Join(mcpEnabled, ","))
 	}
 
 	// [packages.python] / [packages.node] — installed by mise at container start
@@ -520,6 +533,9 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	// Skip any alias whose container path nests inside another alias's path,
 	// because Docker would create intermediate dirs inside the parent bind,
 	// polluting the host project directory.
+	// When HostBaseDir is set (solitary clone), the host source differs from
+	// the container targets so the agent sees the original path layout.
+	hostSource := c.ResolvedHostBaseDir()
 	projectTargets := []string{c.BaseDir, c.ProjectMountPath(), "/" + c.CellName}
 	if c.ProjectName != "" {
 		projectTargets = append(projectTargets, "/"+c.WorkspaceName+"/"+c.ProjectName)
@@ -535,7 +551,7 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 			}
 		}
 		if !nested {
-			v(c.BaseDir + ":" + target)
+			v(hostSource + ":" + target)
 		}
 	}
 	if spec.CellCfg.Cell.ResolvedDockerSocket() && !spec.ProxyEnabled && !dp.DenyDockerSock() {
@@ -552,6 +568,16 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	// Thin image: nix store lives on a named Docker volume, not baked into the image
 	if spec.ThinImage {
 		v(ThinStoreVolume() + ":/nix")
+	}
+
+	// Build-tool cache mounts and env vars (storage-unified experiment)
+	if spec.StoragePlan != nil {
+		for _, m := range spec.StoragePlan.Mounts() {
+			v(m.HostPath + ":" + m.GuestPath)
+		}
+		for _, m := range spec.StoragePlan.Mounts() {
+			e(m.EnvVar, m.GuestPath)
+		}
 	}
 
 	// Boot dir bind-mount: hosts the Go-generated entrypoint script.
@@ -595,7 +621,7 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 
 	// Wireguard env + config mount. The tunnel secrets are forwarded by
 	// name only (-e KEY) so their values never appear in the docker argv;
-	// the entrypoint fragment writes them to the /run/secrets tmpfs.
+	// the s6 secrets service writes them to the /run/secrets tmpfs.
 	if wgEnabled {
 		argv = append(argv, "-e", "DEVCELL_WG_ENABLED=1")
 		for _, k := range []string{"WG_PRIVATE_KEY", "WG_PRESHARED_KEY"} {
