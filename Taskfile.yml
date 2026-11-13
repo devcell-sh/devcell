@@ -4,11 +4,10 @@
 # For LOCAL DEVELOPMENT, use the CLI: `cell build`.
 #   - `cell build`        — rebuild the local cell image from this checkout
 #   - `cell build --update` — bump nix flake inputs + rebuild
-#   - `cell build --thin` — incremental, mounts nix store on a Docker volume
+#   - `cell build`        — nix store lives on a Docker volume (only mode)
 #
 # Taxonomy (post CELL-180 + Modules 2.0):
-#   image:pure:*    ← nix2container path (default, what CI ships)
-#   image:{build,push}        — aggregates (pure path)
+#   image:{build,push}        — nix2container path (what CI ships)
 #   image:{mirror,manifest}   — variant-agnostic utilities
 #
 # Back-compat aliases for muscle memory + external refs are preserved
@@ -54,7 +53,7 @@ vars:
   #
   # Pinned to the Docker Desktop socket while the Colima migration is in
   # flight, so a half-provisioned Colima VM cannot silently become the build
-  # daemon mid-suite (a 2 GiB stock VM makes the thin build's ceilings drop
+  # daemon mid-suite (a 2 GiB stock VM makes the nix build's ceilings drop
   # out entirely — see clampBuildLimits and `task debug:colima`).
   #
   # Resolution order:
@@ -301,14 +300,14 @@ tasks:
   # ── image (CI/release aggregates) ──────────────────────────────────────
   # For LOCAL development, use `cell build` — these tasks are for CI/release.
   image:build:
-    desc: Build pure images (CI/release path). For local dev, use `devcell build`.
+    desc: Build the cell image (CI/release path). For local dev, use `cell build`.
     cmds:
-      - task: image:pure:build
+      - cell build {{.CLI_ARGS}}
 
   image:push:
-    desc: Push pure images to registry (CI).
+    desc: Push the cell image to registry (CI).
     cmds:
-      - task: image:pure:push
+      - docker push {{.CLI_ARGS}}
 
   # ── image: variant-agnostic utilities ──────────────────────────────────
   image:mirror:
@@ -318,7 +317,7 @@ tasks:
       - docker buildx imagetools create -t "{{.DST}}" "{{.SRC}}"
 
   image:manifest:
-    desc: "Stitch per-arch tags into multi-arch manifest. REPO= VERSION= SUFFIX=<-core|-ultimate|-base-pure|-ultimate-pure|''> ARCHES=amd64,arm64"
+    desc: "Stitch per-arch tags into multi-arch manifest. REPO= VERSION= SUFFIX=<-core|-ultimate|''> ARCHES=amd64,arm64"
     silent: true
     vars:
       ARCHES: '{{.ARCHES | default "amd64,arm64"}}'
@@ -2148,14 +2147,14 @@ tasks:
         echo ""
         echo "saved to: {{.LOG}}"
 
-  # ── Colima / thin-build resource debugging ────────────────────────────
+  # ── Colima / nix-build resource debugging ─────────────────────────────
   # Targets the CELL-359 builder-ceiling work. The npm ci "Killed" (exit 137,
   # cgroup OOM) root cause is already settled: --memory 8g + `max-jobs = auto`
   # (= nproc, which --cpus does NOT lower) gave 8 concurrent derivations ~1 GiB
   # each. What is NOT settled is the three hypotheses below, each of which can
   # still break a build on Colima after that fix.
   debug:colima:
-    desc: Dump Colima/Docker daemon capacity, context wiring, and the resource ceilings the thin build will actually emit
+    desc: Dump Colima/Docker daemon capacity, context wiring, and the resource ceilings the nix build will actually emit
     platforms: [darwin]
     silent: true
     vars:
@@ -2300,14 +2299,14 @@ tasks:
         env | grep -E '^DEVCELL_(BUILD|NIX)_' || echo "  none set — defaults apply"
         # --dry-run is documented as "print docker run argv and exit without
         # running" (cmd/root.go). It is wired for the tart/winkit builders;
-        # if the thin/docker path does not honour it yet this prints a real build
+        # if the docker path does not honour it yet this prints a real build
         # instead, so it is guarded by a timeout and --debug supplies the daemon
         # diagnostics (logDockerDiagnostics) regardless.
         item "cell build --dry-run --debug (argv + docker diagnostics)"
         ( DEVCELL_STACK="${DEVCELL_STACK:-base}" \
           timeout 90 cell build --dry-run --debug 2>&1 \
             | grep -viE '^(copying|building) path' \
-            | head -60 ) || echo "  (--dry-run not honoured by the thin path, or timed out — see note in task)"
+            | head -60 ) || echo "  (--dry-run not honoured by the docker path, or timed out — see note in task)"
         item "grep the emitted ceilings out of that output"
         ( DEVCELL_STACK="${DEVCELL_STACK:-base}" \
           timeout 90 cell build --dry-run --debug 2>&1 \

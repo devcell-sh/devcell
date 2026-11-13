@@ -1,0 +1,16 @@
+#:schema https://devcell.sh/schema/v0.0.0/devcell.json
+# devcell.toml — self-contained server image (no nix volume at runtime)
+#
+# Build with: cell build --no-nix-volume
+# Run with:   cell run
+#
+# The --no-nix-volume flag bakes /nix into the image layers instead of
+# relying on a Docker named volume. The resulting image is larger but
+# fully portable: docker run it on any host without the devcell CLI.
+
+[cell]
+stack = "base"
+modules = ["go"]
+packages = ["curl", "jq"]
+ports = ["8080"]
+experimental = ["build-no-nix-volume"]

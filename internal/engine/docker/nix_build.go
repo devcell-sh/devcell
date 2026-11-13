@@ -14,12 +14,12 @@ import (
 	"time"
 )
 
-// NixCoreImage is the default nix base image for thin builds.
+// NixCoreImage is the default nix base image for nix builds.
 // Prefer cfg.DefaultNixImage for the canonical constant; this alias exists
 // for call sites inside the docker engine that don't take a config parameter.
 const NixCoreImage = "docker.io/nixos/nix:2.34.9"
 
-// Resource ceiling for the thin-build container (CELL-359).
+// Resource ceiling for the nix-build container (CELL-359).
 //
 // The builder used to run uncapped, so a `nix build` spike was arbitrated by
 // the VM-wide OOM killer only after the whole VM was already starved. Capping
@@ -268,13 +268,13 @@ func DockerHostPath(p string) string {
 	return p
 }
 
-// ThinBuildArgvFull composes the docker run argv for the thin build.
+// NixBuildArgv composes the docker run argv for the nix build.
 // Runs nixos/nix with the nix store volume + docker socket.
 // Inside: home-manager switch (uses volume cache), then docker build
-// to produce the thin image (nix-core + config, no /nix/store baked in).
+// to produce the image (nix-core + config, /nix/store on a volume).
 //
-// hmTarget is the home-manager flake target name (typically "local" for
-// thin); stack is the user-facing stack name written to
+// hmTarget is the home-manager flake target name (typically "local");
+// stack is the user-facing stack name written to
 // DEVCELL_STACK/metadata.json; modules is a CSV of module names written to
 // DEVCELL_MODULES (CELL-41); projectName is the project directory basename
 // used to scope GC roots so different projects don't overwrite each other's
@@ -291,15 +291,28 @@ func DockerHostPath(p string) string {
 // Detected by prefix: anything starting with a flake-scheme (github:, git+,
 // path:, http:, etc.) is treated as remote; everything else is treated as a
 // local filesystem path.
-func ThinBuildArgvFull(coreImage, containerName, volumeName, nixhomeRef, thinTag, hmTarget, arch, stack, modules, projectName string) []string {
-	return ThinBuildArgvWithPackages(coreImage, containerName, volumeName, nixhomeRef, thinTag, hmTarget, arch, stack, modules, projectName, "")
+func NixBuildArgv(coreImage, containerName, volumeName, nixhomeRef, imageTag, hmTarget, arch, stack, modules, projectName string) []string {
+	return NixBuildArgvWithPackages(coreImage, containerName, volumeName, nixhomeRef, imageTag, hmTarget, arch, stack, modules, projectName, "")
 }
 
-// ThinBuildArgvWithPackages is ThinBuildArgvFull plus the per-module
+// NixBuildArgvWithPackages is NixBuildArgv plus the per-module
 // package counts ("desktop: 69, base: 35") stamped on the image as the
 // devcell.packages label, so `cell <agent>` can show them at start without
 // evaluating nix again. Empty when the build could not evaluate them.
-func ThinBuildArgvWithPackages(coreImage, containerName, volumeName, nixhomeRef, thinTag, hmTarget, arch, stack, modules, projectName, packages string) []string {
+func NixBuildArgvWithPackages(coreImage, containerName, volumeName, nixhomeRef, imageTag, hmTarget, arch, stack, modules, projectName, packages string) []string {
+	return nixBuildArgv(coreImage, containerName, volumeName, nixhomeRef, imageTag, hmTarget, arch, stack, modules, projectName, packages, false)
+}
+
+// NixBuildArgvBaked is the --no-nix-volume build (experimental:
+// build-no-nix-volume): the nix store is copied into the final image's
+// filesystem instead of living on a named Docker volume, so the resulting
+// image needs no /nix volume mount at runtime. There is no volumeName — the
+// builder writes /nix to its own (ephemeral) writable layer.
+func NixBuildArgvBaked(coreImage, containerName, nixhomeRef, imageTag, hmTarget, arch, stack, modules, projectName, packages string) []string {
+	return nixBuildArgv(coreImage, containerName, "", nixhomeRef, imageTag, hmTarget, arch, stack, modules, projectName, packages, true)
+}
+
+func nixBuildArgv(coreImage, containerName, volumeName, nixhomeRef, imageTag, hmTarget, arch, stack, modules, projectName, packages string, bake bool) []string {
 	archSuffix := ""
 	if arch == "aarch64" {
 		archSuffix = "-aarch64"
@@ -316,6 +329,17 @@ func ThinBuildArgvWithPackages(coreImage, containerName, volumeName, nixhomeRef,
 	if isCrossArch(arch) {
 		sandbox = "false"
 		extraPlatforms = "extra-platforms ="
+	}
+
+	// --no-nix-volume: copy /nix into the build context and bake it into the
+	// final image instead of referencing a shared named volume at runtime.
+	builtWith := "nix-volume"
+	nixCopyStep := ""
+	nixCopyDockerfileLine := ""
+	if bake {
+		builtWith = "baked"
+		nixCopyStep = `cp -a /nix "$CTX/nix"`
+		nixCopyDockerfileLine = "COPY nix/ /nix/\n"
 	}
 
 	script := fmt.Sprintf(`set -e
@@ -430,7 +454,7 @@ export HOME=/opt/devcell
 export USER=devcell
 export DEVCELL_STACK=%s
 export DEVCELL_MODULES=%s
-export DEVCELL_BASE_IMAGE=thin
+export DEVCELL_BASE_IMAGE=nix-volume
 export PATH="/opt/devcell/.nix-profile/bin:/opt/devcell/.local/state/nix/profiles/profile/bin:/root/.nix-profile/bin:$PATH"
 
 # nix + cacert already on PATH / exported from pre-profile-cleanup save above
@@ -596,8 +620,9 @@ mkdir -p /etc/devcell
 chown -R 1000:1000 /opt/devcell /etc/devcell 2>/dev/null || true
 
 BUILD_DATE=$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)
-echo "Preparing thin image build context..."
+echo "Preparing image build context..."
 CTX=$(mktemp -d)
+%s
 cp -a /opt/devcell/ "$CTX/opt_devcell/"
 cp -a /etc/devcell/ "$CTX/etc_devcell/"
 cp -a /etc/fonts/ "$CTX/etc_fonts/" 2>/dev/null || mkdir -p "$CTX/etc_fonts/"
@@ -628,7 +653,7 @@ RUN for f in /etc/passwd /etc/group /etc/shadow; do \
     && ln -sf /opt/devcell/.local/bin/nix-ld /lib/ld-linux-aarch64.so.1 \
     && ln -sf /opt/devcell/.local/bin/nix-ld /lib64/ld-linux-x86-64.so.2 \
     && chown -R 1000:1000 /opt/devcell /etc/devcell
-COPY opt_devcell/ /opt/devcell/
+%sCOPY opt_devcell/ /opt/devcell/
 COPY etc_devcell/ /etc/devcell/
 COPY etc_fonts/ /etc/fonts/
 # Fontconfig bridge: pkgs.fontconfig's fonts.conf includes only /etc/fonts/conf.d;
@@ -659,39 +684,46 @@ ENV DEVCELL_STACK=%s
 ENV DEVCELL_MODULES=%s
 ENV DEVCELL_BUILD_DATE=$DEVCELL_BUILD_DATE
 LABEL org.opencontainers.image.created=$DEVCELL_BUILD_DATE
-LABEL devcell.built-with=thin
+LABEL devcell.built-with=%s
 LABEL devcell.stack=%s
 LABEL devcell.packages="%s"
 ENTRYPOINT ["/nix/var/nix/profiles/devcell-tools/bin/tini", "--", "/opt/devcell/.local/bin/entrypoint.sh"]
 CMD ["tail", "-f", "/dev/null"]
 DKEOF
 
-echo "Building thin image via docker socket..."
+echo "Building image via docker socket..."
 docker build --no-cache --platform %s --build-arg "DEVCELL_BUILD_DATE=$BUILD_DATE" --build-arg "NIX_LD=$NIX_LD" -t %s -f "$CTX/Dockerfile" "$CTX"
 rm -rf "$CTX"
-echo "Done — thin image: %s"`,
+echo "Done — image: %s"`,
 		sandbox,                        // sandbox = true|false
 		sandbox,                        // filter-syscalls = true|false (both must be false under QEMU — seccomp BPF uses guest syscall numbers)
 		extraPlatforms,                 // extra-platforms = (empty for cross-arch: QEMU can't handle personality() for i686)
 		stack,                          // export DEVCELL_STACK
 		modules,                        // export DEVCELL_MODULES
 		flakeArg, hmTarget, archSuffix, // home-manager switch
-		coreImage, // FROM <coreImage> (inner Dockerfile)
+		nixCopyStep,          // --no-nix-volume: cp -a /nix "$CTX/nix" (empty otherwise)
+		coreImage,            // FROM <coreImage> (inner Dockerfile)
+		nixCopyDockerfileLine, // --no-nix-volume: COPY nix/ /nix/ (empty otherwise)
 		hmTarget,    // ENV DEVCELL_PROFILE=devcell-<hmTarget>
 		stack,       // ENV DEVCELL_STACK
 		modules,     // ENV DEVCELL_MODULES
+		builtWith,   // LABEL devcell.built-with=<nix-volume|baked>
 		stack,       // LABEL devcell.stack=<stack>
 		packages,    // LABEL devcell.packages="<module: n, ...>"
-		platform, thinTag, thinTag)
+		platform, imageTag, imageTag)
 
 	args := []string{
 		"docker", "run", "--rm", "--privileged", "--name", containerName,
-		"--label", "devcell.role=thin-builder",
+		"--label", "devcell.role=nix-builder",
 		"--label", "devcell.project=" + projectName,
 		"--label", "devcell.stack=" + stack,
 		"--platform", platform,
 		"--user", "0",
-		"-v", volumeName + ":/nix",
+	}
+	if !bake {
+		// Baked builds write /nix to the builder's own ephemeral writable
+		// layer (copied into the image below) instead of a shared volume.
+		args = append(args, "-v", volumeName+":/nix")
 	}
 	// Resource ceiling — see buildCapacityFraction. --memory-swap is left unset
 	// so Docker keeps its 2x default: pinning it equal to --memory would
@@ -771,11 +803,11 @@ func isFlakeRef(s string) bool {
 
 // ── Builder container identity + slot reclaim ────────────────────────────────
 
-// ThinBuilderContainerName names the thin builder for one cell
+// NixBuilderContainerName names the nix builder for one cell
 // (`<project>-<cellID>`, the same key as `devcell-<cell>`). One fixed name for
 // every project meant a build starting in project B force-removed — SIGKILLed,
 // exit 137 with no OOM anywhere — the build project A had in flight.
-func ThinBuilderContainerName(appName string) string {
+func NixBuilderContainerName(appName string) string {
 	return "devcell-builder-" + appName
 }
 

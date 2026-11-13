@@ -30,7 +30,7 @@ const (
 type RankedEntry struct {
 	Kind         EntryKind
 	ID           string
-	Label        string // e.g. "devcell-user:ultimate-pure" or "nix profile install (truncated)"
+	Label        string // e.g. "devcell-user:ultimate" or "nix profile install (truncated)"
 	SizeBytes    int64
 	ReclaimBytes int64
 	PinCount     int // >0 means "in use" — formatter hides reclaim hint

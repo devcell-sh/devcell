@@ -1,4 +1,4 @@
-// sudo_test.go — CELL-86: sudo works in pure (nix2container) images.
+// sudo_test.go — CELL-86: sudo works in nix images.
 //
 // Background: `pkgs.sudo.override { withPam = false; }` strips PAM linkage
 // from the main sudo binary but does NOT propagate to the sudoers.so policy
@@ -8,7 +8,7 @@
 // "unable to initialize PAM: Critical error - immediate abort" and every
 // `sudo` invocation dies before any policy check runs.
 //
-// Fix: pure-image builder (nixhome/image.nix) stages a permissive
+// Fix: the image builder (nixhome/image.nix) stages a permissive
 // /etc/pam.d/sudo pointing at pam_permit.so so pam_start succeeds.
 //
 // Test levels used across test/ (cheapest first):
@@ -140,9 +140,9 @@ func TestSudo_NixInstallHtop(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// CELL-358 — setuid wrapper (thin images)
+// CELL-358 — setuid wrapper (nix-volume images)
 //
-// CELL-86 above fixed the pure image only. Thin images resolve sudo from the
+// CELL-86 above fixed the nix2container image. Nix-volume images resolve sudo from the
 // devcell-tools profile on the SHARED /nix volume, where the store is 0555 and
 // can never carry a setuid bit. Chmod-ing the store was the old fix and is
 // wrong on a shared volume: a `nix profile upgrade` in any cell repoints the

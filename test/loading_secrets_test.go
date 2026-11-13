@@ -38,7 +38,7 @@ var ansiRe = regexp.MustCompile(`\x1b\[[0-9;?]*[a-zA-Z]`)
 func TestCellShell_LoadingSecretsCheckboxAppearsBeforePrompt(t *testing.T) {
 	if testing.Short() {
 		t.Skip("long: drives `cell shell` against a real container image — " +
-			"set DEVCELL_TEST_THIN_IMAGE or run `cell build`")
+			"set DEVCELL_TEST_IMAGE or run `cell build`")
 	}
 
 	cellBin, err := ensureCellBinary()
@@ -46,12 +46,7 @@ func TestCellShell_LoadingSecretsCheckboxAppearsBeforePrompt(t *testing.T) {
 		t.Fatalf("build cell-test binary: %v", err)
 	}
 
-	img, skip := imageTagForVariant(
-		"thin",
-		os.Getenv("DEVCELL_TEST_PURE_IMAGE"),
-		os.Getenv("DEVCELL_TEST_IMAGE"),
-		imageExists,
-	)
+	img, skip := imageTagForVariant("", imageExists)
 	if skip != "" {
 		t.Skip(skip)
 	}
@@ -66,7 +61,7 @@ documents = ["op://devcell-test/secrets"]
 	cmd.Dir = projectDir
 	cmd.Env = append(envWithoutPATH(),
 		"PATH="+opStubDir+":"+defaultPath(),
-		"DEVCELL_TEST_THIN_IMAGE="+img,
+		"DEVCELL_TEST_IMAGE="+img,
 		"DEVCELL_CELL_NAME=loadsecrets-test",
 		"TERM=xterm-256color",
 		"HOME="+t.TempDir(),
@@ -128,19 +123,14 @@ documents = ["op://devcell-test/secrets"]
 func TestCellShell_PhasesAppearInOrder(t *testing.T) {
 	if testing.Short() {
 		t.Skip("long: drives `cell shell` against a real container image — " +
-			"set DEVCELL_TEST_THIN_IMAGE or run `cell build`")
+			"set DEVCELL_TEST_IMAGE or run `cell build`")
 	}
 
 	cellBin, err := ensureCellBinary()
 	if err != nil {
 		t.Fatalf("build cell-test binary: %v", err)
 	}
-	img, skip := imageTagForVariant(
-		"thin",
-		os.Getenv("DEVCELL_TEST_PURE_IMAGE"),
-		os.Getenv("DEVCELL_TEST_IMAGE"),
-		imageExists,
-	)
+	img, skip := imageTagForVariant("", imageExists)
 	if skip != "" {
 		t.Skip(skip)
 	}
@@ -155,7 +145,7 @@ documents = ["op://devcell-test/secrets"]
 	cmd.Dir = projectDir
 	cmd.Env = append(envWithoutPATH(),
 		"PATH="+opStubDir+":"+defaultPath(),
-		"DEVCELL_TEST_THIN_IMAGE="+img,
+		"DEVCELL_TEST_IMAGE="+img,
 		"DEVCELL_CELL_NAME=phaseorder-test",
 		"TERM=xterm-256color",
 		"HOME="+t.TempDir(),
@@ -222,26 +212,21 @@ documents = ["op://devcell-test/secrets"]
 //   - the host listener+consumer renders them
 //
 // If this test fails, the most common causes (rank-ordered) are:
-//  1. Thin image was built before CELL-263 — rebuild with `cell build`
+//  1. Image was built before CELL-263 — rebuild with `cell build`
 //  2. socat missing in nixhome/modules/base.nix (silent notify() no-op)
 //  3. NOTIFY_SOCKET env not reaching the container (BuildArgv bug)
 //  4. s6 service didn't import the notify helper (dependency issue)
 func TestCellShell_ContainerRowsArriveAfterCellReady(t *testing.T) {
 	if testing.Short() {
 		t.Skip("long: drives `cell shell` against a real container image — " +
-			"set DEVCELL_TEST_THIN_IMAGE or run `cell build`")
+			"set DEVCELL_TEST_IMAGE or run `cell build`")
 	}
 
 	cellBin, err := ensureCellBinary()
 	if err != nil {
 		t.Fatalf("build cell-test binary: %v", err)
 	}
-	img, skip := imageTagForVariant(
-		"thin",
-		os.Getenv("DEVCELL_TEST_PURE_IMAGE"),
-		os.Getenv("DEVCELL_TEST_IMAGE"),
-		imageExists,
-	)
+	img, skip := imageTagForVariant("", imageExists)
 	if skip != "" {
 		t.Skip(skip)
 	}
@@ -251,7 +236,7 @@ func TestCellShell_ContainerRowsArriveAfterCellReady(t *testing.T) {
 	cmd.Dir = projectDir
 	cmd.Env = append(envWithoutPATH(),
 		"PATH="+defaultPath(),
-		"DEVCELL_TEST_THIN_IMAGE="+img,
+		"DEVCELL_TEST_IMAGE="+img,
 		"DEVCELL_CELL_NAME=cell263-test",
 		"TERM=xterm-256color",
 		"HOME="+t.TempDir(),

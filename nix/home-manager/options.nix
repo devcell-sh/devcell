@@ -27,7 +27,6 @@ in
     per_cell_image = opt types.bool;
     hostname = opt types.str;
     mac_address = opt types.str;
-    thin = opt types.bool;
     stale_warning = opt types.bool;
     background = opt types.bool;
     experimental = opt (types.listOf types.str);

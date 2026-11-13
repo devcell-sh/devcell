@@ -31,7 +31,7 @@ import (
 	"github.com/devcell-sh/devcell/internal/ux"
 )
 
-// Run acquires the thin image (building it when it is missing, the nix-store
+// Run acquires the image (building it when it is missing, the nix-store
 // volume is unpopulated, or opts.Rebuild is set), runs the boot checklist,
 // and runs the agent in a new container with the terminal attached. With
 // opts.Detach the container starts in the background and Run returns once
@@ -126,9 +126,8 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 
 	forceInsecure := opts.ForceInsecureNetwork && !opts.Solitary
 
-	thin := true
 	imageTag := func() string {
-		return PickImageTagThin()
+		return UserImageTag()
 	}
 	dryRun := opts.DryRun
 	explicitBuild := opts.Rebuild
@@ -147,37 +146,36 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		}
 		logDiagnostics(ctx, c)
 	}
-	// ── Thin image path (CELL-156) ──────────────────────────────────────────
-	if thin {
-		needsBuild := false
-		reason := ""
-		switch {
-		case explicitBuild:
-			needsBuild = true
-		case dryRun:
-			// no-op
-		case !ImageExists(ctx, imageTag()):
-			needsBuild, reason = true, fmt.Sprintf(" No %s image found — building automatically (thin mode)", imageTag())
-		case !VolumeHydrated(ThinStoreVolume(), ThinEntrypointSentinel,
+	// ── Image acquisition (CELL-156) ────────────────────────────────────────
+	needsBuild := false
+	reason := ""
+	switch {
+	case explicitBuild:
+		needsBuild = true
+	case dryRun:
+		// no-op
+	case !ImageExists(ctx, imageTag()):
+		needsBuild, reason = true, fmt.Sprintf(" No %s image found — building automatically", imageTag())
+	case ImageLabel(ctx, imageTag(), "devcell.built-with") != "baked" &&
+		!VolumeHydrated(NixStoreVolume(), NixEntrypointSentinel,
 			func(v string) bool { return VolumeExists(ctx, v) },
 			func(v, p string) bool { return VolumeContains(ctx, v, p) }):
-			needsBuild, reason = true, " /nix volume is missing or unpopulated — rebuilding (thin mode, CELL-38)"
-		default:
-			if missing := MissingImpliedModules(
-				ImageLabel(ctx, imageTag(), "devcell.packages"),
-				cfg.ImpliedModules(cellCfg),
-			); len(missing) > 0 {
-				needsBuild = true
-				reason = fmt.Sprintf(" Image missing required module(s) %v — rebuilding", missing)
-			}
+		needsBuild, reason = true, " /nix volume is missing or unpopulated — rebuilding (CELL-38)"
+	default:
+		if missing := MissingImpliedModules(
+			ImageLabel(ctx, imageTag(), "devcell.packages"),
+			cfg.ImpliedModules(cellCfg),
+		); len(missing) > 0 {
+			needsBuild = true
+			reason = fmt.Sprintf(" Image missing required module(s) %v — rebuilding", missing)
 		}
-		if needsBuild {
-			if reason != "" {
-				fmt.Println(reason)
-			}
-			if err := build(ctx, opts.Cell, autoBuildParams(opts.Cell)); err != nil {
-				return err
-			}
+	}
+	if needsBuild {
+		if reason != "" {
+			fmt.Println(reason)
+		}
+		if err := build(ctx, opts.Cell, autoBuildParams(opts.Cell)); err != nil {
+			return err
 		}
 	}
 
@@ -342,11 +340,11 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 		return err
 	}
 
-	if err := nixStorePhase(ctx, panel, thin, c.BaseDir, c.HostHome, cellCfg.Cell.StaleWarningEnabled(), opts.AutoCleanup, opts.NoHygiene); err != nil {
+	if err := nixStorePhase(ctx, panel, c.BaseDir, c.HostHome, cellCfg.Cell.StaleWarningEnabled(), opts.AutoCleanup, opts.NoHygiene); err != nil {
 		return err
 	}
 
-	if err := closureCheckPhase(ctx, panel, thin, imageTag(), dryRun, func() error {
+	if err := closureCheckPhase(ctx, panel, imageTag(), dryRun, func() error {
 		return build(ctx, opts.Cell, autoBuildParams(opts.Cell))
 	}); err != nil {
 		return err
@@ -375,10 +373,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	}
 	if ux.Verbose && !dryRun {
 		source := DockerHostPath(c.BaseDir)
-		probeVolume := ""
-		if thin {
-			probeVolume = ThinStoreVolume()
-		}
+		probeVolume := NixStoreVolume()
 		out, probeErr := ProbeDockerBind(
 			ctx, imageID, probeVolume, source, "devcell.toml")
 		if probeErr != nil {
@@ -675,6 +670,7 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	}
 
 	spec := newRunSpec(opts, c)
+	spec.NixVolume = ImageLabel(ctx, imageID, "devcell.built-with") != "baked"
 	spec.DefaultFlags = defaultFlags
 	spec.ExtraEnv = extraEnv
 	spec.TrustFlake = trustFlake
@@ -954,7 +950,7 @@ func newRunSpec(opts engine.RunOpts, c config.Config) RunSpec {
 		NixDaemon:    opts.NixDaemon,
 		NoPorts:      opts.NoPorts,
 		ExtraEnv:     opts.Env,
-		ThinImage:    true,
+		NixVolume:    true,
 		Detach:       opts.Detach,
 		NoSecrets:    opts.NoSecrets,
 		ProxyEnabled: proxyEnabled,

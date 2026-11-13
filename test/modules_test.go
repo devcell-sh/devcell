@@ -3,7 +3,7 @@ package container_test
 // Modules 2.0 integration delta tests (CELL-65/317/318/321).
 //
 // Strategy: reuse the shared image() helper (build once, or honour
-// DEVCELL_TEST_IMAGE / DEVCELL_TEST_PURE_IMAGE). Pick representative modules
+// DEVCELL_TEST_IMAGE). Pick representative modules
 // that exercise the new T1 `mkEnableOption` + `mkIf` + `managedMcp` pipeline.
 // Verify two things for each:
 //   1. The module's binary lives at /opt/devcell/.local/state/nix/profiles/profile/bin/<name>
@@ -115,24 +115,24 @@ func TestModules2_EnabledModulesShipBinariesAndClaudeEntries(t *testing.T) {
 //
 // Image acquisition (in priority order):
 //  1. DEVCELL_TEST_DEV_IMAGE — explicit override (e.g. CI passes a pre-pulled tag)
-//  2. Local `devcell-user:dev-thin` if present
-//  3. Auto-build via `buildThinImage("dev")` — `cell build --stack dev
-//     --image devcell-user:dev-thin-<sha>`, ~minutes against a warm nix store.
+//  2. Local `devcell-user:dev` if present
+//  3. Auto-build via `buildNixImage("dev")` — `cell build --stack dev
+//     --image devcell-user:dev-<sha>`, ~minutes against a warm nix store.
 //
 // Gated on `testing.Short()` because path (3) builds an image. Run via
 // `go test ./test` (no -short); the inner loop `go test -short ./test` skips.
 func TestModules2_DevStackHasOnlySeedBinaries(t *testing.T) {
 	devImage := os.Getenv("DEVCELL_TEST_DEV_IMAGE")
 	if devImage == "" {
-		if imageExists("devcell-user:dev-thin") {
-			devImage = "devcell-user:dev-thin"
+		if imageExists("devcell-user:dev") {
+			devImage = "devcell-user:dev"
 		} else {
 			if testing.Short() {
-				t.Skip("long: would build dev-thin via `cell build --stack dev`; run without -short or pre-set DEVCELL_TEST_DEV_IMAGE")
+				t.Skip("long: would build dev image via `cell build --stack dev`; run without -short or pre-set DEVCELL_TEST_DEV_IMAGE")
 			}
-			tag, err := buildThinImage("dev")
+			tag, err := buildNixImage("dev")
 			if err != nil {
-				t.Fatalf("build dev-thin image: %v", err)
+				t.Fatalf("build dev image: %v", err)
 			}
 			devImage = tag
 		}
@@ -167,16 +167,16 @@ func TestModules2_DevStackHasOnlySeedBinaries(t *testing.T) {
 	}
 }
 
-// TestModules2_FreshVolumeStartsCleanly — first-time-use experience for
-// thin mode: mount a fresh empty Docker volume at /nix and verify the cell
-// either bootstraps cleanly OR fails with the known thin-bootstrap error.
+// TestModules2_FreshVolumeStartsCleanly — first-time-use experience:
+// mount a fresh empty Docker volume at /nix and verify the cell
+// either bootstraps cleanly OR fails with the known bootstrap error.
 //
-// KNOWN ARCHITECTURAL GAP (discovered 2026-06-18): the thin image's ENTRYPOINT
-// is `/nix/var/nix/profiles/devcell-tools/bin/tini`, which lives ON the volume
-// — not in the image. An empty volume = no tini = container can't start
+// KNOWN ARCHITECTURAL GAP (discovered 2026-06-18): the image's ENTRYPOINT
+// is `/nix/var/nix/profiles/devcell-tools/bin/tini`, which lives ON the volume,
+// not in the image. An empty volume = no tini = container can't start
 // (error: `exec: /nix/.../tini: no such file or directory`).
 //
-// This means a fresh `docker run` of a thin image against a new volume cannot
+// This means a fresh `docker run` of a nix-volume image against a new volume cannot
 // bootstrap. The first-run path must go through `cell build`, which populates
 // the volume before any agent is run. End users on `cell <agent>` are unaffected
 // because the CLI guarantees the volume is built before launch (CELL-156 era).
@@ -185,11 +185,11 @@ func TestModules2_DevStackHasOnlySeedBinaries(t *testing.T) {
 // If/when the bootstrap is fixed (image carries minimal tini, or entrypoint
 // falls back), this test should be updated to assert successful startup.
 //
-// Skips: non-thin variant (only thin uses /nix volume).
+// Skips: variant without nix volume.
 // Cleanup: removes the volume after the test.
 func TestModules2_FreshVolumeStartsCleanly(t *testing.T) {
-	if !isThinVariant() {
-		t.Skip("thin-variant only; set DEVCELL_TEST_VARIANT=thin")
+	if !hasNixVolume() {
+		t.Skip("nix volume variant only")
 	}
 
 	// Unique volume name per run — purely a string handle, Docker creates it
@@ -204,7 +204,7 @@ func TestModules2_FreshVolumeStartsCleanly(t *testing.T) {
 
 	t.Setenv("DEVCELL_TEST_VOLUME_NAME", volName)
 
-	// startContainer reads thinVolumeName() which now honours the env var.
+	// startContainer reads nixVolumeName() which now honours the env var.
 	// We intercept the panic/fail via a sub-process style: directly construct
 	// the container request and check the error shape, rather than rely on
 	// startContainer's t.Fatalf.
@@ -216,7 +216,7 @@ func TestModules2_FreshVolumeStartsCleanly(t *testing.T) {
 		WaitingFor: wait.ForExec([]string{"pgrep", "tail"}).
 			WithStartupTimeout(30 * 1e9),
 		Mounts: testcontainers.Mounts(
-			testcontainers.VolumeMount(thinVolumeName(), "/nix"),
+			testcontainers.VolumeMount(nixVolumeName(), "/nix"),
 		),
 	}
 	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
@@ -228,7 +228,7 @@ func TestModules2_FreshVolumeStartsCleanly(t *testing.T) {
 		t.Cleanup(func() { _ = c.Terminate(ctx) })
 		out, code := containerExec(t, c, []string{"sh", "-c", "echo first-run-ok"})
 		if code == 0 && strings.Contains(out, "first-run-ok") {
-			t.Log("UNEXPECTED: fresh thin volume booted cleanly — first-run gap may be fixed; consider updating test")
+			t.Log("UNEXPECTED: fresh nix volume booted cleanly — first-run gap may be fixed; consider updating test")
 			return
 		}
 		t.Fatalf("container started but isn't usable: code=%d out=%q", code, out)
@@ -238,9 +238,9 @@ func TestModules2_FreshVolumeStartsCleanly(t *testing.T) {
 	// failure mode still surfaces.
 	errMsg := err.Error()
 	if !strings.Contains(errMsg, "tini") && !strings.Contains(errMsg, "no such file") {
-		t.Fatalf("expected tini-missing error (known thin-bootstrap gap), got different failure: %v", err)
+		t.Fatalf("expected tini-missing error (known nix-volume bootstrap gap), got different failure: %v", err)
 	}
-	t.Logf("CONFIRMED known gap: thin cell can't boot from empty /nix volume — entrypoint binary tini lives on the volume.\n  err: %v", err)
+	t.Logf("CONFIRMED known gap: nix-volume cell can't boot from empty /nix volume — entrypoint binary tini lives on the volume.\n  err: %v", err)
 }
 
 // TestModules2_GlobalTOMLOverrideViaHOME — verifies the layered-merge flow
@@ -444,7 +444,7 @@ func contains(haystack []string, needle string) bool {
 // → nix eval --json → table formatter.
 //
 // Skips when: cell binary isn't built, nix isn't on PATH, or nix can't talk
-// to a daemon (thin devcell cells, sandboxed CI without --store override).
+// to a daemon (devcell cells, sandboxed CI without --store override).
 func TestModules2_CellModulesListEndToEnd(t *testing.T) {
 	if _, err := os.Stat("../bin/cell"); err != nil {
 		t.Skip("../bin/cell not built; run `go build -o ./bin/cell ./cmd` first")
@@ -454,7 +454,7 @@ func TestModules2_CellModulesListEndToEnd(t *testing.T) {
 	}
 	// Probe: can `nix` actually evaluate a flake input? Flake-fetching needs
 	// the daemon/store path that `--expr` alone doesn't exercise. Catches
-	// devcell thin cells and sandboxed CI where the daemon socket is absent.
+	// devcell cells and sandboxed CI where the daemon socket is absent.
 	probe := osexec.Command("nix", "eval", "--json",
 		"--extra-experimental-features", "nix-command flakes",
 		"path:"+nixhomeDir()+"#devcellProfiles.base")
@@ -518,7 +518,7 @@ func TestModules2_LongE2E_CleanVolume_TwoModulesFromGlobalAndProject(t *testing.
 	if err := os.MkdirAll(globalDir, 0o755); err != nil {
 		t.Fatalf("mkdir global: %v", err)
 	}
-	// Resolve the local nixhome dir absolutely — runner.ResolvePureNixhomeRef
+	// Resolve the local nixhome dir absolutely — nixhome.ResolveNixhomeRef
 	// reads [cell].nixhome as tier 1 (explicit user setting), skipping the
 	// github fallback. Mirrors how other long tests cite a known-good nixhome
 	// instead of relying on the network + upstream pin.
@@ -561,7 +561,7 @@ modules = ["`+innerModule+`"]
 	cmd.Env = append(os.Environ(),
 		"HOME="+fakeHome,
 		// Per-test volume isolation: cell build populates THIS volume;
-		// helpers_test.go's thinVolumeName() also reads DEVCELL_NIX_VOLUME
+		// helpers_test.go's nixVolumeName() also reads DEVCELL_NIX_VOLUME
 		// so the testcontainer mount targets the same volume after build.
 		"DEVCELL_NIX_VOLUME="+volName,
 	)
@@ -622,7 +622,7 @@ modules = ["`+innerModule+`"]
 // `https://github.com/devcell-sh/devcell.git` @ `feature/wip`.
 //
 // Pinpoints regressions in:
-//   - `runner.ResolvePureNixhomeRef` tier-3 (github) fallback
+//   - `nixhome.ResolveNixhomeRef` tier-3 (github) fallback
 //   - `scaffold.ParseGithubFlakeRef` + `materializeGithubFlakeRef` git clone
 //   - End-to-end Modules 2.0 with the published upstream layout
 //

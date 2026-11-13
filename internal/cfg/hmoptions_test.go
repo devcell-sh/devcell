@@ -75,7 +75,7 @@ func TestHMOptionsNix_MapsGoTypesToNixTypes(t *testing.T) {
 	out := HMOptionsNix()
 	cases := map[string]string{
 		"string":            "image_tag = opt types.str;",
-		"*bool":             "thin = opt types.bool;",
+		"*bool":             "kvm = opt types.bool;",
 		"bool":              "privileged = opt types.bool;",
 		"int":               "winkit_cpus = opt types.int;",
 		"[]string":          "modules = opt (types.listOf types.str);",

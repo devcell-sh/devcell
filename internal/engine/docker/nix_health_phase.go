@@ -25,11 +25,7 @@ import (
 // Every datapoint and decision is mirrored to ux.Debugf so `--debug` shows
 // the full check: volume, argv, raw probe output, parsed counts, cleanup
 // closures, and reap results.
-func nixStorePhase(ctx context.Context, pr ux.Phaser, thin bool, baseDir, hostHome string, staleWarn, autoCleanup, noHygiene bool) error {
-	if !thin {
-		ux.Debugf("nix health: skipped (not thin mode — no store volume)")
-		return nil
-	}
+func nixStorePhase(ctx context.Context, pr ux.Phaser, baseDir, hostHome string, staleWarn, autoCleanup, noHygiene bool) error {
 	if v := os.Getenv("DEVCELL_NIX_HEALTH_CHECK"); v == "false" || v == "0" {
 		ux.Debugf("nix health: skipped (DEVCELL_NIX_HEALTH_CHECK=%s)", v)
 		return nil
@@ -38,7 +34,7 @@ func nixStorePhase(ctx context.Context, pr ux.Phaser, thin bool, baseDir, hostHo
 	var health NixStoreHealth
 	probed := false
 	_ = pr.PhaseDetailedWarn("Nix store", func() (string, bool, error) {
-		volume := ThinStoreVolume()
+		volume := NixStoreVolume()
 		argv := NixHealthProbeArgv(volume)
 		ux.Debugf("nix health: probing volume=%s", volume)
 		ux.Debugf("nix health: argv=%s", DebugArgv(argv))
@@ -117,7 +113,7 @@ func staleCellNudge(baseDir string, h NixStoreHealth, probed, staleWarn bool) er
 	return fmt.Errorf("launch aborted — update this cell with: cell build --update")
 }
 
-// CELL-418: detect whether the thin image's baked-in nix closure still
+// CELL-418: detect whether the image's baked-in nix closure still
 // exists on the shared nix-store volume. A dead closure means the image
 // will boot silently broken — no nix-daemon, no shell setup, no tools.
 // Prompts for rebuild on TTY; auto-rebuilds on non-TTY.
@@ -126,16 +122,12 @@ func staleCellNudge(baseDir string, h NixStoreHealth, probed, staleWarn bool) er
 // image may not exist at all, and probing a missing image looks exactly
 // like a dead closure. Acting on it would turn a dry run into an image
 // build.
-func closureCheckPhase(ctx context.Context, pr ux.Phaser, thin bool, imageTag string, dryRun bool, rebuild func() error) error {
-	if !thin {
-		ux.Debugf("closure check: skipped (not thin mode)")
-		return nil
-	}
+func closureCheckPhase(ctx context.Context, pr ux.Phaser, imageTag string, dryRun bool, rebuild func() error) error {
 	if dryRun {
 		ux.Debugf("closure check: skipped (dry-run)")
 		return nil
 	}
-	volume := ThinStoreVolume()
+	volume := NixStoreVolume()
 	ux.Debugf("closure check: volume=%s image=%s", volume, imageTag)
 
 	argv := ClosureAliveArgv(volume, imageTag)
@@ -173,7 +165,7 @@ func hygieneDetail(ctx context.Context, health NixStoreHealth, hostHome string) 
 	var parts []string
 
 	if health.StaleRoots > 0 {
-		volume := ThinStoreVolume()
+		volume := NixStoreVolume()
 		argv := HygieneNixArgv(volume)
 		ux.Debugf("hygiene: running nix cleanup (stale=%d)", health.StaleRoots)
 		ux.Debugf("hygiene: argv=%s", DebugArgv(argv))

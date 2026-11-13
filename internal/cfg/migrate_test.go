@@ -28,7 +28,7 @@ func TestMigrateTOML_NoDeprecations_IsNoop(t *testing.T) {
 }
 
 func TestMigrateTOML_RemovesRetiredKeys_KeepsNeighbours(t *testing.T) {
-	src := "[cell]\n# build mode\nthin = true\nstack = \"go\"\nlibvirt_uri = \"qemu:///system\"\nqemu_display = \"cocoa\"\n"
+	src := "[cell]\n# build mode\nvagrant_box = \"foo\"\nstack = \"go\"\nlibvirt_uri = \"qemu:///system\"\nqemu_display = \"cocoa\"\n"
 	res := migrate(t, src)
 	want := "[cell]\n# build mode\nstack = \"go\"\n"
 	if res.After != want {
@@ -186,7 +186,6 @@ func TestMigrateTOML_KitchenSink_LoadsClean(t *testing.T) {
 	src := `# global config
 [cell]
 stack = "ultimate"   # keep
-thin = true
 qemu_ssh_port = 3333  # ssh
 gui = false
 nixhome = "~/dev/home"
@@ -311,7 +310,7 @@ func TestMigrateFile_WritesBackupAndResult(t *testing.T) {
 func TestMigrateFile_ReadOnlyTargetLeavesNoBackup(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "devcell.toml")
-	if err := os.WriteFile(path, []byte("[cell]\nthin = true\n"), 0o444); err != nil {
+	if err := os.WriteFile(path, []byte("[cell]\nqemu_disk_size_gb = 40\n"), 0o444); err != nil {
 		t.Fatal(err)
 	}
 	_, backup, err := cfg.MigrateFile(path, true)
@@ -382,7 +381,7 @@ func TestMigrateFile_ReadOnlySymlinkReportsTarget(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(target, []byte("[cell]\nthin = true\n"), 0o444); err != nil {
+	if err := os.WriteFile(target, []byte("[cell]\nqemu_disk_size_gb = 40\n"), 0o444); err != nil {
 		t.Fatal(err)
 	}
 	path := filepath.Join(dir, "devcell.toml")
@@ -416,7 +415,7 @@ func TestMigrateFile_ReadOnlySymlinkReportsTarget(t *testing.T) {
 func TestMigrateFile_ReadOnlyTargetReportsChanges(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "devcell.toml")
-	if err := os.WriteFile(path, []byte("[cell]\nthin = true\n"), 0o444); err != nil {
+	if err := os.WriteFile(path, []byte("[cell]\nqemu_disk_size_gb = 40\n"), 0o444); err != nil {
 		t.Fatal(err)
 	}
 	res, _, err := cfg.MigrateFile(path, true)
@@ -491,7 +490,7 @@ stack = "go"
 
 // Stale comments alone are reason enough to rewrite the file.
 func TestMigrateTOML_StaleCommentsAloneAreAChange(t *testing.T) {
-	src := "[cell]\nstack = \"go\"\n# thin = true\n"
+	src := "[cell]\nstack = \"go\"\n# libvirt_uri = \"qemu:///system\"\n"
 	res := migrate(t, src)
 	if len(res.Changes) != 1 || res.Changes[0].Key != "comments" {
 		t.Fatalf("want exactly the comments change, got %+v", res.Changes)
@@ -524,7 +523,7 @@ func TestMigrateFile_ReadOnlySymlinkChain_DetectsHomeManager(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(final, []byte("[cell]\nthin = true\n"), 0o444); err != nil {
+	if err := os.WriteFile(final, []byte("[cell]\nqemu_disk_size_gb = 40\n"), 0o444); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(final, hm); err != nil {

@@ -37,8 +37,8 @@ tools inside a consistent Docker dev environment.`,
 		}
 		warnDeprecatedFlags(os.Stderr)
 		// Set docker engine globals BEFORE any subcommand RunE so that
-		// docker.UserImageTag() / PickImageTag() reflect the project's
-		// stack from devcell.toml.
+		// docker.UserImageTag() reflects the project's stack from
+		// devcell.toml.
 		//
 		// Best-effort: silently skips when config can't be loaded (e.g.,
 		// `devcell --help` before cwd has a devcell.toml, or stray cwd).
@@ -368,9 +368,6 @@ var cellBoolFlags = map[string]bool{
 	"--ollama":                 true,
 	"--openrouter":             true,
 	"--nix-daemon":             true, // enable nix-daemon inside container for runtime package installs
-	"--thin":                   true, // thin image mode (default)
-	"--no-thin":                true, // legacy, ignored
-	"--thick":                  true, // legacy, ignored
 	"--no-secrets":             true, // skip all secrets injection: op item get + op run -- prefix
 	"--skip-secrets":           true, // alias for --no-secrets
 	"--no-1password":           true, // alias for --no-secrets (legacy, CELL-42)
@@ -555,7 +552,7 @@ func runAgent(binary string, defaultFlags, userArgs []string, extraEnv map[strin
 	opts.Experiments = exp
 	// The bar already names the workspace and cell.
 	opts.HideBanner = cage.Active()
-	// thin: docker runs thin images; the VM engines report false.
+	// nix volume: docker engine uses nix-on-volume images; VM engines report false.
 	telemetry.TrackCommandRun(filepath.Base(binary), string(engineName), opts.Cell.Stack, opts.Cell.Modules, engineName == engine.Docker)
 
 	// CELL-657: inside the cage, the boot panel renders in a tmux popup

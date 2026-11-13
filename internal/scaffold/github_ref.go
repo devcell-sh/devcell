@@ -8,7 +8,7 @@ import (
 )
 
 // GithubFlakeRef is the parsed form of a `github:owner/repo[/ref][?dir=subdir]`
-// flake reference. Used to drive a host-side `git clone` for thin builds (we
+// flake reference. Used to drive a host-side `git clone` for nix builds (we
 // avoid requiring nix on the host — clone fetches what `nix flake metadata`
 // would have materialized into /nix/store).
 type GithubFlakeRef struct {

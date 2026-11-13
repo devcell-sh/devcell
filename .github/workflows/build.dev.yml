@@ -168,7 +168,7 @@ jobs:
       # end carries everything needed by docker-test. `cell build`
       # reuses store paths across the two invocations (nix is
       # content-addressed), so ultimate after base is incremental.
-      - name: Build thin image (base stack)
+      - name: Build image (base stack)
         env:
           DEVCELL_NIX_VOLUME: devcell-nix-store-${{ matrix.arch }}
           DEVCELL_NIX_MAX_JOBS: "4"
@@ -177,7 +177,7 @@ jobs:
           ./bin/devcell build --stack base --image "$BASE_TAG" --debug
           echo "BASE_TAG=$BASE_TAG" >> "$GITHUB_ENV"
 
-      - name: Build thin image (ultimate stack)
+      - name: Build image (ultimate stack)
         env:
           DEVCELL_NIX_VOLUME: devcell-nix-store-${{ matrix.arch }}
           DEVCELL_NIX_MAX_JOBS: "4"
@@ -264,9 +264,7 @@ jobs:
         # (kicad, plex, gui) find what they need. `DEVCELL_TEST_BASE_IMAGE`
         # points at the smaller base image for entrypoint-only tests
         # (TestEntrypoint_DebugTimestamps etc.). Setting `DEVCELL_USER_IMAGE`
-        # without `DEVCELL_USER_IMAGE_THIN` works because UserImageTagThin()
-        # falls back to DEVCELL_USER_IMAGE as-is (no `-thin` suffix appended)
-        # per CELL-286 prep.
+        # works because UserImageTag() uses DEVCELL_USER_IMAGE as-is.
         # `DEVCELL_NIX_VOLUME` points cell at the per-arch volume we just
         # hydrated from the GHCR cache, so `cell shell` / `cell claude` skip
         # the lazy-build path entirely instead of falling back to the

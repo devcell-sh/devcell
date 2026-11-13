@@ -209,7 +209,7 @@ func TestEnv_BasePermissions(t *testing.T) {
 
 // TestEnv_ImageVersionStamps -- build metadata must be discoverable from
 // /etc/devcell/metadata.json (the canonical source per CELL-139).
-// metadata.json is staged by the thin build (internal/scaffold).
+// metadata.json is staged by the nix build (internal/scaffold).
 func TestEnv_ImageVersionStamps(t *testing.T) {
 	c := startEnvContainer(t)
 

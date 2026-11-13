@@ -208,9 +208,9 @@ func TestBuildCleanupSteps_RunsInContainerOnNixVolume(t *testing.T) {
 	}
 	joined := strings.Join(steps[0].Argv, " ")
 	if !strings.Contains(joined, "docker run") ||
-		!strings.Contains(joined, docker.DefaultThinStoreVolume+":/nix") {
+		!strings.Contains(joined, docker.DefaultNixStoreVolume+":/nix") {
 		t.Errorf("cleanup must run in a container mounting %s:/nix, got: %v",
-			docker.DefaultThinStoreVolume, steps[0].Argv)
+			docker.DefaultNixStoreVolume, steps[0].Argv)
 	}
 }
 
@@ -258,7 +258,7 @@ func TestRunCleanup_AcceptedPromptExecutesReaperStep(t *testing.T) {
 		t.Fatalf("want 1 executed step, got %d", len(got))
 	}
 	joined := strings.Join(got[0].Argv, " ")
-	if !strings.Contains(joined, docker.DefaultThinStoreVolume+":/nix") {
+	if !strings.Contains(joined, docker.DefaultNixStoreVolume+":/nix") {
 		t.Errorf("executed step must mount the nix volume: %v", got[0].Argv)
 	}
 }
@@ -371,7 +371,7 @@ func TestBuildNixPruneSteps_LiveClosuresInsertStampStepBeforeGC(t *testing.T) {
 			GenerationPath: "/nix/store/bbb222-home-manager-generation",
 		},
 	}
-	opts := docker.PruneOpts{GOOS: "linux", Pure: true, LiveClosures: closures}
+	opts := docker.PruneOpts{GOOS: "linux", LiveClosures: closures}
 	steps := docker.BuildNixPruneSteps(opts)
 
 	stampIdx, gcIdx := -1, -1

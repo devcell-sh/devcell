@@ -163,9 +163,7 @@ Local development uses `devcell build` — `task image:*` is for CI/release only
 ```bash
 devcell build                    # Rebuild the local cell image from this checkout
 devcell build --update           # Bump nix flake inputs + rebuild
-devcell build --thin             # Incremental, mounts nix store on a Docker volume
-task image:pure:build         # CI/release: build pure base + ultimate
-task image:impure:build       # [DEPRECATED] legacy Dockerfile path, kept one release
+task image:build              # CI/release: build nix2container images
 ```
 
 ### Testing
@@ -215,6 +213,7 @@ Off by default. Turn one on with `--experimental=<name>`, `DEVCELL_EXPERIMENTAL=
 | `ui-boot-popup` | boot panel in a centred tmux popup, closed before the agent starts (needs ui-cage) | [docs/cage.md](docs/cage.md) | CELL-657 |
 | `engine-windows` | Windows guest (--os windows or winpe): a Windows PE + WSL VM run by the winkit engine on vz or QEMU | [README.md#engines-and-guests](README.md#engines-and-guests) | - |
 | `storage-unified` | unified shared cache: Go mod/build, npm, uv and winkit caches shared across cells via host bind mounts | - | - |
+| `build-no-nix-volume` | cell build --no-nix-volume: bake nix into the image filesystem instead of a Docker named volume | - | - |
 <!-- experiments:end -->
 
 Run `devcell experimental` to see what is on. Details, lifecycle and how to add one: [docs/experimental.md](docs/experimental.md).

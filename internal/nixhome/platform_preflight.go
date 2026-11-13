@@ -13,7 +13,7 @@ import (
 // are compatible with the target system. Returns nil on success.
 //
 // Skips gracefully (returns nil) when nix is not in PATH — this allows the
-// thin Docker build path to work on hosts without nix installed.
+// Docker build path to work on hosts without nix installed.
 //
 // targetSystem is a nix system string like "aarch64-linux" or "aarch64-darwin".
 func PreflightPlatformCheck(ctx context.Context, nixhomeFlakeRef, targetSystem string) error {

@@ -2,7 +2,7 @@ package container_test
 
 // cold_run_test.go — e2e "day-one" test: scaffold a project, build on a
 // fresh nix volume, start a container, and verify the result. Exercises
-// nix cache hydration, thin-image build, and basic cell functionality.
+// nix cache hydration, image build, and basic cell functionality.
 
 import (
 	"context"

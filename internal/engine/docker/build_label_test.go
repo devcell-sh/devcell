@@ -12,16 +12,16 @@ import (
 // imply opt-in where there wasn't any.
 
 func TestBuildLabel_ImplicitStackOmitsQualifier(t *testing.T) {
-	got := docker.BuildLabel("Building thin image", "base", false)
-	want := "Building thin image"
+	got := docker.BuildLabel("Building image", "base", false)
+	want := "Building image"
 	if got != want {
 		t.Errorf("implicit stack: want %q, got %q", want, got)
 	}
 }
 
 func TestBuildLabel_ExplicitStackIncludesQualifier(t *testing.T) {
-	got := docker.BuildLabel("Building thin image", "go", true)
-	want := "Building thin image (stack=go)"
+	got := docker.BuildLabel("Building image", "go", true)
+	want := "Building image (stack=go)"
 	if got != want {
 		t.Errorf("explicit stack: want %q, got %q", want, got)
 	}

@@ -105,7 +105,7 @@ func TestParseSize_RejectsUnknownUnit(t *testing.T) {
 func TestRankEntries_SortsByReclaimableBytesDesc(t *testing.T) {
 	snap := docker.DFSnapshot{
 		Images: []docker.DFImage{
-			{ID: "sha256:img-pinned", Containers: 3, SizeBytes: 29_800_000_000, UniqueBytes: 4_000_000_000, Repository: "devcell-user", Tag: "ultimate-pure"},
+			{ID: "sha256:img-pinned", Containers: 3, SizeBytes: 29_800_000_000, UniqueBytes: 4_000_000_000, Repository: "devcell-user", Tag: "ultimate"},
 			{ID: "sha256:img-orphan", Containers: 0, SizeBytes: 29_800_000_000, UniqueBytes: 3_900_000_000, Repository: "<none>"},
 			{ID: "sha256:img-fully-shared", Containers: 0, SizeBytes: 29_800_000_000, UniqueBytes: 0, Repository: "<none>"},
 		},
@@ -336,7 +336,7 @@ func TestFormatJSON_StableSchema(t *testing.T) {
 func TestFormatTable_HighlightsPinnedAndPrintsHints(t *testing.T) {
 	snap := docker.DFSnapshot{
 		Images: []docker.DFImage{
-			{ID: "sha256:2569df2ab030deadbeef", Containers: 3, SizeBytes: 29_800_000_000, UniqueBytes: 4_063_000_000, Repository: "devcell-user", Tag: "ultimate-pure"},
+			{ID: "sha256:2569df2ab030deadbeef", Containers: 3, SizeBytes: 29_800_000_000, UniqueBytes: 4_063_000_000, Repository: "devcell-user", Tag: "ultimate"},
 			{ID: "sha256:aded93bf10dcdeadbeef", Containers: 0, SizeBytes: 29_800_000_000, UniqueBytes: 3_869_000_000, Repository: "<none>", CreatedSince: "43 hours ago"},
 		},
 		Volumes: []docker.DFVolume{
@@ -354,7 +354,7 @@ func TestFormatTable_HighlightsPinnedAndPrintsHints(t *testing.T) {
 
 	wantSubstrings := []string{
 		"TYPE", "SIZE", "RECLAIM", "PINNED",
-		"devcell-user:ultimate-pure",
+		"devcell-user:ultimate",
 		"✓ (3)",                        // pinned marker with count
 		"docker image rm aded93bf10dc", // orphan reclaim hint, short id form
 		"docker buildx prune",          // cache/volume hint

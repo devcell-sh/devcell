@@ -10,13 +10,13 @@ import (
 // CELL-418: the probe argv must mount the nix volume at /nix and run inside
 // the target image so the baked-in profile symlink can be followed.
 func TestClosureAliveArgv_MountsVolumeAndImage(t *testing.T) {
-	argv := docker.ClosureAliveArgv("devcell-nix-store", "devcell-user:base-thin")
+	argv := docker.ClosureAliveArgv("devcell-nix-store", "devcell-user:base")
 	joined := strings.Join(argv, " ")
 
 	if !strings.Contains(joined, "-v devcell-nix-store:/nix") {
 		t.Errorf("expected nix volume mount, got: %s", joined)
 	}
-	if !strings.Contains(joined, "devcell-user:base-thin") {
+	if !strings.Contains(joined, "devcell-user:base") {
 		t.Errorf("expected image name in argv, got: %s", joined)
 	}
 	if !strings.Contains(joined, "--entrypoint") {

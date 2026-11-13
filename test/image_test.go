@@ -388,12 +388,6 @@ func TestCell_Shell(t *testing.T) {
 		}
 
 		home := cellShellHome(t)
-		// Pin the pure-image tag so cell shell uses the local image instead of
-		// trying to pull <registry>:v<ver>-<stack>-pure. runCellShell only sets
-		// DEVCELL_USER_IMAGE, but cell shell defaults to pure mode and reads
-		// DEVCELL_USER_IMAGE_PURE.
-		t.Setenv("DEVCELL_USER_IMAGE_PURE", userImage)
-
 		// Use distinct markers that won't appear in the literal echoed
 		// command. The startup logs may include "Entrypoint ready — exec
 		// bash -c '<script>'" which would let extractMarker latch on to
@@ -523,12 +517,12 @@ func TestCell_Binary(t *testing.T) {
 // --- Toolchain ---
 
 // TestClaude_CodeVersion verifies claude CLI is present and >= minVersion.
-// Each subtest builds a thin image for the target stack, starts a container
+// Each subtest builds an image for the target stack, starts a container
 // via testcontainers, and execs `claude --version`. Artifacts persist under
 // test/results/<datetime>-<sha>/TestClaude_CodeVersion/<stack>/.
 func TestClaude_CodeVersion(t *testing.T) {
 	if testing.Short() {
-		t.Skip("long: builds thin image per stack")
+		t.Skip("long: builds image per stack")
 	}
 
 	const minVersion = "v2.1.70"
@@ -555,10 +549,10 @@ func TestClaude_CodeVersion(t *testing.T) {
 				t.Fatalf("write global config: %v", err)
 			}
 
-			// Build thin image for this stack.
-			img, err := buildThinImage(stack)
+			// Build nix image for this stack.
+			img, err := buildNixImage(stack)
 			if err != nil {
-				t.Fatalf("build %s thin image: %v", stack, err)
+				t.Fatalf("build %s image: %v", stack, err)
 			}
 
 			ctx := context.Background()
@@ -571,7 +565,7 @@ func TestClaude_CodeVersion(t *testing.T) {
 				User: "0",
 				Cmd:  []string{"tail", "-f", "/dev/null"},
 				Mounts: testcontainers.Mounts(
-					testcontainers.VolumeMount(thinVolumeName(), "/nix"),
+					testcontainers.VolumeMount(nixVolumeName(), "/nix"),
 				),
 				WaitingFor: wait.ForExec([]string{"pgrep", "tail"}).
 					WithStartupTimeout(30 * time.Second),

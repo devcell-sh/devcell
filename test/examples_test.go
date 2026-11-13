@@ -239,7 +239,7 @@ func startExampleContainer(t *testing.T, imageTag string) testcontainers.Contain
 		WaitingFor: wait.ForExec([]string{"pgrep", "tail"}).
 			WithStartupTimeout(startupTimeout()),
 		Mounts: testcontainers.Mounts(
-			testcontainers.VolumeMount(thinVolumeName(), "/nix"),
+			testcontainers.VolumeMount(nixVolumeName(), "/nix"),
 		),
 	}
 	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{

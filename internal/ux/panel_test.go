@@ -101,7 +101,7 @@ func TestBootPanel_MultiGroup(t *testing.T) {
 func TestBootPanel_WarnNoteUsesShortTag(t *testing.T) {
 	panel := NewBootPanel(testGroups("Nix store"))
 	_ = panel.PhaseDetailedWarn("Nix store", func() (string, bool, error) {
-		return "drifted — 4 profile hashes (drift) — run: cell build prune --pure", true, nil
+		return "drifted — 4 profile hashes (drift) — run: cell clean build", true, nil
 	})
 	snap := panel.loader.Snapshot()
 	note := snap.Note(0, 0)

@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Runtime seams for CollectLiveClosures — thin exec wrappers, injected as
+// Runtime seams for CollectLiveClosures — exec wrappers, injected as
 // the ps/resolve callbacks so the collection logic stays unit-testable.
 
 // DockerRunningDevcellContainers lists RUNNING devcell containers by the

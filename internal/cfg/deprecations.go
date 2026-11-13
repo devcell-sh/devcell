@@ -20,12 +20,6 @@ type Deprecation struct {
 // with its struct field when the old key is dropped.
 var Deprecations = []Deprecation{
 	{
-		Path:        []string{"cell", "thin"},
-		Name:        "[cell] thin",
-		Replacement: "(none)",
-		Message:     "remove it; thin is the only build mode",
-	},
-	{
 		Path:        []string{"cell", "libvirt_uri"},
 		Name:        "[cell] libvirt_uri",
 		Replacement: "(none)",

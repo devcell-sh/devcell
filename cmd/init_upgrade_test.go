@@ -54,7 +54,7 @@ func TestInitUpgrade_ProjectFileFirst(t *testing.T) {
 	}
 	// Project config with deprecated key (canonical name).
 	projectCfg := filepath.Join(home, "devcell.toml")
-	if err := os.WriteFile(projectCfg, []byte("[cell]\nthin = true\n"), 0o644); err != nil {
+	if err := os.WriteFile(projectCfg, []byte("[cell]\nqemu_ssh_port = 3333\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	out, err := runCellIn(t, home, "init", "--upgrade")
@@ -80,7 +80,7 @@ func TestInitUpgrade_ReadOnlyGlobalIsSkipped(t *testing.T) {
 	}
 	// Replace the canonical project config with one containing a deprecated key.
 	projectCfg := filepath.Join(home, "devcell.toml")
-	if err := os.WriteFile(projectCfg, []byte("[cell]\nthin = true\n"), 0o644); err != nil {
+	if err := os.WriteFile(projectCfg, []byte("[cell]\nqemu_ssh_port = 3333\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	out, err := runCellIn(t, home, "init", "--upgrade")
@@ -96,7 +96,7 @@ func TestInitUpgrade_ReadOnlyGlobalIsSkipped(t *testing.T) {
 	if matches, _ := filepath.Glob(global + ".bak-*"); len(matches) != 0 {
 		t.Errorf("no backup expected for a skipped file, got %v", matches)
 	}
-	if b, _ := os.ReadFile(projectCfg); strings.Contains(string(b), "thin") {
+	if b, _ := os.ReadFile(projectCfg); strings.Contains(string(b), "qemu_ssh_port") {
 		t.Errorf("project file must still be migrated:\n%s", b)
 	}
 }
@@ -121,7 +121,7 @@ func TestInitUpgrade_NixStoreSymlinkGlobalNamesSource(t *testing.T) {
 	if err := os.Symlink(target, global); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(home, "devcell.toml"), []byte("[cell]\nthin = true\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(home, "devcell.toml"), []byte("[cell]\nqemu_ssh_port = 3333\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	out, err := runCellIn(t, home, "init", "--upgrade")

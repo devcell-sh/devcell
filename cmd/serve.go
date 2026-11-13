@@ -377,7 +377,7 @@ func startServeDaemon() error {
 	// Remove stale container
 	exec.CommandContext(ctx, "docker", "rm", "-f", serveContainerName).Run()
 
-	image := docker.PickImageTag(false)
+	image := docker.UserImageTag()
 
 	self, err := os.Executable()
 	if err != nil {

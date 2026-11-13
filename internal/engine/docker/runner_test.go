@@ -733,9 +733,8 @@ func TestArgv_WorkdirAndImage(t *testing.T) {
 	if !hasConsecutive(argv, "--workdir", "/devcell/home/bob/myproject") {
 		t.Errorf("expected --workdir /devcell/home/bob/myproject: %v", argv)
 	}
-	// BuildArgv's default image is the Debian variant — callers using --pure
-	// (the default after the CELL-189 flip) override Image explicitly on the
-	// RunSpec, so the default path tested here is the legacy --debian one.
+	// BuildArgv's default image comes from UserImageTag(). Callers override
+	// Image explicitly on the RunSpec when needed.
 	if !hasArg(argv, docker.UserImageTag()) {
 		t.Error("missing devcell-local image name")
 	}
@@ -1030,17 +1029,11 @@ func min(a, b int) int {
 	return b
 }
 
-// --- UserImageTag stack-based (legacy bare tag, used by --debian) ---
-//
-// UserImageTag() is unchanged across the 2026-05-15 flip — it remains the
-// user's "current image" concept (bare devcell-user:<stack>). After CELL-189
-// it's reached only via `cell <agent> --debian` (legacy Dockerfile path);
-// the new default reaches UserImageTagPure() via PickImageTag(false).
+// --- UserImageTag stack-based ---
 
 func withCleanImageState(t *testing.T) {
 	t.Helper()
 	t.Setenv("DEVCELL_USER_IMAGE", "")
-	t.Setenv("DEVCELL_USER_IMAGE_PURE", "")
 	t.Setenv("DEVCELL_CELL_NAME", "")
 	t.Setenv("DEVCELL_WORKSPACE", "")
 	t.Setenv("TMUX_SESSION_NAME", "")
@@ -1235,8 +1228,8 @@ func TestImageMetadataFromInspect_LabelsPopulated(t *testing.T) {
 
 // When the org.opencontainers.image.created label is missing (older images
 // from before the 2026-05-16 label addition), the OCI manifest's Created
-// field should be the fallback — every pure build sets it via the
-// nix2container `created` parameter.
+// field should be the fallback — every nix2container build sets it via the
+// `created` parameter.
 func TestImageMetadataFromInspect_NoLabelDateFallsBackToCreated(t *testing.T) {
 	m := docker.ImageMetadataFromInspectExport(
 		"2026-05-16T12:00:00Z",
@@ -1368,22 +1361,22 @@ func TestArgv_AwsReadOnlyFalse(t *testing.T) {
 	}
 }
 
-// --- Thin image volume mount ---
+// --- Nix volume mount ---
 
-func TestArgv_ThinImageMountsNixStoreVolume(t *testing.T) {
+func TestArgv_NixVolumeMountsNixStore(t *testing.T) {
 	argv := buildArgv(t, func(s *docker.RunSpec) {
-		s.ThinImage = true
+		s.NixVolume = true
 	})
 	if !hasConsecutive(argv, "-v", "devcell-nix-store:/nix") {
-		t.Errorf("expected -v devcell-nix-store:/nix for thin image, argv: %v", argv)
+		t.Errorf("expected -v devcell-nix-store:/nix for nix volume, argv: %v", argv)
 	}
 }
 
-func TestArgv_NonThinImageNoNixStoreVolume(t *testing.T) {
+func TestArgv_NoNixVolumeSkipsMount(t *testing.T) {
 	argv := buildArgv(t)
 	for i, a := range argv {
 		if a == "-v" && i+1 < len(argv) && strings.Contains(argv[i+1], "devcell-nix-store") {
-			t.Errorf("devcell-nix-store volume should NOT appear for non-thin image, argv: %v", argv)
+			t.Errorf("devcell-nix-store volume should NOT appear when NixVolume is false, argv: %v", argv)
 		}
 	}
 }
@@ -1391,7 +1384,7 @@ func TestArgv_NonThinImageNoNixStoreVolume(t *testing.T) {
 func TestArgv_PassesHostProjectDir(t *testing.T) {
 	argv := buildArgv(t)
 	if !hasConsecutive(argv, "-e", "DEVCELL_HOST_PROJECT_DIR=/home/bob/myproject") {
-		t.Errorf("should pass DEVCELL_HOST_PROJECT_DIR for thin build path resolution, argv: %v", argv)
+		t.Errorf("should pass DEVCELL_HOST_PROJECT_DIR for nix build path resolution, argv: %v", argv)
 	}
 }
 

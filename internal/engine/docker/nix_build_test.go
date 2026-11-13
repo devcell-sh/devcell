@@ -14,14 +14,14 @@ const (
 	testContainer = "devcell-builder-test-1"
 	testVolume    = "devcell-nix-store"
 	testNixhome   = "/home/bob/nixhome"
-	testThinTag   = "devcell-user:base-thin"
+	testImageTag   = "devcell-user:base"
 	testStack     = "base"
 )
 
-// thinBuildArgv is ThinBuildArgvFull with the stack/modules/project fields
-// left at their defaults, for tests that only care about the builder shape.
-func thinBuildArgv(coreImage, containerName, volumeName, nixhomeRef, thinTag, hmTarget, arch string) []string {
-	return ThinBuildArgvFull(coreImage, containerName, volumeName, nixhomeRef, thinTag, hmTarget, arch, "", "", "unknown")
+// nixBuildArgvHelper wraps NixBuildArgv with stack/modules/project at
+// their defaults, for tests that only care about the builder shape.
+func nixBuildArgvHelper(coreImage, containerName, volumeName, nixhomeRef, imageTag, hmTarget, arch string) []string {
+	return NixBuildArgv(coreImage, containerName, volumeName, nixhomeRef, imageTag, hmTarget, arch, "", "", "unknown")
 }
 
 func containsArg(argv []string, want string) bool {
@@ -42,15 +42,15 @@ func containsConsecutive(argv []string, first, second string) bool {
 	return false
 }
 
-func TestThinBuildArgv_DockerRunStructure(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+func TestNixBuildArgv_DockerRunStructure(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 	if argv[0] != "docker" || argv[1] != "run" || argv[2] != "--rm" {
 		t.Errorf("should start with docker run --rm, got: %v", argv[:min(3, len(argv))])
 	}
 }
 
-func TestThinBuildArgv_MountsNixVolume(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_MountsNixVolume(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	found := false
 	for i, a := range argv {
 		if a == "-v" && i+1 < len(argv) && argv[i+1] == "devcell-nix-store:/nix" {
@@ -63,16 +63,16 @@ func TestThinBuildArgv_MountsNixVolume(t *testing.T) {
 	}
 }
 
-func TestThinBuildArgv_NixDbOnVolume(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_NixDbOnVolume(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	if strings.Contains(script, "COPY nix_var/") {
 		t.Error("inner Dockerfile should NOT copy nix DB — it lives on the volume with the store")
 	}
 }
 
-func TestThinBuildArgv_MountsDockerSocket(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_MountsDockerSocket(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	found := false
 	for i, a := range argv {
 		if a == "-v" && i+1 < len(argv) && argv[i+1] == "/var/run/docker.sock:/var/run/docker.sock" {
@@ -85,8 +85,8 @@ func TestThinBuildArgv_MountsDockerSocket(t *testing.T) {
 	}
 }
 
-func TestThinBuildArgv_StreamsNixhome(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_StreamsNixhome(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	if !containsArg(argv, "-i") {
 		t.Errorf("local nixhome transport must attach stdin: %v", argv)
 	}
@@ -98,43 +98,43 @@ func TestThinBuildArgv_StreamsNixhome(t *testing.T) {
 	}
 }
 
-func TestThinBuildArgv_RunsHomeManagerSwitch(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+func TestNixBuildArgv_RunsHomeManagerSwitch(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "home-manager switch") {
 		t.Errorf("should run home-manager switch, got: %s", script)
 	}
 }
 
-func TestThinBuildArgv_RunsDockerBuild(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+func TestNixBuildArgv_RunsDockerBuild(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "docker build") {
 		t.Errorf("should run docker build inside container, got: %s", script)
 	}
-	if !strings.Contains(script, testThinTag) {
-		t.Errorf("inner docker build should tag as %s, got: %s", testThinTag, script)
+	if !strings.Contains(script, testImageTag) {
+		t.Errorf("inner docker build should tag as %s, got: %s", testImageTag, script)
 	}
 }
 
-func TestThinBuildArgv_InnerDockerfileFromNixCore(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_InnerDockerfileFromNixCore(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "FROM "+testCoreImage) {
 		t.Errorf("inner Dockerfile should FROM %s, got script", testCoreImage)
 	}
 }
 
-func TestThinBuildArgv_ArchSuffix(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+func TestNixBuildArgv_ArchSuffix(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "devcell-base-aarch64") {
 		t.Errorf("aarch64 should include arch suffix, got: %s", script)
 	}
 }
 
-func TestThinBuildArgv_NoArchSuffixForX86(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_NoArchSuffixForX86(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	// The flake ref should NOT have an arch suffix for x86_64
 	if strings.Contains(script, "devcell-base-x86") {
@@ -148,8 +148,8 @@ func TestThinBuildArgv_NoArchSuffixForX86(t *testing.T) {
 	}
 }
 
-func TestThinBuildArgv_CopiesConfigInContext(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_CopiesConfigInContext(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	for _, dir := range []string{"opt_devcell", "etc_devcell", "lib"} {
 		if !strings.Contains(script, dir) {
@@ -158,12 +158,12 @@ func TestThinBuildArgv_CopiesConfigInContext(t *testing.T) {
 	}
 }
 
-func TestThinBuildArgv_NixConfDaemonMode(t *testing.T) {
+func TestNixBuildArgv_NixConfDaemonMode(t *testing.T) {
 	nativeArch := "x86_64"
 	if runtime.GOARCH == "arm64" {
 		nativeArch = "aarch64"
 	}
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, nativeArch)
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, nativeArch)
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "sandbox = true") {
 		t.Error("should set sandbox = true (isolate builds)")
@@ -179,16 +179,16 @@ func TestThinBuildArgv_NixConfDaemonMode(t *testing.T) {
 	}
 }
 
-func TestThinBuildArgv_RemovesHomelessShelter(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_RemovesHomelessShelter(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "rm -rf /homeless-shelter") {
 		t.Error("should rm -rf /homeless-shelter before nix runs")
 	}
 }
 
-func TestThinBuildArgv_CreatesDevcellUser(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_CreatesDevcellUser(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "devcell") && !strings.Contains(script, "1000") {
 		t.Error("should create devcell user with UID 1000")
@@ -198,8 +198,8 @@ func TestThinBuildArgv_CreatesDevcellUser(t *testing.T) {
 	}
 }
 
-func TestThinBuildArgv_InstallsSystemToolsOnVolume(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_InstallsSystemToolsOnVolume(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "devcell-tools") {
 		t.Error("should install system tools into a dedicated profile on the volume")
@@ -214,8 +214,8 @@ func TestThinBuildArgv_InstallsSystemToolsOnVolume(t *testing.T) {
 // CELL-76: fontconfig must be installed into the devcell-tools profile so its
 // fonts.conf lives at the stable path /nix/var/nix/profiles/devcell-tools/etc/fonts/fonts.conf
 // (no store hash), mirroring the LOCALE_ARCHIVE pattern.
-func TestThinBuildArgv_InstallsFontconfigOnVolume(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_InstallsFontconfigOnVolume(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	// ^out is load-bearing: fontconfig's default output is `bin`; fonts.conf
 	// lives in `out` ("$out contains all the config" per nixpkgs).
@@ -224,11 +224,11 @@ func TestThinBuildArgv_InstallsFontconfigOnVolume(t *testing.T) {
 	}
 }
 
-// CELL-76: without FONTCONFIG_FILE, fontconfig has no main config in thin cells
+// CELL-76: without FONTCONFIG_FILE, fontconfig has no main config in nix-volume cells
 // (FONTCONFIG_PATH points at a dir with only conf.d/) and every fc-* call fails with
 // "Cannot load default config file" — fonts are installed but unresolvable.
-func TestThinBuildArgv_SetsFontconfigFile(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_SetsFontconfigFile(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "ENV FONTCONFIG_FILE=/nix/var/nix/profiles/devcell-tools/etc/fonts/fonts.conf") {
 		t.Error("inner Dockerfile should set ENV FONTCONFIG_FILE to the devcell-tools fonts.conf (mirrors full image's image.nix fontconfig env)")
@@ -238,8 +238,8 @@ func TestThinBuildArgv_SetsFontconfigFile(t *testing.T) {
 // CELL-75: mise-native shared installs — the image env must point mise at
 // the baked install dir so fresh cells resolve declared tools read-only
 // instead of re-downloading them into every cell home.
-func TestThinBuildArgv_SetsMiseSharedInstallDirs(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_SetsMiseSharedInstallDirs(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "ENV MISE_SHARED_INSTALL_DIRS=/opt/devcell/.local/share/mise/installs") {
 		t.Error("inner Dockerfile should set ENV MISE_SHARED_INSTALL_DIRS to the baked mise install dir (mise ≥2026.3.9 shared installs)")
@@ -250,40 +250,40 @@ func TestThinBuildArgv_SetsMiseSharedInstallDirs(t *testing.T) {
 // Without the bridge symlink to home-manager's conf.d, none of the hm font
 // setup loads (font dirs, default aliases) and apps see only dejavu-minimal
 // (1 font). Mirrors the full image's bridge in image.nix.
-func TestThinBuildArgv_FontconfigConfDBridge(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_FontconfigConfDBridge(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "ln -sfn /opt/devcell/.config/fontconfig/conf.d /etc/fonts/conf.d") {
 		t.Error("inner Dockerfile should symlink /etc/fonts/conf.d → home-manager's fontconfig conf.d")
 	}
 }
 
-func TestThinBuildArgv_InnerDockerfileNoNixInstall(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_InnerDockerfileNoNixInstall(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	if strings.Contains(script, "nix profile install --priority") {
 		t.Error("inner Dockerfile should NOT install nix packages — all tools live on the volume")
 	}
 }
 
-func TestThinBuildArgv_SetsNixLdInterpreter(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_SetsNixLdInterpreter(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "ld-linux") && !strings.Contains(script, "nix-ld") {
 		t.Error("inner Dockerfile should set nix-ld as /lib/ld-linux-* interpreter")
 	}
 }
 
-func TestThinBuildArgv_SetsUserDevcell(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_SetsUserDevcell(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "USER=devcell") {
 		t.Error("should set USER=devcell for home-manager")
 	}
 }
 
-func TestThinBuildArgv_CreatesNixLdShim(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_CreatesNixLdShim(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "nix-ld") {
 		t.Error("should create nix-ld shim for mise binaries")
@@ -293,8 +293,8 @@ func TestThinBuildArgv_CreatesNixLdShim(t *testing.T) {
 	}
 }
 
-func TestThinBuildArgv_UsesEntrypointSh(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_UsesEntrypointSh(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	found := false
 	for i, a := range argv {
 		if a == "--entrypoint" && i+1 < len(argv) && argv[i+1] == "/bin/sh" {
@@ -307,48 +307,48 @@ func TestThinBuildArgv_UsesEntrypointSh(t *testing.T) {
 	}
 }
 
-func TestThinBuildArgv_PreservesDefaultProfile(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_PreservesDefaultProfile(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	if strings.Contains(script, "rm -f /nix/var/nix/profiles/default") {
 		t.Error("must NOT delete default profile — it provides sh for subsequent container starts")
 	}
 }
 
-func TestThinBuildArgv_RootOwnsHomeForNixEnv(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_RootOwnsHomeForNixEnv(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "chown -R 0:0 /opt/devcell") {
 		t.Error("should chown /opt/devcell to root so nix-env uses user profile, not root's default")
 	}
 }
 
-func TestThinBuildArgv_SudoShim(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_SudoShim(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "/usr/local/bin/sudo") {
 		t.Error("should create sudo shim — home-manager activation calls sudo but builder runs as root")
 	}
 }
 
-func TestThinBuildArgv_SavesNixPathBeforeCleanup(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_SavesNixPathBeforeCleanup(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "NIX_DIR=") {
 		t.Error("should save nix store path before any cleanup")
 	}
 }
 
-func TestThinBuildArgv_InstallsDockerClient(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_InstallsDockerClient(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "docker-client") {
 		t.Error("should install docker-client via nix for inner docker build")
 	}
 }
 
-func TestThinBuildArgv_SslCertInNixConf(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_SslCertInNixConf(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "ssl-cert-file") {
 		t.Error("nix.conf must include ssl-cert-file for daemon to reach cache.nixos.org")
@@ -390,7 +390,7 @@ func TestDockerHostPath_NoEnvNoChange(t *testing.T) {
 // (/opt/devcell/.local/state/nix/profiles/profile) MUST resolve to an
 // immutable /nix/store path, NOT to /nix/var/nix/profiles/per-user/root/profile.
 // The per-user/root profile lives on the shared devcell-nix-store docker
-// volume — every thin build's `home-manager switch` overwrites it, so a
+// volume — every nix build's `home-manager switch` overwrites it, so a
 // container labelled `ultimate` will lose packages the moment someone builds
 // a leaner stack against the same volume (see the CELL-322 kirr.dev-540
 // clobber where chromium/patchright disappeared from PATH).
@@ -398,8 +398,8 @@ func TestDockerHostPath_NoEnvNoChange(t *testing.T) {
 // The builder captures the just-switched target's realpath and bakes THAT
 // store path into the image. Once baked, no cross-container switch can touch
 // what this image sees.
-func TestThinBuildArgv_ProfileSymlinkResolvesToStorePath(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_ProfileSymlinkResolvesToStorePath(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 
 	// MUST NOT symlink into the mutable shared-volume slot.
@@ -428,8 +428,8 @@ func TestThinBuildArgv_ProfileSymlinkResolvesToStorePath(t *testing.T) {
 //
 // The builder must register the resolved profile as an indirect GC root
 // under /nix/var/nix/gcroots/ so the store path stays alive on the volume.
-func TestThinBuildArgv_ProfilePinnedAsGCRoot(t *testing.T) {
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", testStack, "", "testproj")
+func TestNixBuildArgv_ProfilePinnedAsGCRoot(t *testing.T) {
+	argv := NixBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, "local", "x86_64", testStack, "", "testproj")
 	script := argv[len(argv)-1]
 
 	if !strings.Contains(script, "/nix/var/nix/gcroots/devcell/") {
@@ -441,8 +441,8 @@ func TestThinBuildArgv_ProfilePinnedAsGCRoot(t *testing.T) {
 // component of basename($HM_PROFILE). This encodes stack + modules + arch +
 // nixpkgs revision, so identical configs naturally dedupe while different
 // configs never clobber each other. Project name is NOT in the root name.
-func TestThinBuildArgv_HashKeyedGCRoots(t *testing.T) {
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", testStack, "", "myproject")
+func TestNixBuildArgv_HashKeyedGCRoots(t *testing.T) {
+	argv := NixBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, "local", "x86_64", testStack, "", "myproject")
 	script := argv[len(argv)-1]
 
 	// Must derive hash from store path.
@@ -466,9 +466,9 @@ func TestThinBuildArgv_HashKeyedGCRoots(t *testing.T) {
 
 // CELL-331: identical configs from different projects produce the same
 // store path hash → same GC root symlinks (only metadata differs).
-func TestThinBuildArgv_IdenticalConfigsDedupeRoots(t *testing.T) {
-	argvA := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", testStack, "", "alpha")
-	argvB := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", testStack, "", "beta")
+func TestNixBuildArgv_IdenticalConfigsDedupeRoots(t *testing.T) {
+	argvA := NixBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, "local", "x86_64", testStack, "", "alpha")
+	argvB := NixBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, "local", "x86_64", testStack, "", "beta")
 	scriptA := argvA[len(argvA)-1]
 	scriptB := argvB[len(argvB)-1]
 
@@ -487,8 +487,8 @@ func TestThinBuildArgv_IdenticalConfigsDedupeRoots(t *testing.T) {
 
 // CELL-331: metadata file is stamped alongside the GC root so the reaper
 // can attribute roots to projects and detect lock drift.
-func TestThinBuildArgv_StampsMetadataFile(t *testing.T) {
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", testStack, "", "myproject")
+func TestNixBuildArgv_StampsMetadataFile(t *testing.T) {
+	argv := NixBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, "local", "x86_64", testStack, "", "myproject")
 	script := argv[len(argv)-1]
 
 	if !strings.Contains(script, "${HM_PROFILE_HASH}-meta") {
@@ -516,8 +516,8 @@ func extractBetween(s, start, end string) string {
 	return s[i : i+j]
 }
 
-func TestThinBuildArgv_RuntimePathExcludesSharedProfileSlot(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_RuntimePathExcludesSharedProfileSlot(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 
 	// Look at the `ENV PATH=` line specifically (the baked image env). The
@@ -542,10 +542,10 @@ func TestThinBuildArgv_RuntimePathExcludesSharedProfileSlot(t *testing.T) {
 
 // home-manager activation (via the sudo shim) stages nix-managed agent
 // configs to /etc/claude-code, /etc/codex, /etc/opencode, /etc/gemini inside
-// the builder. The thin image must carry them, otherwise the s6 oneshot
+// the builder. The image must carry them, otherwise the s6 oneshot
 // services (claude-config etc.) silently skip the MCP merge.
-func TestThinBuildArgv_ExportsAgentEtcDirs(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_ExportsAgentEtcDirs(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	for _, dir := range []string{"claude-code", "codex", "opencode", "gemini"} {
 		ctxDir := "etc_" + strings.ReplaceAll(dir, "-", "_")
@@ -564,8 +564,8 @@ func TestThinBuildArgv_ExportsAgentEtcDirs(t *testing.T) {
 // got it — every dynamically linked foreign binary failed exec with ENOENT.
 // nix-ld is self-contained, so it is baked into the image as a real file and
 // the interpreter paths are image-internal symlinks (no image→volume links).
-func TestThinBuildArgv_BakesNixLdInterpreter(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_BakesNixLdInterpreter(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, `install -m755 "$NIX_LD_BIN" /opt/devcell/.local/bin/nix-ld`) {
 		t.Error("builder must bake the nix-ld binary into /opt/devcell/.local/bin (rides into image via opt_devcell COPY)")
@@ -580,13 +580,13 @@ func TestThinBuildArgv_BakesNixLdInterpreter(t *testing.T) {
 	}
 }
 
-// CELL-38: when no local nixhome is available, the thin builder must use the
+// CELL-38: when no local nixhome is available, the nix builder must use the
 // prebaked github:DimmKirr/devcell ref directly with home-manager — no
 // -v <path>:/opt/nixhome mount, --flake points at the github URL.
 
-func TestThinBuildArgv_RemoteRefSkipsNixhomeMount(t *testing.T) {
+func TestNixBuildArgv_RemoteRefSkipsNixhomeMount(t *testing.T) {
 	const remoteRef = "github:devcell-sh/home/main"
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, remoteRef, testThinTag, testStack, "x86_64")
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, remoteRef, testImageTag, testStack, "x86_64")
 	for i, a := range argv {
 		if a == "-v" && i+1 < len(argv) && strings.HasSuffix(argv[i+1], ":/opt/nixhome") {
 			t.Errorf("remote ref must NOT mount nixhome dir, got: %s", argv[i+1])
@@ -594,9 +594,9 @@ func TestThinBuildArgv_RemoteRefSkipsNixhomeMount(t *testing.T) {
 	}
 }
 
-func TestThinBuildArgv_RemoteRefUsedInHomeManagerSwitch(t *testing.T) {
+func TestNixBuildArgv_RemoteRefUsedInHomeManagerSwitch(t *testing.T) {
 	const remoteRef = "github:devcell-sh/home/main"
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, remoteRef, testThinTag, testStack, "x86_64")
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, remoteRef, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	want := "home-manager switch --flake " + remoteRef + "#devcell-" + testStack
 	if !strings.Contains(script, want) {
@@ -604,8 +604,8 @@ func TestThinBuildArgv_RemoteRefUsedInHomeManagerSwitch(t *testing.T) {
 	}
 }
 
-func TestThinBuildArgv_LocalPathDoesNotUseDaemonBind(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_LocalPathDoesNotUseDaemonBind(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	for i, a := range argv {
 		if a == "-v" && i+1 < len(argv) && argv[i+1] == testNixhome+":/opt/nixhome" {
 			t.Fatalf("local nixhome must be streamed, not daemon bind-mounted: %v", argv)
@@ -613,13 +613,13 @@ func TestThinBuildArgv_LocalPathDoesNotUseDaemonBind(t *testing.T) {
 	}
 }
 
-// CELL-41: thin build must thread the user-facing stack name and modules
+// CELL-41: nix build must thread the user-facing stack name and modules
 // list into DEVCELL_STACK / DEVCELL_MODULES so the running container's
 // metadata.json reflects what the user configured — not the home-manager
 // target name ("local"), which is an implementation detail.
 
-func TestThinBuildArgv_SetsDevcellStackFromCaller(t *testing.T) {
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", "ultimate", "", "testproj")
+func TestNixBuildArgv_SetsDevcellStackFromCaller(t *testing.T) {
+	argv := NixBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, "local", "x86_64", "ultimate", "", "testproj")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "export DEVCELL_STACK=ultimate") {
 		t.Errorf("script must set DEVCELL_STACK to the user-facing stack name (not the HM target), got script without that export")
@@ -629,16 +629,16 @@ func TestThinBuildArgv_SetsDevcellStackFromCaller(t *testing.T) {
 	}
 }
 
-func TestThinBuildArgv_SetsDevcellModulesFromCaller(t *testing.T) {
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", "", "foo,bar", "testproj")
+func TestNixBuildArgv_SetsDevcellModulesFromCaller(t *testing.T) {
+	argv := NixBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, "local", "x86_64", "", "foo,bar", "testproj")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "export DEVCELL_MODULES=foo,bar") {
 		t.Error("script must set DEVCELL_MODULES to the user-facing module CSV")
 	}
 }
 
-func TestThinBuildArgv_BakesStackAndModulesEnvIntoImage(t *testing.T) {
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", "ultimate", "foo,bar", "testproj")
+func TestNixBuildArgv_BakesStackAndModulesEnvIntoImage(t *testing.T) {
+	argv := NixBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, "local", "x86_64", "ultimate", "foo,bar", "testproj")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "ENV DEVCELL_STACK=ultimate") {
 		t.Error("inner Dockerfile must bake ENV DEVCELL_STACK so the running container's writeMetadata sees it")
@@ -648,10 +648,10 @@ func TestThinBuildArgv_BakesStackAndModulesEnvIntoImage(t *testing.T) {
 	}
 }
 
-func TestThinBuildArgv_EmptyStackAndModulesIsExplicit(t *testing.T) {
+func TestNixBuildArgv_EmptyStackAndModulesIsExplicit(t *testing.T) {
 	// Empty values still get exported — the entrypoint's writeMetadata
 	// distinguishes empty (modules: []) from missing (skip metadata write).
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", "", "", "testproj")
+	argv := NixBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, "local", "x86_64", "", "", "testproj")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "export DEVCELL_STACK=") {
 		t.Error("empty stack must still appear as `export DEVCELL_STACK=` so writeMetadata fires")
@@ -663,8 +663,8 @@ func TestThinBuildArgv_EmptyStackAndModulesIsExplicit(t *testing.T) {
 
 // --- Cross-architecture (DEVCELL_ARCH) ---
 
-func TestThinBuildArgv_PlatformFlagOnBuilderContainer(t *testing.T) {
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64", testStack, "", "testproj")
+func TestNixBuildArgv_PlatformFlagOnBuilderContainer(t *testing.T) {
+	argv := NixBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64", testStack, "", "testproj")
 	found := false
 	for i, a := range argv {
 		if a == "--platform" && i+1 < len(argv) && argv[i+1] == "linux/amd64" {
@@ -677,8 +677,8 @@ func TestThinBuildArgv_PlatformFlagOnBuilderContainer(t *testing.T) {
 	}
 }
 
-func TestThinBuildArgv_PlatformFlagArm64(t *testing.T) {
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64", testStack, "", "testproj")
+func TestNixBuildArgv_PlatformFlagArm64(t *testing.T) {
+	argv := NixBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64", testStack, "", "testproj")
 	found := false
 	for i, a := range argv {
 		if a == "--platform" && i+1 < len(argv) && argv[i+1] == "linux/arm64" {
@@ -691,16 +691,16 @@ func TestThinBuildArgv_PlatformFlagArm64(t *testing.T) {
 	}
 }
 
-func TestThinBuildArgv_InnerDockerBuildPlatform(t *testing.T) {
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64", testStack, "", "testproj")
+func TestNixBuildArgv_InnerDockerBuildPlatform(t *testing.T) {
+	argv := NixBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64", testStack, "", "testproj")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "--platform linux/amd64") {
 		t.Error("inner docker build must include --platform linux/amd64 for x86_64 arch")
 	}
 }
 
-func TestThinBuildArgv_InnerDockerBuildPlatformArm64(t *testing.T) {
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64", testStack, "", "testproj")
+func TestNixBuildArgv_InnerDockerBuildPlatformArm64(t *testing.T) {
+	argv := NixBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64", testStack, "", "testproj")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "--platform linux/arm64") {
 		t.Error("inner docker build must include --platform linux/arm64 for aarch64 arch")
@@ -710,8 +710,8 @@ func TestThinBuildArgv_InnerDockerBuildPlatformArm64(t *testing.T) {
 // GNU coreutils `cp` refuses to write through a dangling symlink — the builder
 // must rm -f the dangling link before cp, otherwise the /etc/{passwd,group,...}
 // materialisation fails with "cp: not writing through dangling symlink".
-func TestThinBuildArgv_DanglingSymlinkFixRemovesBeforeCopy(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_DanglingSymlinkFixRemovesBeforeCopy(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, `rm -f "$f"`) {
 		t.Error(`dangling symlink fix must rm -f "$f" before cp — plain cp fails with "not writing through dangling symlink" (GNU coreutils)`)
@@ -722,8 +722,8 @@ func TestThinBuildArgv_DanglingSymlinkFixRemovesBeforeCopy(t *testing.T) {
 // volume already has the base-system path). The script must rm + overwrite
 // rather than append, otherwise both sed and cat silently fail on the
 // read-only target.
-func TestThinBuildArgv_OverwritesNixConf(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_OverwritesNixConf(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "rm -f /etc/nix/nix.conf") {
 		t.Error("must rm -f /etc/nix/nix.conf before writing — it may be a symlink to a read-only store path")
@@ -736,12 +736,12 @@ func TestThinBuildArgv_OverwritesNixConf(t *testing.T) {
 // QEMU can't translate seccomp BPF programs, so cross-arch builds must disable
 // Nix's sandbox — otherwise home-manager switch fails with
 // "unable to load seccomp BPF program: Invalid argument".
-func TestThinBuildArgv_CrossArchDisablesSandboxAndFilterSyscalls(t *testing.T) {
+func TestNixBuildArgv_CrossArchDisablesSandboxAndFilterSyscalls(t *testing.T) {
 	crossArch := "x86_64"
 	if runtime.GOARCH == "amd64" {
 		crossArch = "aarch64"
 	}
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, crossArch, testStack, "", "testproj")
+	argv := NixBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, crossArch, testStack, "", "testproj")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "sandbox = false") {
 		t.Error("cross-arch build must set sandbox = false")
@@ -753,36 +753,36 @@ func TestThinBuildArgv_CrossArchDisablesSandboxAndFilterSyscalls(t *testing.T) {
 
 // QEMU can't handle personality(PER_LINUX32) — cross-arch builds must clear
 // extra-platforms so Nix doesn't attempt to build i686-linux derivations.
-func TestThinBuildArgv_CrossArchDisablesExtraPlatforms(t *testing.T) {
+func TestNixBuildArgv_CrossArchDisablesExtraPlatforms(t *testing.T) {
 	crossArch := "x86_64"
 	if runtime.GOARCH == "amd64" {
 		crossArch = "aarch64"
 	}
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, crossArch, testStack, "", "testproj")
+	argv := NixBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, crossArch, testStack, "", "testproj")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "extra-platforms =") {
 		t.Error("cross-arch build must set extra-platforms = (empty) — QEMU can't handle personality() for i686")
 	}
 }
 
-func TestThinBuildArgv_NativeArchOmitsExtraPlatforms(t *testing.T) {
+func TestNixBuildArgv_NativeArchOmitsExtraPlatforms(t *testing.T) {
 	nativeArch := "x86_64"
 	if runtime.GOARCH == "arm64" {
 		nativeArch = "aarch64"
 	}
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, nativeArch, testStack, "", "testproj")
+	argv := NixBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, nativeArch, testStack, "", "testproj")
 	script := argv[len(argv)-1]
 	if strings.Contains(script, "extra-platforms") {
 		t.Error("native-arch build should NOT set extra-platforms — Nix defaults handle i686 correctly on real hardware")
 	}
 }
 
-func TestThinBuildArgv_NativeArchEnablesSandboxAndFilterSyscalls(t *testing.T) {
+func TestNixBuildArgv_NativeArchEnablesSandboxAndFilterSyscalls(t *testing.T) {
 	nativeArch := "x86_64"
 	if runtime.GOARCH == "arm64" {
 		nativeArch = "aarch64"
 	}
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, nativeArch, testStack, "", "testproj")
+	argv := NixBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, nativeArch, testStack, "", "testproj")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "sandbox = true") {
 		t.Error("native-arch build should keep sandbox = true")
@@ -795,8 +795,8 @@ func TestThinBuildArgv_NativeArchEnablesSandboxAndFilterSyscalls(t *testing.T) {
 // NIX_LD must be baked as image ENV — nix-ld at the interpreter path reads it
 // to find the real glibc loader. Shell rc sets it for interactive shells, but
 // MCP servers and other non-login spawns need it from the container env.
-func TestThinBuildArgv_BakesNixLdEnv(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_BakesNixLdEnv(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, `--build-arg "NIX_LD=$NIX_LD"`) {
 		t.Error("docker build must pass NIX_LD from the builder env as a build arg")
@@ -811,8 +811,8 @@ func TestThinBuildArgv_BakesNixLdEnv(t *testing.T) {
 // a setuid copy at /run/wrappers/bin/sudo (NixOS security-wrappers pattern),
 // so that dir must precede the devcell-tools profile on PATH or the
 // non-setuid profile sudo shadows the wrapper and every `sudo` call fails.
-func TestThinBuildArgv_WrapperDirPrecedesProfileOnPath(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+func TestNixBuildArgv_WrapperDirPrecedesProfileOnPath(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	var envPath string
 	for _, line := range strings.Split(script, "\n") {
@@ -836,7 +836,7 @@ func TestThinBuildArgv_WrapperDirPrecedesProfileOnPath(t *testing.T) {
 
 // argvFlagValue returns the value following the named flag in argv, or "" if
 // the flag is absent. Only handles the separate-token form (`--memory 8g`),
-// which is what ThinBuildArgvFull emits.
+// which is what NixBuildArgv emits.
 func argvFlagValue(argv []string, flag string) string {
 	for i, a := range argv {
 		if a == flag && i+1 < len(argv) {
@@ -875,18 +875,18 @@ const (
 	bigHostMem = 25 << 30 // 25 GiB — a Docker Desktop-sized daemon
 )
 
-func TestThinBuildArgv_CapsMemoryOnRoomyHost(t *testing.T) {
+func TestNixBuildArgv_CapsMemoryOnRoomyHost(t *testing.T) {
 	withCapacity(t, bigHostCPU, bigHostMem, true)
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 	// ¾ of 25 GiB, rounded down to whole GiB.
 	if got := argvFlagValue(argv, "--memory"); got != "18g" {
-		t.Errorf("thin build must cap memory at ¾ of the daemon so a nix build spike cannot starve sibling cells; --memory = %q, want 18g", got)
+		t.Errorf("nix build must cap memory at ¾ of the daemon so a nix build spike cannot starve sibling cells; --memory = %q, want 18g", got)
 	}
 }
 
-func TestThinBuildArgv_NoCPUQuotaByDefault(t *testing.T) {
+func TestNixBuildArgv_NoCPUQuotaByDefault(t *testing.T) {
 	withCapacity(t, bigHostCPU, bigHostMem, true)
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 	if got := argvFlagValue(argv, "--cpus"); got != "" {
 		t.Errorf("no CFS quota by default — the memory ceiling is the OOM guard; --cpus = %q, want none", got)
 	}
@@ -894,13 +894,13 @@ func TestThinBuildArgv_NoCPUQuotaByDefault(t *testing.T) {
 
 // The default ceiling is ¾ of the daemon's memory, and nix's concurrency is
 // derived so maxJobs × cores saturates the CPU budget.
-func TestThinBuildArgv_DefaultCeilingDerivesConcurrency(t *testing.T) {
+func TestNixBuildArgv_DefaultCeilingDerivesConcurrency(t *testing.T) {
 	t.Setenv("DEVCELL_NIX_MAX_JOBS", "")
 	t.Setenv("DEVCELL_NIX_CORES", "")
 
 	t.Run("8 GiB colima — one job with every core", func(t *testing.T) {
 		withCapacity(t, 8, 8<<30, true)
-		argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+		argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 		if got := argvFlagValue(argv, "--memory"); got != "6g" {
 			t.Errorf("--memory = %q, want 6g (¾ of 8 GiB)", got)
 		}
@@ -914,7 +914,7 @@ func TestThinBuildArgv_DefaultCeilingDerivesConcurrency(t *testing.T) {
 
 	t.Run("24 GiB docker desktop — two jobs splitting the CPUs", func(t *testing.T) {
 		withCapacity(t, 8, 24<<30, true)
-		argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+		argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 		if got := argvFlagValue(argv, "--memory"); got != "18g" {
 			t.Errorf("--memory = %q, want 18g (¾ of 24 GiB)", got)
 		}
@@ -936,10 +936,10 @@ func TestThinBuildArgv_DefaultCeilingDerivesConcurrency(t *testing.T) {
 // reports every host CPU, so `max-jobs = auto` kept scheduling one job per host
 // CPU — 8 concurrent derivations sharing an 8 GiB ceiling. A memory ceiling is
 // only safe if nix's job count is derived from it.
-func TestThinBuildArgv_PinsNixMaxJobsToMemoryCeiling(t *testing.T) {
+func TestNixBuildArgv_PinsNixMaxJobsToMemoryCeiling(t *testing.T) {
 	t.Setenv("DEVCELL_NIX_MAX_JOBS", "")
 	withCapacity(t, bigHostCPU, bigHostMem, true)
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 
 	mem := argvFlagValue(argv, "--memory")
 	memBytes, ok := parseMemoryLimit(mem)
@@ -967,10 +967,10 @@ func TestThinBuildArgv_PinsNixMaxJobsToMemoryCeiling(t *testing.T) {
 // Bounding max-jobs alone is not enough: nix's `cores` defaults to 0, meaning
 // "use every CPU", so each of N jobs forks make -j<nproc> and nproc ignores the
 // --cpus quota. The CPU budget has to be spread across the jobs.
-func TestThinBuildArgv_PinsNixCoresToCPUCeiling(t *testing.T) {
+func TestNixBuildArgv_PinsNixCoresToCPUCeiling(t *testing.T) {
 	t.Setenv("DEVCELL_NIX_CORES", "")
 	withCapacity(t, bigHostCPU, bigHostMem, true)
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 
 	cores := argvEnvValue(argv, "DEVCELL_NIX_CORES")
 	if cores == "" {
@@ -990,8 +990,8 @@ func TestThinBuildArgv_PinsNixCoresToCPUCeiling(t *testing.T) {
 }
 
 // nix.conf must actually read the value we pass, or pinning it does nothing.
-func TestThinBuildArgv_NixConfDeclaresCores(t *testing.T) {
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+func TestNixBuildArgv_NixConfDeclaresCores(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "cores = ${DEVCELL_NIX_CORES:-0}") {
 		t.Error("nix.conf must set cores from DEVCELL_NIX_CORES (default 0 = nix's own default)")
@@ -1000,11 +1000,11 @@ func TestThinBuildArgv_NixConfDeclaresCores(t *testing.T) {
 
 // No ceiling means the VM total is the budget, which is what `auto` was always
 // sized against. Pinning concurrency there would only slow builds down.
-func TestThinBuildArgv_LeavesNixConcurrencyAutoWhenUncapped(t *testing.T) {
+func TestNixBuildArgv_LeavesNixConcurrencyAutoWhenUncapped(t *testing.T) {
 	t.Setenv("DEVCELL_NIX_MAX_JOBS", "")
 	t.Setenv("DEVCELL_NIX_CORES", "")
 	withCapacity(t, 0, 0, false)
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 	if got := argvEnvValue(argv, "DEVCELL_NIX_MAX_JOBS"); got != "" {
 		t.Errorf("max-jobs must stay auto when no ceiling is in force, got %q", got)
 	}
@@ -1013,11 +1013,11 @@ func TestThinBuildArgv_LeavesNixConcurrencyAutoWhenUncapped(t *testing.T) {
 	}
 }
 
-func TestThinBuildArgv_ExplicitNixConcurrencyWins(t *testing.T) {
+func TestNixBuildArgv_ExplicitNixConcurrencyWins(t *testing.T) {
 	t.Setenv("DEVCELL_NIX_MAX_JOBS", "1")
 	t.Setenv("DEVCELL_NIX_CORES", "3")
 	withCapacity(t, bigHostCPU, bigHostMem, true)
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 	if got := argvEnvValue(argv, "DEVCELL_NIX_MAX_JOBS"); got != "1" {
 		t.Errorf("an explicit DEVCELL_NIX_MAX_JOBS must win over the derived value; got %q", got)
 	}
@@ -1030,13 +1030,13 @@ func TestThinBuildArgv_ExplicitNixConcurrencyWins(t *testing.T) {
 // the binding constraint: capping protects nothing and would only OOM the
 // build sooner. The CPU quota goes with it — a quota alone cannot prevent an
 // OOM, it only slows the build down, so a lone --cpus is pure loss.
-func TestThinBuildArgv_DropsCeilingsAsAPairOnASmallDaemon(t *testing.T) {
+func TestNixBuildArgv_DropsCeilingsAsAPairOnASmallDaemon(t *testing.T) {
 	t.Setenv("DEVCELL_NIX_MAX_JOBS", "")
 	t.Setenv("DEVCELL_NIX_CORES", "")
 	t.Setenv("DEVCELL_BUILD_MEMORY", "4g")
 	t.Setenv("DEVCELL_BUILD_CPUS", "4")
 	withCapacity(t, bigHostCPU, 4<<30, true) // 4g ceiling >= 4 GiB daemon total
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 	if got := argvFlagValue(argv, "--memory"); got != "" {
 		t.Errorf("a 4 GiB daemon cannot honour a 4g ceiling; --memory must be omitted, got %q", got)
 	}
@@ -1085,9 +1085,9 @@ func TestNixConcurrency(t *testing.T) {
 // there makes dockerd hard-fail with "range of CPUs is from 0.01 to 2.00" and
 // exit 125 — the build never starts. A ceiling at or above what the daemon
 // has constrains nothing, so it must not be emitted at all.
-func TestThinBuildArgv_OmitsCPUCapExceedingDaemonCPUs(t *testing.T) {
+func TestNixBuildArgv_OmitsCPUCapExceedingDaemonCPUs(t *testing.T) {
 	withCapacity(t, 2, 2<<30, true)
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 	if got := argvFlagValue(argv, "--cpus"); got != "" {
 		t.Errorf("a 2-CPU daemon cannot honour a 4-CPU ceiling; --cpus must be omitted, got %q", got)
 	}
@@ -1095,10 +1095,10 @@ func TestThinBuildArgv_OmitsCPUCapExceedingDaemonCPUs(t *testing.T) {
 
 // Same reasoning for memory: an explicit cap at or above the VM's own total
 // cannot protect anything, and a cap below it would only OOM the build sooner.
-func TestThinBuildArgv_OmitsMemoryCapExceedingDaemonMemory(t *testing.T) {
+func TestNixBuildArgv_OmitsMemoryCapExceedingDaemonMemory(t *testing.T) {
 	t.Setenv("DEVCELL_BUILD_MEMORY", "2g")
 	withCapacity(t, 2, 2<<30, true)
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 	if got := argvFlagValue(argv, "--memory"); got != "" {
 		t.Errorf("a 2 GiB daemon cannot honour a 2g ceiling; --memory must be omitted, got %q", got)
 	}
@@ -1106,10 +1106,10 @@ func TestThinBuildArgv_OmitsMemoryCapExceedingDaemonMemory(t *testing.T) {
 
 // An explicit override is still clamped — the point is that dockerd never
 // receives an argument it will reject.
-func TestThinBuildArgv_ClampsExplicitCPUOverride(t *testing.T) {
+func TestNixBuildArgv_ClampsExplicitCPUOverride(t *testing.T) {
 	t.Setenv("DEVCELL_BUILD_CPUS", "16")
 	withCapacity(t, bigHostCPU, bigHostMem, true)
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 	if got := argvFlagValue(argv, "--cpus"); got != "" {
 		t.Errorf("16 CPUs on an 8-CPU daemon must be omitted, got %q", got)
 	}
@@ -1117,9 +1117,9 @@ func TestThinBuildArgv_ClampsExplicitCPUOverride(t *testing.T) {
 
 // If the daemon cannot be probed, emit nothing rather than guess — an absent
 // cap is the long-standing behaviour and never fails the run.
-func TestThinBuildArgv_OmitsCapsWhenProbeFails(t *testing.T) {
+func TestNixBuildArgv_OmitsCapsWhenProbeFails(t *testing.T) {
 	withCapacity(t, 0, 0, false)
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 	if got := argvFlagValue(argv, "--memory"); got != "" {
 		t.Errorf("--memory must be omitted when capacity is unknown, got %q", got)
 	}
@@ -1128,29 +1128,29 @@ func TestThinBuildArgv_OmitsCapsWhenProbeFails(t *testing.T) {
 	}
 }
 
-func TestThinBuildArgv_MemoryCapOverridableByEnv(t *testing.T) {
+func TestNixBuildArgv_MemoryCapOverridableByEnv(t *testing.T) {
 	t.Setenv("DEVCELL_BUILD_MEMORY", "12g")
 	withCapacity(t, bigHostCPU, bigHostMem, true)
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 	if got := argvFlagValue(argv, "--memory"); got != "12g" {
 		t.Errorf("DEVCELL_BUILD_MEMORY must override the default; --memory = %q, want 12g", got)
 	}
 }
 
-func TestThinBuildArgv_CPUCapOverridableByEnv(t *testing.T) {
+func TestNixBuildArgv_CPUCapOverridableByEnv(t *testing.T) {
 	t.Setenv("DEVCELL_BUILD_CPUS", "2")
 	withCapacity(t, bigHostCPU, bigHostMem, true)
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 	if got := argvFlagValue(argv, "--cpus"); got != "2" {
 		t.Errorf("DEVCELL_BUILD_CPUS must override the default; --cpus = %q, want 2", got)
 	}
 }
 
-func TestThinBuildArgv_ZeroDisablesCaps(t *testing.T) {
+func TestNixBuildArgv_ZeroDisablesCaps(t *testing.T) {
 	t.Setenv("DEVCELL_BUILD_MEMORY", "0")
 	t.Setenv("DEVCELL_BUILD_CPUS", "0")
 	withCapacity(t, bigHostCPU, bigHostMem, true)
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 	if got := argvFlagValue(argv, "--memory"); got != "" {
 		t.Errorf("DEVCELL_BUILD_MEMORY=0 must emit no --memory flag, got %q", got)
 	}
@@ -1163,9 +1163,9 @@ func TestThinBuildArgv_ZeroDisablesCaps(t *testing.T) {
 // --memory would *disable* spill on the hosts that do have swap. It must not be
 // mistaken for headroom though — Lima and Docker Desktop VMs both run swapless
 // (SwapTotal: 0), so the ceiling is hard and has to be generous on its own.
-func TestThinBuildArgv_LeavesMemorySwapUnset(t *testing.T) {
+func TestNixBuildArgv_LeavesMemorySwapUnset(t *testing.T) {
 	withCapacity(t, bigHostCPU, bigHostMem, true)
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 	if got := argvFlagValue(argv, "--memory-swap"); got != "" {
 		t.Errorf("--memory-swap must stay unset to keep Docker's 2x default, got %q", got)
 	}
@@ -1198,29 +1198,29 @@ func TestParseMemoryLimit(t *testing.T) {
 // ── Builder container identity + slot reclaim ────────────────────────────────
 //
 // One fixed builder name meant every `cell build` (explicit or auto-triggered
-// from `cell` in another project) began with `docker rm -f devcell-thin-builder`
+// from `cell` in another project) began with `docker rm -f devcell-nix-builder`
 // and SIGKILLed whatever build was in flight — exit 137 with no OOM anywhere.
 // The builder is now named per app, and a *running* builder is never removed.
 
-func TestThinBuildArgv_BuilderLabels(t *testing.T) {
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "aarch64", "base", "go,node", "myproject")
+func TestNixBuildArgv_BuilderLabels(t *testing.T) {
+	argv := NixBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, "local", "aarch64", "base", "go,node", "myproject")
 	labels := map[string]bool{}
 	for i, a := range argv {
 		if a == "--label" && i+1 < len(argv) {
 			labels[argv[i+1]] = true
 		}
 	}
-	for _, want := range []string{"devcell.role=thin-builder", "devcell.project=myproject", "devcell.stack=base"} {
+	for _, want := range []string{"devcell.role=nix-builder", "devcell.project=myproject", "devcell.stack=base"} {
 		if !labels[want] {
 			t.Errorf("missing label %q in builder argv", want)
 		}
 	}
 }
 
-func TestThinBuilderContainerName_PerApp(t *testing.T) {
-	got := ThinBuilderContainerName("nmd.gg-20")
+func TestNixBuilderContainerName_PerApp(t *testing.T) {
+	got := NixBuilderContainerName("nmd.gg-20")
 	if got != "devcell-builder-nmd.gg-20" {
-		t.Fatalf("ThinBuilderContainerName = %q, want devcell-builder-nmd.gg-20", got)
+		t.Fatalf("NixBuilderContainerName = %q, want devcell-builder-nmd.gg-20", got)
 	}
 }
 
@@ -1258,9 +1258,9 @@ func TestReclaimBuilderSlot_RunningIsNeverKilled(t *testing.T) {
 
 // nix.conf must set max-substitution-jobs and http-connections from the
 // DEVCELL_BUILD_THREADS env var, defaulting to 128.
-func TestThinBuildArgv_NixConfDefaultBuildThreads(t *testing.T) {
+func TestNixBuildArgv_NixConfDefaultBuildThreads(t *testing.T) {
 	t.Setenv("DEVCELL_BUILD_THREADS", "")
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "x86_64")
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "x86_64")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, "max-substitution-jobs = ${DEVCELL_BUILD_THREADS:-128}") {
 		t.Error("nix.conf must set max-substitution-jobs from DEVCELL_BUILD_THREADS (default 128)")
@@ -1270,19 +1270,19 @@ func TestThinBuildArgv_NixConfDefaultBuildThreads(t *testing.T) {
 	}
 }
 
-func TestThinBuildArgv_BuildThreadsEnvPassedToContainer(t *testing.T) {
+func TestNixBuildArgv_BuildThreadsEnvPassedToContainer(t *testing.T) {
 	t.Setenv("DEVCELL_BUILD_THREADS", "64")
 	withCapacity(t, bigHostCPU, bigHostMem, true)
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 	if got := argvEnvValue(argv, "DEVCELL_BUILD_THREADS"); got != "64" {
 		t.Errorf("DEVCELL_BUILD_THREADS must be forwarded to the container; got %q, want 64", got)
 	}
 }
 
-func TestThinBuildArgv_BuildThreadsDefaultOmittedFromArgv(t *testing.T) {
+func TestNixBuildArgv_BuildThreadsDefaultOmittedFromArgv(t *testing.T) {
 	t.Setenv("DEVCELL_BUILD_THREADS", "")
 	withCapacity(t, bigHostCPU, bigHostMem, true)
-	argv := thinBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, testStack, "aarch64")
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 	if got := argvEnvValue(argv, "DEVCELL_BUILD_THREADS"); got != "" {
 		t.Errorf("default build threads should not be passed as env var (nix.conf has its own default); got %q", got)
 	}
@@ -1309,8 +1309,8 @@ func TestBuilderOrphanedByCancel(t *testing.T) {
 	}
 }
 
-func TestThinBuildArgv_HomeManagerTargetX86(t *testing.T) {
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", "base", "", "myproject")
+func TestNixBuildArgv_HomeManagerTargetX86(t *testing.T) {
+	argv := NixBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, "local", "x86_64", "base", "", "myproject")
 	script := argv[len(argv)-1]
 	want := "home-manager switch --flake /opt/nixhome#devcell-local"
 	if !strings.Contains(script, want) {
@@ -1322,8 +1322,8 @@ func TestThinBuildArgv_HomeManagerTargetX86(t *testing.T) {
 	}
 }
 
-func TestThinBuildArgv_HomeManagerTargetAarch64(t *testing.T) {
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "aarch64", "base", "", "myproject")
+func TestNixBuildArgv_HomeManagerTargetAarch64(t *testing.T) {
+	argv := NixBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, "local", "aarch64", "base", "", "myproject")
 	script := argv[len(argv)-1]
 	want := "home-manager switch --flake /opt/nixhome#devcell-local-aarch64"
 	if !strings.Contains(script, want) {
@@ -1331,25 +1331,25 @@ func TestThinBuildArgv_HomeManagerTargetAarch64(t *testing.T) {
 	}
 }
 
-// The build's package summary rides on the thin image as a label so
+// The build's package summary rides on the image as a label so
 // `cell <agent>` can show it at start without evaluating nix again.
-func TestThinBuildArgvWithPackages_LabelsImage(t *testing.T) {
-	argv := ThinBuildArgvWithPackages("core:1", "c", "v", "path:/x", "thin:1", "local", "aarch64", "ultimate", "", "proj", "desktop: 69, base: 35")
+func TestNixBuildArgvWithPackages_LabelsImage(t *testing.T) {
+	argv := NixBuildArgvWithPackages("core:1", "c", "v", "path:/x", "img:1", "local", "aarch64", "ultimate", "", "proj", "desktop: 69, base: 35")
 	script := argv[len(argv)-1]
 	if !strings.Contains(script, `LABEL devcell.packages="desktop: 69, base: 35"`) {
 		t.Errorf("want the packages label in the inner Dockerfile:\n%s", script)
 	}
-	plain := ThinBuildArgvFull("core:1", "c", "v", "path:/x", "thin:1", "local", "aarch64", "ultimate", "", "proj")
+	plain := NixBuildArgv("core:1", "c", "v", "path:/x", "img:1", "local", "aarch64", "ultimate", "", "proj")
 	if !strings.Contains(plain[len(plain)-1], `LABEL devcell.packages=""`) {
-		t.Errorf("ThinBuildArgvFull must keep the label with an empty value")
+		t.Errorf("NixBuildArgv must keep the label with an empty value")
 	}
 }
 
 // home-manager uses jq internally to URI-encode the flake config name.
 // If jq is missing at runtime, the name becomes "" and nix looks for
 // homeConfigurations."" — an attribute that doesn't exist.
-func TestThinBuildArgv_JqInDevcellToolsProfile(t *testing.T) {
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", "base", "", "myproject")
+func TestNixBuildArgv_JqInDevcellToolsProfile(t *testing.T) {
+	argv := NixBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, "local", "x86_64", "base", "", "myproject")
 	script := argv[len(argv)-1]
 
 	profileInstallIdx := strings.Index(script, "nix profile install --profile /nix/var/nix/profiles/devcell-tools")
@@ -1366,8 +1366,8 @@ func TestThinBuildArgv_JqInDevcellToolsProfile(t *testing.T) {
 	}
 }
 
-func TestThinBuildArgv_JqHealthCheckBeforeInstall(t *testing.T) {
-	argv := ThinBuildArgvFull(testCoreImage, testContainer, testVolume, testNixhome, testThinTag, "local", "x86_64", "base", "", "myproject")
+func TestNixBuildArgv_JqHealthCheckBeforeInstall(t *testing.T) {
+	argv := NixBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, "local", "x86_64", "base", "", "myproject")
 	script := argv[len(argv)-1]
 
 	installIdx := strings.Index(script, "Installing system tools on volume")
@@ -1381,5 +1381,56 @@ func TestThinBuildArgv_JqHealthCheckBeforeInstall(t *testing.T) {
 	jqCheck := strings.Index(script, "jq --version")
 	if jqCheck < 0 || jqCheck > installIdx {
 		t.Error("script must health-check jq (jq --version) before the devcell-tools install block")
+	}
+}
+
+// NixBuildArgvBaked (--no-nix-volume) bakes the nix store into the final
+// image instead of mounting a named Docker volume: no -v <volume>:/nix on
+// the builder, /nix is copied into the build context, and the inner
+// Dockerfile COPYs it into the image with a distinct built-with label.
+func TestNixBuildArgvBaked_OmitsNixVolumeMount(t *testing.T) {
+	argv := NixBuildArgvBaked(testCoreImage, testContainer, testNixhome, testImageTag, "local", "x86_64", "base", "", "myproject", "")
+	for i, a := range argv {
+		if a == "-v" && i+1 < len(argv) && strings.Contains(argv[i+1], ":/nix") {
+			t.Errorf("baked build must not mount a named volume at /nix: %v", argv)
+		}
+	}
+}
+
+func TestNixBuildArgvBaked_CopiesNixStoreIntoBuildContext(t *testing.T) {
+	argv := NixBuildArgvBaked(testCoreImage, testContainer, testNixhome, testImageTag, "local", "x86_64", "base", "", "myproject", "")
+	script := argv[len(argv)-1]
+	if !strings.Contains(script, `cp -a /nix "$CTX/nix"`) {
+		t.Errorf("baked build must copy /nix into the build context:\n%s", script)
+	}
+	if !strings.Contains(script, "COPY nix/ /nix/") {
+		t.Errorf("inner Dockerfile must COPY the nix store into the image:\n%s", script)
+	}
+}
+
+func TestNixBuildArgvBaked_LabelsBuiltWithBaked(t *testing.T) {
+	argv := NixBuildArgvBaked(testCoreImage, testContainer, testNixhome, testImageTag, "local", "x86_64", "base", "", "myproject", "")
+	script := argv[len(argv)-1]
+	if !strings.Contains(script, "LABEL devcell.built-with=baked") {
+		t.Errorf("baked image must be labeled devcell.built-with=baked:\n%s", script)
+	}
+	if strings.Contains(script, "LABEL devcell.built-with=nix-volume") {
+		t.Errorf("baked image must not carry the nix-volume label:\n%s", script)
+	}
+}
+
+// Non-baked builds (NixBuildArgv / NixBuildArgvWithPackages) must be
+// unaffected: still mount the volume, still label nix-volume, no COPY nix/.
+func TestNixBuildArgv_StillLabelsNixVolumeAndSkipsNixCopy(t *testing.T) {
+	argv := NixBuildArgv(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, "local", "x86_64", "base", "", "myproject")
+	script := argv[len(argv)-1]
+	if !strings.Contains(script, "LABEL devcell.built-with=nix-volume") {
+		t.Errorf("non-baked image must keep the nix-volume label:\n%s", script)
+	}
+	if strings.Contains(script, "COPY nix/ /nix/") {
+		t.Errorf("non-baked build must not COPY nix/ into the image:\n%s", script)
+	}
+	if strings.Contains(script, `cp -a /nix "$CTX/nix"`) {
+		t.Errorf("non-baked build must not copy /nix into the build context:\n%s", script)
 	}
 }

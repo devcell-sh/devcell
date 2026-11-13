@@ -9,18 +9,18 @@ import (
 	"testing"
 )
 
-func TestWriteThinBuildContextIncludesOnlyOverlay(t *testing.T) {
+func TestWriteNixBuildContext_IncludesOnlyOverlay(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteThinTestFile(t, filepath.Join(dir, "flake.nix"), "outer")
-	mustWriteThinTestFile(t, filepath.Join(dir, "nixhome", "flake.nix"), "inner")
-	mustWriteThinTestFile(t, filepath.Join(dir, "nixhome", "entrypoint.sh"), "#!/bin/sh")
-	mustWriteThinTestFile(t, filepath.Join(dir, "debug", "large.log"), "exclude")
+	mustWriteNixTestFile(t, filepath.Join(dir, "flake.nix"), "outer")
+	mustWriteNixTestFile(t, filepath.Join(dir, "nixhome", "flake.nix"), "inner")
+	mustWriteNixTestFile(t, filepath.Join(dir, "nixhome", "entrypoint.sh"), "#!/bin/sh")
+	mustWriteNixTestFile(t, filepath.Join(dir, "debug", "large.log"), "exclude")
 	if err := os.Symlink("nixhome/entrypoint.sh", filepath.Join(dir, "entrypoint.sh")); err != nil {
 		t.Fatal(err)
 	}
 
 	var buf bytes.Buffer
-	if err := WriteThinBuildContext(&buf, dir); err != nil {
+	if err := WriteNixBuildContext(&buf, dir); err != nil {
 		t.Fatal(err)
 	}
 
@@ -55,14 +55,14 @@ func TestWriteThinBuildContextIncludesOnlyOverlay(t *testing.T) {
 	}
 }
 
-func TestWriteThinBuildContextRequiresFlake(t *testing.T) {
+func TestWriteNixBuildContext_RequiresFlake(t *testing.T) {
 	dir := t.TempDir()
-	if err := WriteThinBuildContext(io.Discard, dir); err == nil {
+	if err := WriteNixBuildContext(io.Discard, dir); err == nil {
 		t.Fatal("missing outer flake.nix must fail before starting the builder")
 	}
 }
 
-func mustWriteThinTestFile(t *testing.T, path, content string) {
+func mustWriteNixTestFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)

@@ -30,7 +30,7 @@ func dockerRun(ctx context.Context, args ...string) (string, error) {
 // (the image ships no gcroot for it), and a nix cache published from such a
 // volume carries the dangling symlink. Hydrating that cache over a freshly
 // populated volume overwrites the good symlink while bash stays in the
-// store, so /bin/sh still starts but PATH resolves nothing: the thin build
+// store, so /bin/sh still starts but PATH resolves nothing: the nix build
 // dies on its first `mkdir`. The bootstrap must repair the profile link
 // even when the profile's store directory is already on the volume.
 func TestEnsureVolumeShell_RepairsDanglingDefaultProfile(t *testing.T) {

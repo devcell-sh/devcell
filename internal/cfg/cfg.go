@@ -19,7 +19,7 @@ import (
 // Must match docker.DefaultRegistry.
 const DefaultRegistry = "ghcr.io/devcell-sh/devcell"
 
-// DefaultNixImage is the pinned nixos/nix image for thin builds.
+// DefaultNixImage is the pinned nixos/nix image for nix builds.
 // Pinned because nixos/nix symlinks /etc files into /nix/store; upgrading
 // changes the store hash and breaks when a shared volume is mounted over /nix.
 const DefaultNixImage = "docker.io/nixos/nix:2.34.9"
@@ -45,7 +45,6 @@ type CellSection struct {
 	PerCellImage     *bool             `toml:"per_cell_image"`          // tag user image per cell instead of per stack; default: false
 	Hostname         string            `toml:"hostname"`                // override container hostname; default: computed "devcell-<cellname>"; env: DEVCELL_HOSTNAME
 	MacAddress       string            `toml:"mac_address"`             // MAC for the container's NIC (XX:XX:XX:XX:XX:XX); pinned across restarts for infra-side identity persistence. Honored on user-defined bridge networks (devcell uses --network devcell-network). Empty → docker auto-assigns a random MAC per launch.
-	Thin             *bool             `toml:"thin"`                    // thin image mode; default: true; disable with thin=false or DEVCELL_THIN=0
 	StaleWarning     *bool             `toml:"stale_warning"`           // CELL-391 "cell is behind — parallel reality" nudge at start; default: true; env: DEVCELL_STALE_WARN
 	Background       *bool             `toml:"background"`              // keep VM/container running after shell exit; default: false; env: DEVCELL_BACKGROUND
 	Experimental     StringList        `toml:"experimental"`            // opt-in experimental features, e.g. ["ui-cage", "ui-boot-popup"]; flag: --experimental=a,b; env: DEVCELL_EXPERIMENTAL=a,b; names and the gate live in internal/experiments
@@ -308,19 +307,6 @@ func (c CellSection) ResolvedWinkitMemoryGB() int {
 		return c.WinkitMemoryGB
 	}
 	return 4
-}
-
-// ResolvedThin returns the effective thin setting: default ON, disabled by env/toml.
-func (c CellSection) ResolvedThin() bool {
-	if v := os.Getenv("DEVCELL_THIN"); v == "0" {
-		return false
-	} else if v == "1" {
-		return true
-	}
-	if c.Thin != nil {
-		return *c.Thin
-	}
-	return true
 }
 
 // ResolvedRegistry returns the effective registry: env > toml > default.
@@ -995,7 +981,7 @@ func (d DockerSection) ResolvedShmSize() string {
 	return "1g"
 }
 
-// BuildSection holds [build] config for thin-build resource ceilings.
+// BuildSection holds [build] config for nix-build resource ceilings.
 // Values feed the same resolution chain as the env vars; an explicit env var
 // always wins over TOML (env > toml > derived default).
 type BuildSection struct {
@@ -1010,7 +996,7 @@ type BuildSection struct {
 
 // NixSection holds [nix] config for nix image and nixhome settings.
 type NixSection struct {
-	Image       string `toml:"image"`   // nix core image for thin builds; default: DefaultNixImage; env: DEVCELL_NIX_IMAGE
+	Image       string `toml:"image"`   // nix core image for nix builds; default: DefaultNixImage; env: DEVCELL_NIX_IMAGE
 	NixhomePath string `toml:"nixhome"` // local nixhome path; overridden by DEVCELL_NIXHOME_PATH env
 }
 

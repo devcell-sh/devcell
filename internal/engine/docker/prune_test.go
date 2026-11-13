@@ -180,7 +180,7 @@ func TestBuildDockerPruneSteps_ForceOnLinux_Rootless(t *testing.T) {
 	}
 }
 
-// `cell build prune --pure` on Linux (default, no --force) runs safe
+// `cell clean build` on Linux (default, no --force) runs safe
 // project-aware GC: remove only orphaned profile generations that aren't
 // protected by project-scoped GC roots under /nix/var/nix/gcroots/devcell/,
 // then `nix-store --gc`. This is safe for shared Docker volumes where
@@ -192,8 +192,7 @@ func TestBuildDockerPruneSteps_ForceOnLinux_Rootless(t *testing.T) {
 func TestBuildNixPruneSteps_Default_LinuxSafeGC(t *testing.T) {
 	opts := docker.PruneOpts{
 		GOOS: "linux",
-		Pure: true,
-	}
+			}
 	steps := docker.BuildNixPruneSteps(opts)
 
 	if len(steps) == 0 {
@@ -239,7 +238,7 @@ func TestBuildNixPruneSteps_Default_LinuxSafeGC(t *testing.T) {
 	}
 }
 
-// `cell build prune --pure --force` on macOS wipes the linux-builder VM qcow
+// `cell clean build --force` on macOS wipes the linux-builder VM qcow
 // disk image and restarts the launchd service so the VM is rebuilt from the
 // nix-darwin derivation. Ships as DRY-RUN ONLY in the initial implementation:
 // the qcow path varies across nix-darwin versions, so we print the plan and
@@ -247,8 +246,7 @@ func TestBuildNixPruneSteps_Default_LinuxSafeGC(t *testing.T) {
 func TestBuildNixPruneSteps_ForceOnDarwin_IsDryRunPlan(t *testing.T) {
 	opts := docker.PruneOpts{
 		GOOS:  "darwin",
-		Pure:  true,
-		Force: true,
+				Force: true,
 	}
 	steps := docker.BuildNixPruneSteps(opts)
 
@@ -285,15 +283,14 @@ func TestBuildNixPruneSteps_ForceOnDarwin_IsDryRunPlan(t *testing.T) {
 	}
 }
 
-// `cell build prune --pure --force` on Linux native runs aggressive GC:
+// `cell clean build --force` on Linux native runs aggressive GC:
 // delete old profile generations + nix-collect-garbage -d + optimise +
 // wipe ~/.cache/nix. Does NOT rm -rf /nix/store (would destroy NixOS, requires
 // reinstall otherwise).
 func TestBuildNixPruneSteps_ForceOnLinux_AggressiveGC(t *testing.T) {
 	opts := docker.PruneOpts{
 		GOOS:    "linux",
-		Pure:    true,
-		Force:   true,
+				Force:   true,
 		HomeDir: "/home/testuser",
 	}
 	steps := docker.BuildNixPruneSteps(opts)
@@ -305,7 +302,7 @@ func TestBuildNixPruneSteps_ForceOnLinux_AggressiveGC(t *testing.T) {
 	// No step may DryRun on Linux — execution is safe here.
 	for i, s := range steps {
 		if s.DryRun {
-			t.Errorf("step %d marked DryRun on Linux force-pure: %v", i+1, s.Argv)
+			t.Errorf("step %d marked DryRun on Linux force: %v", i+1, s.Argv)
 		}
 	}
 
@@ -340,8 +337,7 @@ func TestBuildNixPruneSteps_ForceOnLinux_AggressiveGC(t *testing.T) {
 func TestBuildNixPruneSteps_ForceOnLinux_NixOSAddsSystemProfileCleanup(t *testing.T) {
 	opts := docker.PruneOpts{
 		GOOS:    "linux",
-		Pure:    true,
-		Force:   true,
+				Force:   true,
 		NixOS:   true,
 		HomeDir: "/home/testuser",
 	}
@@ -357,7 +353,7 @@ func TestBuildNixPruneSteps_ForceOnLinux_NixOSAddsSystemProfileCleanup(t *testin
 
 	// Same without NixOS — must NOT touch system profile.
 	plain := docker.BuildNixPruneSteps(docker.PruneOpts{
-		GOOS: "linux", Pure: true, Force: true, NixOS: false, HomeDir: "/home/testuser",
+		GOOS: "linux", Force: true, NixOS: false, HomeDir: "/home/testuser",
 	})
 	plainJoined := ""
 	for _, s := range plain {
@@ -741,8 +737,7 @@ func TestNixGCRootReportScript_ContainsDriftWarning(t *testing.T) {
 func TestBuildNixPruneSteps_Default_LinuxOmitsReportStep(t *testing.T) {
 	opts := docker.PruneOpts{
 		GOOS: "linux",
-		Pure: true,
-	}
+			}
 	steps := docker.BuildNixPruneSteps(opts)
 
 	for _, s := range steps {
@@ -760,8 +755,7 @@ func TestBuildNixPruneSteps_Default_LinuxOmitsReportStep(t *testing.T) {
 func TestBuildNixPruneSteps_Default_LinuxRunsInContainer(t *testing.T) {
 	opts := docker.PruneOpts{
 		GOOS: "linux",
-		Pure: true,
-	}
+			}
 	steps := docker.BuildNixPruneSteps(opts)
 
 	// Must NOT use `sudo sh -c` for the safe GC step.
@@ -799,16 +793,15 @@ func TestNixReapSweepScript_DoesNotTouchAutoRoots(t *testing.T) {
 	}
 }
 
-// CELL-333: on macOS the thin-mode nix store lives in the devcell-nix-store
-// Docker volume, not in the linux-builder VM. The default --pure prune must
+// CELL-333: on macOS the nix store lives in the devcell-nix-store
+// Docker volume, not in the linux-builder VM. The default prune must
 // target that volume via a throwaway container (where /nix and the devcell
 // GC roots resolve correctly), exactly like the Linux path. GC-ing the
 // linux-builder VM never reclaims the store that actually grows.
 func TestBuildNixPruneSteps_Default_DarwinRunsInContainerOnNixVolume(t *testing.T) {
 	opts := docker.PruneOpts{
 		GOOS: "darwin",
-		Pure: true,
-	}
+			}
 	steps := docker.BuildNixPruneSteps(opts)
 
 	if len(steps) == 0 {
@@ -833,7 +826,7 @@ func TestBuildNixPruneSteps_Default_DarwinRunsInContainerOnNixVolume(t *testing.
 	for _, s := range steps {
 		joined := strings.Join(s.Argv, " ")
 		if strings.Contains(joined, "docker run") &&
-			strings.Contains(joined, docker.DefaultThinStoreVolume+":/nix") {
+			strings.Contains(joined, docker.DefaultNixStoreVolume+":/nix") {
 			sawVolume = true
 			for i, a := range s.Argv {
 				if a == "-c" && i+1 < len(s.Argv) {
@@ -844,7 +837,7 @@ func TestBuildNixPruneSteps_Default_DarwinRunsInContainerOnNixVolume(t *testing.
 	}
 	if !sawVolume {
 		t.Fatalf("no docker run step mounting %s:/nix found: %+v",
-			docker.DefaultThinStoreVolume, steps)
+			docker.DefaultNixStoreVolume, steps)
 	}
 	allScripts := strings.Join(scripts, "\n---\n")
 	if !strings.Contains(allScripts, "gcroots/devcell") {

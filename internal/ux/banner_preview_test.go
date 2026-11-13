@@ -21,7 +21,7 @@ func TestPreviewBanner(t *testing.T) {
 	const w = 8
 	fmt.Println("   " + ux.KV(w, "Project", "devcell"+ux.StyleMuted.Render("  /Users/warden/dev/devcell")))
 	fmt.Println("   " + ux.KV(w, "Cell", "CELL"+ux.StyleMuted.Render("  /Users/warden/.devcell/CELL")))
-	fmt.Println("   " + ux.KV(w, "Image", "devcell-user:ultimate-thin"+ux.StyleMuted.Render("  1.1 GB")))
+	fmt.Println("   " + ux.KV(w, "Image", "devcell-user:ultimate"+ux.StyleMuted.Render("  1.1 GB")))
 	fmt.Println("   " + ux.KV(w, "Modules", "stack=ultimate"))
 	fmt.Println("   " + ux.KV(w, "Network", "devcell-network"+ux.StyleMuted.Render(" · hostname devcell-304 · MAC auto")))
 	fmt.Println("   " + ux.KV(w, "Locale", "en_US.UTF-8 (from host $LANG)"))

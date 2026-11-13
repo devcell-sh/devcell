@@ -284,7 +284,7 @@ func BuildCleanupSteps(closures []LiveClosure) []PruneStep {
 	return []PruneStep{
 		{Label: "Reaping stale GC roots", Argv: []string{
 			"docker", "run", "--rm",
-			"-v", DefaultThinStoreVolume + ":/nix",
+			"-v", DefaultNixStoreVolume + ":/nix",
 			NixCoreImage,
 			"/bin/sh", "-c", BuildCleanupScript(closures),
 		}},

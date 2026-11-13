@@ -102,7 +102,7 @@ jobs:
 
       # DEVCELL_ARCH tells DetectArch() which platform to build for,
       # enabling cross-arch builds (arm64 on x86 via QEMU).
-      - name: Build thin image
+      - name: Build image
         id: build
         env:
           DEVCELL_NIX_VOLUME: devcell-nix-store-${{ matrix.arch }}

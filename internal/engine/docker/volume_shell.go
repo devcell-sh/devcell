@@ -21,7 +21,7 @@ import (
 // a nix cache published from such a volume carries a dangling
 // /nix/var/nix/profiles/default. Hydrating that cache over a freshly
 // populated volume overwrites the good link while bash stays in the store,
-// so /bin/sh starts but PATH resolves nothing and the thin build dies on
+// so /bin/sh starts but PATH resolves nothing and the nix build dies on
 // its first mkdir. The link is therefore repointed unconditionally.
 //
 // The devcell-tools profile is invalidated only when the core image's
@@ -47,7 +47,7 @@ done
 mkdir -p /mnt/nix/var/nix/profiles
 ln -sfT "$PROFILE_TARGET" /mnt/nix/var/nix/profiles/default
 if [ "$CORE_CHANGED" = 1 ]; then
-  # Core image changed: wipe the devcell-tools profile so the thin build
+  # Core image changed: wipe the devcell-tools profile so the nix build
   # recreates it with store paths from the new closure.
   rm -f /mnt/nix/var/nix/profiles/devcell-tools*
   echo "bootstrap: synced $COPIED store paths, invalidated devcell-tools"
@@ -73,12 +73,12 @@ func EnsureVolumeShellArgv(volumeName, coreImage string) []string {
 // The nixos/nix image's /bin/sh is a symlink into /nix/store/<hash>/bin/bash.
 // When the shared nix-store volume mounts over /nix, the symlink target
 // must exist on the volume. A stale volume (from a prior image version)
-// has different store hashes, making /bin/sh dangle and the thin build
+// has different store hashes, making /bin/sh dangle and the nix build
 // unbootable.
 //
 // The fix: mount the volume at /mnt/nix (leaving the image's own /nix
 // intact) and copy the default profile's closure to the volume. This also
-// covers coreutils, nix, git, and other tools the thin build script needs.
+// covers coreutils, nix, git, and other tools the nix build script needs.
 //
 // No-op when the volume does not exist yet (Docker auto-populates on
 // first mount) or the closure is already present.

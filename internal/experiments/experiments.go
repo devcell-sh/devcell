@@ -39,10 +39,16 @@ var (
 		Name:    "storage-unified",
 		Summary: "unified shared cache: Go mod/build, npm, uv and winkit caches shared across cells via host bind mounts",
 	}
+	// NoNixVolume enables --no-nix-volume on `cell build`: bake nix into
+	// the image filesystem instead of mounting a Docker named volume.
+	NoNixVolume = Experiment{
+		Name:    "build-no-nix-volume",
+		Summary: "cell build --no-nix-volume: bake nix into the image filesystem instead of a Docker named volume",
+	}
 )
 
 // all is the iteration order for List, docs and error messages.
-var all = []Experiment{Cage, BootPopup, Windows, SharedCache}
+var all = []Experiment{Cage, BootPopup, Windows, SharedCache, NoNixVolume}
 
 // List returns every registered experiment, active or not.
 func List() []Experiment { return append([]Experiment(nil), all...) }

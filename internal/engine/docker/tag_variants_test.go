@@ -7,17 +7,9 @@ import (
 	"github.com/devcell-sh/devcell/internal/engine/docker"
 )
 
-// Tag-variant contract after the 2026-05-15 flip (CELL-189) + CELL-165
-// vocabulary rename (`debian` → `impure`):
+// Tag-variant contract:
 //
-//   - `UserImageTag()` — unchanged. Returns the bare local devcell-user:<stack>.
-//     After the flip this is reached only via `--impure` (legacy Dockerfile
-//     path); the new default reaches UserImageTagPure() via PickImageTag(false).
-//   - `UserImageTagPure()` — returns devcell-user:<stack>-pure. The default
-//     after the flip.
-//   - `PickImageTag(impure)`:
-//       false → UserImageTagPure()   (local pure, new default)
-//       true  → UserImageTag()       (bare local tag, legacy --impure path)
+//   - `UserImageTag()` — returns the local devcell-user:<stack> tag.
 
 func TestUserImageTag_BareTagUnchanged(t *testing.T) {
 	defer setEnv("DEVCELL_USER_IMAGE", "")()
@@ -26,52 +18,10 @@ func TestUserImageTag_BareTagUnchanged(t *testing.T) {
 
 	got := docker.UserImageTag()
 	if got != "localhost/devcell-user:ultimate" {
-		t.Errorf("UserImageTag = %q, want localhost/devcell-user:ultimate (unchanged across flip)", got)
+		t.Errorf("UserImageTag = %q, want localhost/devcell-user:ultimate", got)
 	}
 }
 
-func TestUserImageTagPure_HasPureSuffix(t *testing.T) {
-	defer setEnv("DEVCELL_USER_IMAGE", "")()
-	defer setEnv("DEVCELL_USER_IMAGE_PURE", "")()
-	defer setEnv("DEVCELL_WORKSPACE", "")()
-	defer setStack("ultimate")()
-
-	got := docker.UserImageTagPure()
-	if got != "localhost/devcell-user:ultimate-pure" {
-		t.Errorf("UserImageTagPure = %q, want localhost/devcell-user:ultimate-pure", got)
-	}
-}
-
-// PickImageTag — post CELL-183 flip + CELL-165 vocab rename: parameter
-// renamed to `impure`. false (default) returns the pure tag, true returns
-// the bare tag.
-//
-//	false (default)   → UserImageTagPure()
-//	true  (--impure)  → UserImageTag()
-func TestPickImageTag_DefaultIsPureTag(t *testing.T) {
-	defer setEnv("DEVCELL_USER_IMAGE", "")()
-	defer setEnv("DEVCELL_USER_IMAGE_PURE", "")()
-	defer setEnv("DEVCELL_WORKSPACE", "")()
-	defer setStack("ultimate")()
-
-	got := docker.PickImageTag(false)
-	if got != "localhost/devcell-user:ultimate-pure" {
-		t.Errorf("PickImageTag(false) = %q, want localhost/devcell-user:ultimate-pure (default after flip)", got)
-	}
-}
-
-func TestPickImageTag_ImpureTrueReturnsBareTag(t *testing.T) {
-	defer setEnv("DEVCELL_USER_IMAGE", "")()
-	defer setEnv("DEVCELL_WORKSPACE", "")()
-	defer setStack("ultimate")()
-
-	got := docker.PickImageTag(true)
-	if got != "localhost/devcell-user:ultimate" {
-		t.Errorf("PickImageTag(true) = %q, want localhost/devcell-user:ultimate (legacy bare tag, --impure path)", got)
-	}
-}
-
-// Env overrides still apply per their respective tag.
 func TestUserImageTag_EnvOverridesFullTag(t *testing.T) {
 	defer setEnv("DEVCELL_USER_IMAGE", "my-registry/custom:tag")()
 	if got := docker.UserImageTag(); got != "my-registry/custom:tag" {
@@ -79,61 +29,16 @@ func TestUserImageTag_EnvOverridesFullTag(t *testing.T) {
 	}
 }
 
-func TestUserImageTagPure_EnvOverridesFullTag(t *testing.T) {
-	defer setEnv("DEVCELL_USER_IMAGE_PURE", "my-registry/custom:tag")()
-	if got := docker.UserImageTagPure(); got != "my-registry/custom:tag" {
-		t.Errorf("env override ignored: got %q", got)
-	}
-}
-
-// ── Thin image tag ────────────────────────────────────────────────────────
-
-func TestUserImageTagThin_HasThinSuffix(t *testing.T) {
-	defer setEnv("DEVCELL_USER_IMAGE", "")()
-	defer setEnv("DEVCELL_USER_IMAGE_THIN", "")()
-	defer setEnv("DEVCELL_WORKSPACE", "")()
-	defer setStack("ultimate")()
-
-	got := docker.UserImageTagThin()
-	if got != "localhost/devcell-user:ultimate-thin" {
-		t.Errorf("UserImageTagThin = %q, want localhost/devcell-user:ultimate-thin", got)
-	}
-}
-
-func TestUserImageTagThin_EnvOverride(t *testing.T) {
-	defer setEnv("DEVCELL_USER_IMAGE_THIN", "custom:thin-override")()
-	if got := docker.UserImageTagThin(); got != "custom:thin-override" {
-		t.Errorf("env override ignored: got %q", got)
-	}
-}
-
-// TestUserImageTagThin_UnifiedEnvOverride locks in CELL-286 prep: when
-// DEVCELL_USER_IMAGE alone is set (no DEVCELL_USER_IMAGE_THIN), the thin tag
-// equals the env value verbatim — no "-thin" suffix appended. CI relies on
-// this so it can publish + consume one canonical tag without juggling
-// variant-specific env vars.
-func TestUserImageTagThin_UnifiedEnvOverride(t *testing.T) {
-	defer setEnv("DEVCELL_USER_IMAGE_THIN", "")()
-	defer setEnv("DEVCELL_USER_IMAGE", "ghcr.io/devcell-sh/devcell:v0.0.0-amd64")()
-	defer setStack("ultimate")()
-
-	got := docker.UserImageTagThin()
-	if got != "ghcr.io/devcell-sh/devcell:v0.0.0-amd64" {
-		t.Errorf("UserImageTagThin = %q, want %q (no -thin suffix when DEVCELL_USER_IMAGE is the only override)",
-			got, "ghcr.io/devcell-sh/devcell:v0.0.0-amd64")
-	}
-}
-
 // ── Custom build tag override (--image flag) ─────────────────────────────────
 
 func TestResolveBuildTag_EmptyCustomReturnsDerived(t *testing.T) {
-	if got := docker.ResolveBuildTag("", "localhost/devcell-user:ultimate-thin"); got != "localhost/devcell-user:ultimate-thin" {
+	if got := docker.ResolveBuildTag("", "localhost/devcell-user:ultimate"); got != "localhost/devcell-user:ultimate" {
 		t.Errorf("empty custom: got %q, want derived", got)
 	}
 }
 
 func TestResolveBuildTag_CustomOverrides(t *testing.T) {
-	if got := docker.ResolveBuildTag("myorg/devcell-test:dev-thin", "localhost/devcell-user:ultimate-thin"); got != "myorg/devcell-test:dev-thin" {
+	if got := docker.ResolveBuildTag("myorg/devcell-test:dev", "localhost/devcell-user:ultimate"); got != "myorg/devcell-test:dev" {
 		t.Errorf("custom override ignored: got %q", got)
 	}
 }
@@ -141,18 +46,6 @@ func TestResolveBuildTag_CustomOverrides(t *testing.T) {
 func TestResolveBuildTag_CustomTrimsWhitespace(t *testing.T) {
 	if got := docker.ResolveBuildTag("  myorg/foo:bar  ", "default"); got != "myorg/foo:bar" {
 		t.Errorf("whitespace not trimmed: got %q", got)
-	}
-}
-
-func TestPickImageTag_ThinReturnsThinTag(t *testing.T) {
-	defer setEnv("DEVCELL_USER_IMAGE", "")()
-	defer setEnv("DEVCELL_USER_IMAGE_THIN", "")()
-	defer setEnv("DEVCELL_WORKSPACE", "")()
-	defer setStack("ultimate")()
-
-	got := docker.PickImageTagThin()
-	if got != "localhost/devcell-user:ultimate-thin" {
-		t.Errorf("PickImageTagThin() = %q, want localhost/devcell-user:ultimate-thin", got)
 	}
 }
 

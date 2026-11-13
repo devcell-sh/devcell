@@ -311,11 +311,6 @@
           "description": "SSH user for tart engine; default: \"admin\"; env: DEVCELL_TART_SSH_USER",
           "type": "string"
         },
-        "thin": {
-          "deprecated": true,
-          "description": "thin image mode; default: true; disable with thin=false or DEVCELL_THIN=0. Deprecated: remove it; thin is the only build mode",
-          "type": "boolean"
-        },
         "timezone": {
           "description": "IANA tz (e.g. \"Europe/Prague\"); default: host $TZ",
           "type": "string"
@@ -587,7 +582,7 @@
       "additionalProperties": false,
       "properties": {
         "image": {
-          "description": "nix core image for thin builds; default: DefaultNixImage; env: DEVCELL_NIX_IMAGE",
+          "description": "nix core image for nix builds; default: DefaultNixImage; env: DEVCELL_NIX_IMAGE",
           "type": "string"
         },
         "nixhome": {

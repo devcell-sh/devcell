@@ -108,7 +108,7 @@ func GroupPackageDefinitions(defs []PackageDefinition, hmDeclaration string) []M
 //
 //	desktop: 69, base: 35, infra: 11
 //
-// This is what the thin image's devcell.packages label carries.
+// This is what the image's devcell.packages label carries.
 func FormatModuleCounts(counts []ModuleCount) string {
 	parts := make([]string, len(counts))
 	for i, c := range counts {

@@ -8,6 +8,7 @@ import (
 	"github.com/devcell-sh/devcell/internal/cfg"
 	"github.com/devcell-sh/devcell/internal/config"
 	"github.com/devcell-sh/devcell/internal/engine"
+	"github.com/devcell-sh/devcell/internal/experiments"
 	"github.com/devcell-sh/devcell/internal/telemetry"
 	"github.com/spf13/cobra"
 )
@@ -21,11 +22,12 @@ var buildCmd = &cobra.Command{
 func init() {
 	buildCmd.Flags().Bool("update", false, "update nix flake inputs to latest revisions before building")
 	buildCmd.Flags().String("stack", "", "override [cell].stack for this build (base, dev, go, node, python, fullstack, electronics, ultimate, bbb)")
-	buildCmd.Flags().String("image", "", "override the built image tag (e.g. devcell-user:dev-thin); env DEVCELL_BUILD_IMAGE has lower precedence")
+	buildCmd.Flags().String("image", "", "override the built image tag (e.g. devcell-user:dev); env DEVCELL_BUILD_IMAGE has lower precedence")
 	buildCmd.Flags().Bool("force", false, "recreate VM even if it already exists (tart only)")
 	buildCmd.Flags().Bool("no-cache", false, "re-download OCI image, bypassing tart cache (tart only)")
 	buildCmd.Flags().String("stage", "full", `build stage: "base" (infra only) or "full" (default, includes stack activation) (tart only)`)
 	buildCmd.Flags().Int("build-threads", 0, "nix download threads (max-substitution-jobs + http-connections); default 128; env DEVCELL_BUILD_THREADS")
+	buildCmd.Flags().Bool("no-nix-volume", false, "bake nix into the image filesystem instead of a Docker named volume (experimental: build-no-nix-volume)")
 }
 
 func runBuild(cmd *cobra.Command, _ []string) error {
@@ -55,6 +57,18 @@ func runBuild(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
+
+	noNixVolume, _ := cmd.Flags().GetBool("no-nix-volume")
+	if noNixVolume {
+		exp, err := experimental(cellCfg.Cell)
+		if err != nil {
+			return err
+		}
+		if err := experiments.Require(exp, experiments.NoNixVolume, "--no-nix-volume"); err != nil {
+			return err
+		}
+	}
+
 	e, err := engine.For(engineName)
 	if err != nil {
 		return err
@@ -69,6 +83,7 @@ func buildOpts(cmd *cobra.Command, c engine.Cell) engine.BuildOpts {
 	update, _ := flags.GetBool("update")
 	force, _ := flags.GetBool("force")
 	noCache, _ := flags.GetBool("no-cache")
+	noNixVolume, _ := flags.GetBool("no-nix-volume")
 	threads, _ := flags.GetInt("build-threads")
 	return engine.BuildOpts{
 		Cell:         c,
@@ -80,5 +95,6 @@ func buildOpts(cmd *cobra.Command, c engine.Cell) engine.BuildOpts {
 		Stage:        flags.Lookup("stage").Value.String(),
 		Image:        flags.Lookup("image").Value.String(),
 		BuildThreads: threads,
+		NoNixVolume:  noNixVolume,
 	}
 }

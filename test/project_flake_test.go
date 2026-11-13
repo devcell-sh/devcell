@@ -76,10 +76,10 @@ echo "SEED_DONE"`, flakeNix)
 	mounts := testcontainers.Mounts(
 		testcontainers.VolumeMount(projVol, "/test-project"),
 	)
-	if isThinVariant() {
+	if hasNixVolume() {
 		mounts = testcontainers.Mounts(
 			testcontainers.VolumeMount(projVol, "/test-project"),
-			testcontainers.VolumeMount(thinVolumeName(), "/nix"),
+			testcontainers.VolumeMount(nixVolumeName(), "/nix"),
 		)
 	}
 

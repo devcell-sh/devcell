@@ -9,14 +9,14 @@ import (
 	"path/filepath"
 )
 
-// WriteThinBuildContext writes the local nixhome overlay needed by the thin
+// WriteNixBuildContext writes the local nixhome overlay needed by the nix
 // builder. Streaming this through the Docker API avoids asking a VM-backed
 // daemon to resolve a host path for a second-generation container.
-func WriteThinBuildContext(w io.Writer, buildDir string) error {
+func WriteNixBuildContext(w io.Writer, buildDir string) error {
 	tw := tar.NewWriter(w)
 
 	for _, root := range []string{"flake.nix", "entrypoint.sh", "nixhome"} {
-		if err := writeThinContextPath(tw, buildDir, root); err != nil {
+		if err := writeNixContextPath(tw, buildDir, root); err != nil {
 			_ = tw.Close()
 			return err
 		}
@@ -24,10 +24,10 @@ func WriteThinBuildContext(w io.Writer, buildDir string) error {
 	return tw.Close()
 }
 
-func writeThinContextPath(tw *tar.Writer, buildDir, root string) error {
+func writeNixContextPath(tw *tar.Writer, buildDir, root string) error {
 	fullRoot := filepath.Join(buildDir, root)
 	if _, err := os.Lstat(fullRoot); err != nil {
-		return fmt.Errorf("thin build context %s: %w", fullRoot, err)
+		return fmt.Errorf("nix build context %s: %w", fullRoot, err)
 	}
 
 	return filepath.WalkDir(fullRoot, func(path string, entry fs.DirEntry, walkErr error) error {

@@ -30,5 +30,13 @@
     "doc": "",
     "ticket": "",
     "state": "active"
+  },
+  {
+    "name": "build-no-nix-volume",
+    "group": "build",
+    "summary": "cell build --no-nix-volume: bake nix into the image filesystem instead of a Docker named volume",
+    "doc": "",
+    "ticket": "",
+    "state": "active"
   }
 ]

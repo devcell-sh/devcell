@@ -9,7 +9,7 @@ import (
 )
 
 // TestPersistentPreRun_SetsRunnerStackFromConfig pins the fix for the bug
-// where `devcell build` produced devcell-user:base-pure even when .devcell.toml
+// where `devcell build` produced devcell-user:base even when .devcell.toml
 // said stack="ultimate". Root cause: docker.Stack was only set in rootCmd's
 // RunE (which is skipped when a subcommand is invoked), not in
 // PersistentPreRun (which fires for every subcommand).
@@ -61,11 +61,6 @@ modules = ["desktop"]
 		t.Errorf("docker.Modules = %v, want [desktop]", docker.Modules)
 	}
 
-	// Downstream: UserImageTagPure() must now produce the ultimate tag,
-	// not fall back to base-pure. This is the actual user-visible bug.
-	if got := docker.UserImageTagPure(); got == "devcell-user:base-pure" {
-		t.Errorf("UserImageTagPure() = %q — fell back to base-pure despite stack=ultimate", got)
-	}
 }
 
 // TestPersistentPreRun_NoConfig_LeavesDefaults verifies the silent-skip

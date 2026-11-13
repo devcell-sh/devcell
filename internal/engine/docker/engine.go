@@ -9,9 +9,8 @@ import (
 	"github.com/devcell-sh/devcell/internal/engine"
 )
 
-// Engine runs a cell as a docker container built from a thin image: a small
-// image whose /nix lives on the shared nix-store volume. It registers itself
-// as engine.Docker.
+// Engine runs a cell as a docker container whose /nix lives on the shared
+// nix-store volume. It registers itself as engine.Docker.
 //
 // Docker-only commands (cell stop, cell cleanup, cell build df, cell build
 // prune) are not engine verbs; cmd/ calls this package for them directly.
@@ -23,7 +22,7 @@ func init() {
 	engine.Register(engine.Docker, Engine{})
 }
 
-// Build builds the cell's thin image: it syncs the nixhome flake into the
+// Build builds the cell's image: it syncs the nixhome flake into the
 // build dir, writes the overlay flake for the cell's stack and modules, and
 // runs home-manager and `docker build` in a builder container. opts.Stack
 // (else DEVCELL_STACK) overrides the stack, opts.Image the tag, and
@@ -42,7 +41,7 @@ func (Engine) Build(ctx context.Context, opts engine.BuildOpts) error {
 }
 
 // useCell points the image-tag globals (Stack, Modules, PerCellImage) at
-// cell c, so UserImageTagThin and PickImageTagThin name its image.
+// cell c, so UserImageTag names its image.
 func useCell(c engine.Cell) {
 	Stack = c.Stack
 	Modules = c.Modules

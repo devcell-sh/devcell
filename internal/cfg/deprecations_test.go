@@ -50,7 +50,6 @@ documents = ["prod-api-keys"]
 func TestLoadFile_LegacyCellKeys(t *testing.T) {
 	p := writeTOML(t, t.TempDir(), "test.toml", `
 [cell]
-thin = false
 gui = false
 nixhome = "/src/home"
 `)
@@ -58,7 +57,7 @@ nixhome = "/src/home"
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(deprecatedNames(c), ","); got != "[cell] thin,[cell] gui,[cell] nixhome" {
+	if got := strings.Join(deprecatedNames(c), ","); got != "[cell] gui,[cell] nixhome" {
 		t.Errorf("deprecated = %q", got)
 	}
 	if c.Nix.NixhomePath != "/src/home" {

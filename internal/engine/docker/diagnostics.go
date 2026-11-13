@@ -29,7 +29,7 @@ func logDiagnostics(ctx context.Context, c config.Config) {
 	hostProject := os.Getenv("DEVCELL_HOST_PROJECT_DIR")
 	ux.Debugf("docker paths: base=%q build=%q DEVCELL_HOST_PROJECT_DIR=%q daemon-build-source=%q",
 		c.BaseDir, c.BuildDir, hostProject, DockerHostPath(c.BuildDir))
-	volume := ThinStoreVolume()
+	volume := NixStoreVolume()
 	if detail := DockerVolumeDebug(ctx, volume); detail != "" {
 		ux.Debugf("docker nix volume: %s", detail)
 	} else {

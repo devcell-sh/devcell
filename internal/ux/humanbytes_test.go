@@ -6,7 +6,7 @@ import (
 	"github.com/devcell-sh/devcell/internal/ux"
 )
 
-// HumanBytes is the format helper used by the pure-build spinner success line
+// HumanBytes is the format helper used by the build spinner success line
 // to surface image size when skopeo's per-blob progress is empty (non-TTY).
 // 1024-based units with the conventional KB/MB/GB abbreviations (matches what
 // `docker images` prints).

@@ -4,74 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"testing"
-
-	"github.com/devcell-sh/devcell/internal/engine/docker"
 )
-
-// After the 2026-05-15 flip (CELL-189), UserImageTag() is unchanged
-// (bare devcell-user:<stack>); the pure variant is reached via
-// UserImageTagPure() with the -pure suffix.
-func TestUserImageTag_BareLocal_PureSuffixOnVariant(t *testing.T) {
-	saved := os.Getenv("DEVCELL_USER_IMAGE")
-	defer os.Setenv("DEVCELL_USER_IMAGE", saved)
-	os.Unsetenv("DEVCELL_USER_IMAGE")
-	savedPure := os.Getenv("DEVCELL_USER_IMAGE_PURE")
-	defer os.Setenv("DEVCELL_USER_IMAGE_PURE", savedPure)
-	os.Unsetenv("DEVCELL_USER_IMAGE_PURE")
-	savedWS := os.Getenv("DEVCELL_WORKSPACE")
-	defer os.Setenv("DEVCELL_WORKSPACE", savedWS)
-	os.Unsetenv("DEVCELL_WORKSPACE")
-
-	savedStack := docker.Stack
-	defer func() { docker.Stack = savedStack }()
-	docker.Stack = "ultimate"
-
-	bare := docker.UserImageTag()
-	pure := docker.UserImageTagPure()
-
-	if bare != "localhost/devcell-user:ultimate" {
-		t.Errorf("UserImageTag = %q, want localhost/devcell-user:ultimate", bare)
-	}
-	if pure != "localhost/devcell-user:ultimate-pure" {
-		t.Errorf("UserImageTagPure = %q, want localhost/devcell-user:ultimate-pure", pure)
-	}
-	if pure != bare+"-pure" {
-		t.Errorf("UserImageTagPure must equal UserImageTag + '-pure': pure=%q bare=%q", pure, bare)
-	}
-}
-
-// PickImageTag — post-flip direction (CELL-183) + CELL-165 vocab:
-//
-//	false (default) → pure tag
-//	true (--impure, alias --debian) → bare tag
-func TestPickImageTag_FlippedDirection(t *testing.T) {
-	saved := os.Getenv("DEVCELL_USER_IMAGE")
-	defer os.Setenv("DEVCELL_USER_IMAGE", saved)
-	os.Unsetenv("DEVCELL_USER_IMAGE")
-	savedPure := os.Getenv("DEVCELL_USER_IMAGE_PURE")
-	defer os.Setenv("DEVCELL_USER_IMAGE_PURE", savedPure)
-	os.Unsetenv("DEVCELL_USER_IMAGE_PURE")
-	savedWS := os.Getenv("DEVCELL_WORKSPACE")
-	defer os.Setenv("DEVCELL_WORKSPACE", savedWS)
-	os.Unsetenv("DEVCELL_WORKSPACE")
-
-	savedStack := docker.Stack
-	defer func() { docker.Stack = savedStack }()
-	docker.Stack = "ultimate"
-
-	pure := docker.PickImageTag(false)
-	bare := docker.PickImageTag(true)
-
-	if pure != "localhost/devcell-user:ultimate-pure" {
-		t.Errorf("PickImageTag(false) = %q, want localhost/devcell-user:ultimate-pure (default)", pure)
-	}
-	if bare != "localhost/devcell-user:ultimate" {
-		t.Errorf("PickImageTag(true) = %q, want localhost/devcell-user:ultimate (impure / --impure path)", bare)
-	}
-	if pure == bare {
-		t.Errorf("pure and bare must differ: pure=%s bare=%s", pure, bare)
-	}
-}
 
 func TestVet(t *testing.T) {
 	cmd := exec.Command("go", "vet", "./...")

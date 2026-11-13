@@ -166,6 +166,9 @@ type BuildOpts struct {
 	// and http-connections (--build-threads); 0 keeps the default. Docker
 	// only; it wins over DEVCELL_BUILD_THREADS and [build] threads.
 	BuildThreads int
+	// NoNixVolume bakes nix into the image filesystem instead of mounting
+	// a Docker named volume (--no-nix-volume). Experimental (build-no-nix-volume).
+	NoNixVolume bool
 }
 
 // InitOpts configures Engine.Init.

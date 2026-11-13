@@ -359,9 +359,9 @@ func startRdpContainer(t *testing.T) testcontainers.Container {
 			"grep -qi 0D3D /proc/net/tcp6 /proc/net/tcp 2>/dev/null && grep -qi ' 0A ' /proc/net/tcp6 /proc/net/tcp 2>/dev/null"}).
 			WithStartupTimeout(90 * time.Second),
 	}
-	if isThinVariant() {
+	if hasNixVolume() {
 		req.Mounts = testcontainers.Mounts(
-			testcontainers.VolumeMount(thinVolumeName(), "/nix"),
+			testcontainers.VolumeMount(nixVolumeName(), "/nix"),
 		)
 	}
 	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{

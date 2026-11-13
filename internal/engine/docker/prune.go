@@ -281,10 +281,6 @@ type PruneOpts struct {
 	// aggressive nix GC). Default mode is the standard prune sequence.
 	Force bool
 
-	// Pure is deprecated: the default now prunes both Docker and nix.
-	// Retained for backwards compatibility; ignored by RunPrune.
-	Pure bool
-
 	// Rootless indicates a rootless Docker daemon on Linux. Only relevant
 	// when GOOS == "linux" && Force. The runtime call site auto-detects
 	// this via `docker info`.
@@ -304,7 +300,7 @@ type PruneOpts struct {
 	LinuxBuilderHost string
 
 	// LiveClosures are the running containers' resolved store paths
-	// (CollectLiveClosures). When set, the pure prune plan stamps GC roots
+	// (CollectLiveClosures). When set, the prune plan stamps GC roots
 	// for them before the safe GC step, so "running implies rooted" holds
 	// by construction instead of being assumed (CELL-334 preflight gate).
 	LiveClosures []LiveClosure
@@ -406,7 +402,7 @@ func BuildNixPruneSteps(opts PruneOpts) []PruneStep {
 		// (CELL-333): run safe project-aware GC inside a container with the
 		// nix volume mounted. The root report is now shown in the preflight
 		// (execCleanBuild) before the confirmation prompt, so it's not
-		// repeated here. On macOS the thin-mode store lives in this Docker
+		// repeated here. On macOS the nix store lives in this Docker
 		// volume, not the linux-builder VM — GC-ing the VM never reclaims it.
 		var steps []PruneStep
 		// Preflight gate (CELL-334): stamp roots for every running
@@ -415,7 +411,7 @@ func BuildNixPruneSteps(opts PruneOpts) []PruneStep {
 		if stamp := StampRootsScript(opts.LiveClosures); stamp != "" {
 			steps = append(steps, PruneStep{Label: "Stamping GC roots for running containers", Argv: []string{
 				"docker", "run", "--rm",
-				"-v", DefaultThinStoreVolume + ":/nix",
+				"-v", DefaultNixStoreVolume + ":/nix",
 				NixCoreImage,
 				"/bin/sh", "-c", stamp,
 			}})
@@ -423,7 +419,7 @@ func BuildNixPruneSteps(opts PruneOpts) []PruneStep {
 		if !opts.SkipReapSweep {
 			steps = append(steps, PruneStep{Label: "Reaping stale roots and orphaned generations", Argv: []string{
 				"docker", "run", "--rm",
-				"-v", DefaultThinStoreVolume + ":/nix",
+				"-v", DefaultNixStoreVolume + ":/nix",
 				NixCoreImage,
 				"/bin/sh", "-c", NixReapSweepScript,
 			}})
@@ -431,7 +427,7 @@ func BuildNixPruneSteps(opts PruneOpts) []PruneStep {
 		steps = append(steps,
 			PruneStep{Label: "Running nix garbage collection", Argv: []string{
 				"docker", "run", "--rm",
-				"-v", DefaultThinStoreVolume + ":/nix",
+				"-v", DefaultNixStoreVolume + ":/nix",
 				NixCoreImage,
 				"/bin/sh", "-c", "nix-store --gc",
 			}},
@@ -642,7 +638,7 @@ func BuildPrunePrompt(opts PruneOpts) string {
 			"           Running containers are not touched.\n" +
 			"   Nix:    remove orphaned profile generations and unreferenced store paths.\n" +
 			"           Running containers' nix closures are protected.\n" +
-			"   Target: local Docker daemon + " + DefaultThinStoreVolume + " volume (/nix)\n" +
+			"   Target: local Docker daemon + " + DefaultNixStoreVolume + " volume (/nix)\n" +
 			sizeBlock +
 			tail
 	}

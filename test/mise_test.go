@@ -1,9 +1,9 @@
 // mise_test.go: mise runtimes inside the container. Baked installs and shims
 // (CELL-85), shared-install layering (CELL-75), the host user's mise env
-// vars, and thin-variant runtime checks.
+// vars, and nix-volume-variant runtime checks.
 //
 // All container tests here are L2 (container exec against an existing
-// image). Run via `task test:integration -- -run 'TestMise|TestThinRuntime'`.
+// image). Run via `task test:integration -- -run 'TestMise|TestNixRuntime'`.
 
 package container_test
 
@@ -178,7 +178,7 @@ func TestMise_SharedInstalls_NoUserCopies(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Host-user mise environment and thin-variant runtime
+// Host-user mise environment and nix-volume-variant runtime
 // ---------------------------------------------------------------------------
 
 // TestMise_DataDir -- the host user's MISE_DATA_DIR must be ~/.local/share/mise, not /opt/mise.
@@ -309,11 +309,11 @@ func TestMise_DanglingSymlinkCleaned(t *testing.T) {
 	}
 }
 
-// TestThinRuntime_NodeIsMiseShim verifies node resolves to a mise shim path,
-// not a nix profile binary. Thin mode bakes shims at /opt/devcell/.local/share/mise/shims/.
-func TestThinRuntime_NodeIsMiseShim(t *testing.T) {
-	if !isThinVariant() {
-		t.Skip("thin variant only")
+// TestNixRuntime_NodeIsMiseShim verifies node resolves to a mise shim path,
+// not a nix profile binary. The build bakes shims at /opt/devcell/.local/share/mise/shims/.
+func TestNixRuntime_NodeIsMiseShim(t *testing.T) {
+	if !hasNixVolume() {
+		t.Skip("nix volume variant only")
 	}
 	c := startContainer(t, map[string]string{
 		"APP_NAME":  "test",
@@ -331,11 +331,11 @@ func TestThinRuntime_NodeIsMiseShim(t *testing.T) {
 	t.Logf("node shim at: %s", shimPath)
 }
 
-// TestThinRuntime_NodeVersion verifies node --version matches the declared
+// TestNixRuntime_NodeVersion verifies node --version matches the declared
 // mise config version (24.13.1 from nixhome/modules/node.nix).
-func TestThinRuntime_NodeVersion(t *testing.T) {
-	if !isThinVariant() {
-		t.Skip("thin variant only")
+func TestNixRuntime_NodeVersion(t *testing.T) {
+	if !hasNixVolume() {
+		t.Skip("nix volume variant only")
 	}
 	c := startContainer(t, map[string]string{
 		"APP_NAME":  "test",
@@ -353,11 +353,11 @@ func TestThinRuntime_NodeVersion(t *testing.T) {
 	t.Logf("node version: %s", version)
 }
 
-// TestThinRuntime_AllDeclaredTools verifies all mise-declared tools are installed
+// TestNixRuntime_AllDeclaredTools verifies all mise-declared tools are installed
 // (no "(missing)" in mise ls output).
-func TestThinRuntime_AllDeclaredTools(t *testing.T) {
-	if !isThinVariant() {
-		t.Skip("thin variant only")
+func TestNixRuntime_AllDeclaredTools(t *testing.T) {
+	if !hasNixVolume() {
+		t.Skip("nix volume variant only")
 	}
 	c := startContainer(t, map[string]string{
 		"APP_NAME":  "test",

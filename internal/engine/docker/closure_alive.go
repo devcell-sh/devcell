@@ -4,13 +4,13 @@ import (
 	"strings"
 )
 
-// CELL-418: detect whether the thin image's baked-in nix closure still
+// CELL-418: detect whether the image's baked-in nix closure still
 // exists on the shared nix-store volume. A closure dies when a later
 // build for a different stack triggers GC that reaps the store paths
 // the image's profile symlink points at.
 
 // ProfilePath is the canonical location of the home-manager profile
-// baked into every thin image by thin_build.go.
+// baked into every image by nix_build.go.
 const ProfilePath = "/opt/devcell/.local/state/nix/profiles/profile"
 
 // ClosureAliveArgv returns the docker argv for the closure-alive probe.

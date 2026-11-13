@@ -379,15 +379,15 @@ func TestMcp_PatchrightUndetected(t *testing.T) {
 //
 // This Go test is a smoke check only — verifies the MCP stealth pipeline
 // is wired correctly in the container. Full detection assertions are in JS.
-// Runs across all 3 variants (DEVCELL_TEST_VARIANT=thin/pure/impure).
+// Runs across all variants.
 
-// TestThinEntrypoint_MiseFound verifies the s6 mise service can find
-// the mise binary regardless of which profile path it's at. In thin mode, mise is at
+// TestNixEntrypoint_MiseFound verifies the s6 mise service can find
+// the mise binary regardless of which profile path it's at. With nix volume, mise is at
 // /nix/var/nix/profiles/per-user/root/profile/bin/mise, not the hardcoded
 // /opt/devcell/.local/state/nix/profiles/profile/bin/mise.
-func TestThinEntrypoint_MiseFound(t *testing.T) {
-	if !isThinVariant() {
-		t.Skip("thin variant only")
+func TestNixEntrypoint_MiseFound(t *testing.T) {
+	if !hasNixVolume() {
+		t.Skip("nix volume variant only")
 	}
 	c := startContainer(t, map[string]string{
 		"APP_NAME":  "test",
@@ -396,7 +396,7 @@ func TestThinEntrypoint_MiseFound(t *testing.T) {
 
 	out, code := containerExec(t, c, []string{"sh", "-c", "command -v mise"})
 	if code != 0 {
-		t.Fatalf("mise not on PATH in thin container: %s", out)
+		t.Fatalf("mise not on PATH in container: %s", out)
 	}
 	t.Logf("mise found at: %s", strings.TrimSpace(out))
 
@@ -409,11 +409,11 @@ func TestThinEntrypoint_MiseFound(t *testing.T) {
 	}
 }
 
-// TestThinEntrypoint_LocaleWorks verifies LC_ALL=en_US.UTF-8 doesn't warn about
-// missing locale in thin mode.
-func TestThinEntrypoint_LocaleWorks(t *testing.T) {
-	if !isThinVariant() {
-		t.Skip("thin variant only")
+// TestNixEntrypoint_LocaleWorks verifies LC_ALL=en_US.UTF-8 doesn't warn about
+// missing locale with the nix volume.
+func TestNixEntrypoint_LocaleWorks(t *testing.T) {
+	if !hasNixVolume() {
+		t.Skip("nix volume variant only")
 	}
 	c := startContainer(t, map[string]string{
 		"APP_NAME":  "test",
@@ -425,17 +425,17 @@ func TestThinEntrypoint_LocaleWorks(t *testing.T) {
 		t.Fatalf("locale command failed: %s", out)
 	}
 	if strings.Contains(out, "Cannot set") || strings.Contains(out, "cannot change locale") {
-		t.Errorf("locale not properly configured in thin mode:\n%s", out)
+		t.Errorf("locale not properly configured:\n%s", out)
 	}
 }
 
-// TestThinEntrypoint_FontconfigResolvesFonts — CELL-76: fonts are installed in the
+// TestNixEntrypoint_FontconfigResolvesFonts — CELL-76: fonts are installed in the
 // profile but fontconfig has no main config (FONTCONFIG_FILE unset, FONTCONFIG_PATH
 // dir has only conf.d/), so fc-list fails with "Cannot load default config file"
 // and no app can resolve any font (PT Sans et al).
-func TestThinEntrypoint_FontconfigResolvesFonts(t *testing.T) {
-	if !isThinVariant() {
-		t.Skip("thin variant only")
+func TestNixEntrypoint_FontconfigResolvesFonts(t *testing.T) {
+	if !hasNixVolume() {
+		t.Skip("nix volume variant only")
 	}
 	c := startContainer(t, map[string]string{
 		"APP_NAME":  "test",
@@ -447,7 +447,7 @@ func TestThinEntrypoint_FontconfigResolvesFonts(t *testing.T) {
 		t.Fatalf("fc-list failed (exit %d):\n%s", code, out)
 	}
 	if strings.Contains(out, "Fontconfig error") {
-		t.Errorf("fontconfig cannot load its config in thin mode:\n%s", out)
+		t.Errorf("fontconfig cannot load its config:\n%s", out)
 	}
 	if !strings.Contains(out, "PT Sans") {
 		t.Errorf("fc-list does not resolve PT Sans — profile fonts not reachable via fontconfig:\n%.2000s", out)

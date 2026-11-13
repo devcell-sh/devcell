@@ -88,7 +88,7 @@ func TestTrackCommandRun_Properties(t *testing.T) {
 		"command": "claude",
 		"engine":  "docker",
 		"stack":   "go",
-		"thin":    true,
+		"nix_volume": true,
 	}
 	for k, want := range checks {
 		got := c.Properties[k]
@@ -157,7 +157,7 @@ func TestTrack_FeatureEvents(t *testing.T) {
 	Init(dir)
 	defer Close()
 
-	Track("build", map[string]any{"engine": "qemu", "subcommand": "build", "stack": "go", "thin": true})
+	Track("build", map[string]any{"engine": "qemu", "subcommand": "build", "stack": "go", "nix_volume": true})
 	Track("init", map[string]any{"engine": "docker", "stack": "base"})
 	Track("serve", map[string]any{"port": 8484, "https": true, "pty": false})
 	Track("vnc", map[string]any{"viewer": "royaltsx", "global": true})

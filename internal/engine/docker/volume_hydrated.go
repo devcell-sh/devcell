@@ -6,10 +6,10 @@ import (
 	"strings"
 )
 
-// ThinEntrypointSentinel is the path the thin image's ENTRYPOINT references
-// (built by thin_build.go:259). Used as the hydration probe in cmd/root.go's
+// NixEntrypointSentinel is the path the image's ENTRYPOINT references
+// (built by nix_build.go). Used as the hydration probe in cmd/root.go's
 // auto-build gate (CELL-38).
-const ThinEntrypointSentinel = "/nix/var/nix/profiles/devcell-tools/bin/tini"
+const NixEntrypointSentinel = "/nix/var/nix/profiles/devcell-tools/bin/tini"
 
 // VolumeHydrated reports whether a named Docker volume exists AND contains the
 // given sentinel path. Use to gate auto-build in `cell shell`/`claude`/... so

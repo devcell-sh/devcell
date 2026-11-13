@@ -23,13 +23,14 @@ import (
 	"github.com/devcell-sh/devcell/internal/version"
 )
 
-// buildParams is a thin-image build resolved from engine.BuildOpts.
+// buildParams is an image build resolved from engine.BuildOpts.
 type buildParams struct {
 	stack         string // --stack, else DEVCELL_STACK, else Cell.Stack
 	explicitStack bool   // the stack was overridden or set in [cell] stack; the progress label names it
-	image         string // tag to build: --image, else DEVCELL_BUILD_IMAGE, else "" for UserImageTagThin
+	image         string // tag to build: --image, else DEVCELL_BUILD_IMAGE, else "" for UserImageTag
 	updateFlake   bool   // --update: run nix flake update before building
 	threads       int    // --build-threads, exported as DEVCELL_BUILD_THREADS; 0 leaves it alone
+	noNixVolume   bool   // --no-nix-volume: bake nix into the image instead of a named volume
 }
 
 // newBuildParams resolves opts for build. getenv is os.Getenv outside tests.
@@ -48,6 +49,7 @@ func newBuildParams(opts engine.BuildOpts, getenv func(string) string) (buildPar
 		image:         image,
 		updateFlake:   opts.Update,
 		threads:       opts.BuildThreads,
+		noNixVolume:   opts.NoNixVolume,
 	}, nil
 }
 
@@ -79,11 +81,11 @@ func resolveStackOverride(flagValue string, getenv func(string) string) (string,
 	return "", nil
 }
 
-// build builds a thin image (CELL-156):
+// build builds a nix-volume image (CELL-156):
 //  1. Ensure core image exists (pull or use cached)
 //  2. docker run core with nix volume + docker socket:
 //     - home-manager switch (reuses volume-cached /nix/store)
-//     - docker build (inside container, via socket) → thin image
+//     - docker build (inside container, via socket) → user image
 func build(ctx context.Context, c engine.Cell, p buildParams) error {
 	// Daemon preflight — surface the actionable error when docker is down
 	// before any pull/build attempt (CELL-44). Run probes before its
@@ -113,17 +115,17 @@ func build(ctx context.Context, c engine.Cell, p buildParams) error {
 		ux.Debugf("nix: %s", o)
 	}
 
-	// Write the overlay flake at .devcell/flake.nix — same generator as pure
-	// path. Imports path:./nixhome (the just-synced upstream) + enables the
-	// merged TOML modules. home-manager will switch against this overlay's
+	// Write the overlay flake at .devcell/flake.nix. Imports
+	// path:./nixhome (the just-synced upstream) + enables the merged TOML
+	// modules. home-manager will switch against this overlay's
 	// `devcell-local<arch>` output, not the upstream stack outputs directly,
-	// so [cell].modules takes effect in thin builds (CELL-38 + CELL-61).
+	// so [cell].modules takes effect (CELL-38 + CELL-61).
 	overlayFlake := scaffold.GenerateFlakeNixWithMcp(stack, cellCfg.Cell.Modules, version.Version, true, cellCfg.Mcp.Enabled, cellCfg.Packages.Nix)
 	overlayPath := filepath.Join(c.BuildDir, "flake.nix")
 	if err := os.WriteFile(overlayPath, []byte(overlayFlake), 0o644); err != nil {
 		return fmt.Errorf("write overlay flake: %w", err)
 	}
-	// Symlink entrypoint.sh up from synced nixhome so ThinBuildArgv's
+	// Symlink entrypoint.sh up from synced nixhome so NixBuildArgv's
 	// `cp /opt/nixhome/entrypoint.sh` keeps working when mounting the overlay
 	// dir at /opt/nixhome instead of the raw nixhome.
 	entrypointLink := filepath.Join(c.BuildDir, "entrypoint.sh")
@@ -181,7 +183,7 @@ func build(ctx context.Context, c engine.Cell, p buildParams) error {
 		}
 	}
 
-	// What we hand ThinBuildArgv is the OVERLAY dir (.devcell), mounted at
+	// What we hand NixBuildArgv is the OVERLAY dir (.devcell), mounted at
 	// /opt/nixhome inside the builder. home-manager target becomes
 	// `devcell-local` (matches GenerateFlakeNix's homeConfigurations output).
 	nixhomeRef := DockerHostPath(c.BuildDir)
@@ -191,9 +193,9 @@ func build(ctx context.Context, c engine.Cell, p buildParams) error {
 	defer stop()
 
 	coreImage := cellCfg.Nix.ResolvedImage()
-	tag := ResolveBuildTag(p.image, UserImageTagThin())
-	volumeName := ThinStoreVolume()
-	containerName := ThinBuilderContainerName(c.CellName)
+	tag := ResolveBuildTag(p.image, UserImageTag())
+	volumeName := NixStoreVolume()
+	containerName := NixBuilderContainerName(c.CellName)
 
 	// ── Ensure core image exists for target platform ───────────────────────
 	targetPlatform := DockerPlatform(DetectArch())
@@ -207,34 +209,35 @@ func build(ctx context.Context, c engine.Cell, p buildParams) error {
 		sp.Success(pullLabel)
 	}
 
-	// ── Nix cache hydration ───────────────────────────────────────────────
-	// On first build (volume empty), pull the pre-built /nix store from GHCR
-	// so home-manager switch is incremental instead of from-scratch (~5 min → ~1 min).
-	// Non-fatal: if the cache is unavailable, the build proceeds normally.
-	// Runs even with --update: nix is content-addressed, so the existing
-	// store paths are valid cache regardless of flake input changes.
-	{
-		hydrated := VolumeHydrated(volumeName, ThinEntrypointSentinel,
+	// ── Nix cache hydration + volume shell bootstrap ─────────────────────
+	// Skipped for --no-nix-volume: baked builds use the container's own
+	// filesystem for /nix, so there is no named volume to hydrate.
+	if !p.noNixVolume {
+		// On first build (volume empty), pull the pre-built /nix store from GHCR
+		// so home-manager switch is incremental instead of from-scratch (~5 min → ~1 min).
+		// Non-fatal: if the cache is unavailable, the build proceeds normally.
+		// Runs even with --update: nix is content-addressed, so the existing
+		// store paths are valid cache regardless of flake input changes.
+		hydrated := VolumeHydrated(volumeName, NixEntrypointSentinel,
 			func(v string) bool { return VolumeExists(ctx, v) },
 			func(v, p string) bool { return VolumeContains(ctx, v, p) },
 		)
 		if ShouldHydrateFromCache(hydrated, os.Getenv) {
 			HydrateNixCache(ctx, volumeName, Registry, DetectArch())
 		}
+
+		// The nixos/nix image's /bin/sh symlinks into /nix/store. When the
+		// shared nix-store volume mounts over /nix, a stale volume (from an
+		// older image version) makes the symlink dangle, so the nix builder
+		// cannot even start. Copy the current image's default-profile closure
+		// onto the volume so /bin/sh and all core tools resolve.
+		if err := EnsureVolumeShell(ctx, volumeName, coreImage); err != nil {
+			ux.Debugf("volume shell bootstrap: %v", err)
+		}
 	}
 
-	// ── Volume shell bootstrap ─────────────────────────────────────────────
-	// The nixos/nix image's /bin/sh symlinks into /nix/store. When the
-	// shared nix-store volume mounts over /nix, a stale volume (from an
-	// older image version) makes the symlink dangle, so the thin builder
-	// cannot even start. Copy the current image's default-profile closure
-	// onto the volume so /bin/sh and all core tools resolve.
-	if err := EnsureVolumeShell(ctx, volumeName, coreImage); err != nil {
-		ux.Debugf("volume shell bootstrap: %v", err)
-	}
-
-	// ── Build thin image ────────────────────────────────────────────────────
-	buildLabel := BuildLabel("Building thin image", stack, p.explicitStack)
+	// ── Build image ─────────────────────────────────────────────────────────
+	buildLabel := BuildLabel("Building image", stack, p.explicitStack)
 	sp := ux.NewProgressSpinner(buildLabel)
 
 	// Reclaim this app's builder slot. A builder left behind by a crashed or
@@ -275,7 +278,12 @@ func build(ctx context.Context, c engine.Cell, p buildParams) error {
 		applyBuildEnv("DEVCELL_BUILD_THREADS", strconv.Itoa(cellCfg.Build.Threads))
 	}
 
-	argv := ThinBuildArgvWithPackages(coreImage, containerName, volumeName, nixhomeRef, tag, homeManagerTarget, DetectArch(), stack, modulesCSV, projectName, packageCounts)
+	var argv []string
+	if p.noNixVolume {
+		argv = NixBuildArgvBaked(coreImage, containerName, nixhomeRef, tag, homeManagerTarget, DetectArch(), stack, modulesCSV, projectName, packageCounts)
+	} else {
+		argv = NixBuildArgvWithPackages(coreImage, containerName, volumeName, nixhomeRef, tag, homeManagerTarget, DetectArch(), stack, modulesCSV, projectName, packageCounts)
+	}
 
 	// Log the resolved build resource config under --debug.
 	if lim := ResolveBuildLimits(); lim.Memory != "" || lim.CPUs != "" {
@@ -299,26 +307,26 @@ func build(ctx context.Context, c engine.Cell, p buildParams) error {
 	// Stream the overlay through Docker stdin. Unlike a bind mount, this is
 	// resolved by the local cell process and works when the selected daemon is
 	// inside Docker Desktop, Colima, or on a remote host.
-	archive, err := os.CreateTemp("", "devcell-thin-nixhome-*.tar")
+	archive, err := os.CreateTemp("", "devcell-nix-build-*.tar")
 	if err != nil {
 		sp.Fail(buildLabel + " failed")
-		return fmt.Errorf("create thin nixhome archive: %w", err)
+		return fmt.Errorf("create nix build archive: %w", err)
 	}
 	archivePath := archive.Name()
 	defer func() {
 		_ = archive.Close()
 		_ = os.Remove(archivePath)
 	}()
-	if err := WriteThinBuildContext(archive, c.BuildDir); err != nil {
+	if err := WriteNixBuildContext(archive, c.BuildDir); err != nil {
 		sp.Fail(buildLabel + " failed")
-		return fmt.Errorf("archive thin nixhome: %w", err)
+		return fmt.Errorf("archive nix build context: %w", err)
 	}
 	size, _ := archive.Seek(0, io.SeekCurrent)
 	if _, err := archive.Seek(0, io.SeekStart); err != nil {
 		sp.Fail(buildLabel + " failed")
-		return fmt.Errorf("rewind thin nixhome archive: %w", err)
+		return fmt.Errorf("rewind nix build archive: %w", err)
 	}
-	ux.Debugf("thin nixhome transport: tar-stdin source=%q bytes=%d", c.BuildDir, size)
+	ux.Debugf("nix build transport: tar-stdin source=%q bytes=%d", c.BuildDir, size)
 
 	var buf bytes.Buffer
 	var out io.Writer = &buf
@@ -337,13 +345,13 @@ func build(ctx context.Context, c engine.Cell, p buildParams) error {
 			rmCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			_ = exec.CommandContext(rmCtx, "docker", "rm", "-f", containerName).Run()
 			cancel()
-			return fmt.Errorf("thin build: interrupted")
+			return fmt.Errorf("nix build: interrupted")
 		}
 		sp.Fail(buildLabel + " failed")
 		if !ux.Verbose && buf.Len() > 0 {
 			fmt.Fprint(os.Stderr, buf.String())
 		}
-		return fmt.Errorf("thin build: %w", err)
+		return fmt.Errorf("nix build: %w", err)
 	}
 
 	successLabel := buildLabel

@@ -95,6 +95,8 @@ func TestNewBuildParams(t *testing.T) {
 			buildParams{stack: "base", updateFlake: true}},
 		{"--build-threads", engine.BuildOpts{Cell: cell, BuildThreads: 16}, env(),
 			buildParams{stack: "base", threads: 16}},
+		{"--no-nix-volume sets noNixVolume", engine.BuildOpts{Cell: cell, NoNixVolume: true}, env(),
+			buildParams{stack: "base", noNixVolume: true}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -153,7 +155,7 @@ func TestNewRunSpec_MapsOpts(t *testing.T) {
 		NixDaemon:    true,
 		NoPorts:      true,
 		ExtraEnv:     map[string]string{"A": "1"},
-		ThinImage:    true,
+		NixVolume:    true,
 		Detach:       true,
 		NoSecrets:    true,
 		Policy:       cfg.OpenPolicy(),

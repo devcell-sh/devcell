@@ -137,10 +137,10 @@ func checkDiskSpace() error {
 
 // TestMain cleans up locally-built test images after all tests complete.
 //
-// Long-test bucketing: when DEVCELL_TEST_BUILD_THIN=1, builds the ultimate-thin
-// image ONCE before any test runs and exports its tag via DEVCELL_TEST_THIN_IMAGE
-// so every thin-variant test reuses the same fresh image. Without that env var,
-// tests fall back to a preexisting `devcell-user:ultimate-thin` or skip cleanly.
+// Long-test bucketing: when DEVCELL_TEST_BUILD=1, builds the ultimate image
+// ONCE before any test runs and exports its tag via DEVCELL_TEST_IMAGE so every
+// test reuses the same fresh image. Without that env var, tests fall back to a
+// preexisting `devcell-user:ultimate` or skip cleanly.
 // This keeps the convention: short tests never trigger a build; long tests opt
 // in via env var or `testing.Short()` gates.
 func TestMain(m *testing.M) {
@@ -168,13 +168,13 @@ func shortSHA() string {
 }
 
 
-func buildThinImage(stack string) (string, error) {
+func buildNixImage(stack string) (string, error) {
 	cellBin, err := ensureCellBinary()
 	if err != nil {
 		return "", err
 	}
-	tag := fmt.Sprintf("devcell-user:%s-thin-%s", stack, shortSHA())
-	log.Printf("Building thin image: stack=%s, tag=%s", stack, tag)
+	tag := fmt.Sprintf("devcell-user:%s-%s", stack, shortSHA())
+	log.Printf("Building nix image: stack=%s, tag=%s", stack, tag)
 	cmd := osexec.Command(cellBin, "build", "--stack", stack, "--image", tag, "--debug")
 	cmd.Dir = ".."
 	cmd.Stdout = os.Stdout
@@ -221,90 +221,62 @@ var (
 	cellBinErr  error
 )
 
-// Local tag conventions (CELL-108):
-//   - `task image:pure:build:ultimate`   → devcell-user:ultimate-pure
 const (
-	localPureUltimateTag  = "devcell-user:ultimate-pure"
-	localThinUltimateTag  = "devcell-user:ultimate-thin"
-	defaultThinVolumeName = "devcell-nix-store"
+	localUltimateTag      = "devcell-user:ultimate"
+	defaultNixVolumeName = "devcell-nix-store"
 )
 
-// thinVolumeName returns the Docker volume to mount at /nix for thin-variant
-// tests. Reads BOTH:
+// nixVolumeName returns the Docker volume to mount at /nix for tests.
+// Reads BOTH:
 //   - DEVCELL_NIX_VOLUME (the canonical production env var also honoured by
-//     `docker.ThinStoreVolume` — set by tests that drive `cell build` and
-//     need build + run to target the same volume), preferred.
+//     `docker.NixStoreVolume`), preferred.
 //   - DEVCELL_TEST_VOLUME_NAME (legacy test-only override), fallback.
 //
 // Either lets a test isolate to a unique volume with t.Cleanup-based removal.
-func thinVolumeName() string {
+func nixVolumeName() string {
 	if v := os.Getenv("DEVCELL_NIX_VOLUME"); v != "" {
 		return v
 	}
 	if v := os.Getenv("DEVCELL_TEST_VOLUME_NAME"); v != "" {
 		return v
 	}
-	return defaultThinVolumeName
+	return defaultNixVolumeName
 }
 
 // imageTagForVariant resolves the test image tag for a given variant
-// without touching docker — pure function so the priority order is
-// table-testable (CELL-108).
+// without touching docker.
 //
 // Returns (tag, skipReason). Caller semantics:
 //   - tag != "" → use it directly.
-//   - tag == "" && skipReason == "" → caller falls back to its variant-specific
-//     default (e.g. scratch bake for impure).
+//   - tag == "" && skipReason == "" → caller falls back to its default.
 //   - tag == "" && skipReason != "" → caller should t.Skip(skipReason) or panic.
-func imageTagForVariant(variant, pureEnv, impureEnv string, exists func(string) bool) (tag, skipReason string) {
-	switch variant {
-	case "thin":
-		if env := os.Getenv("DEVCELL_TEST_THIN_IMAGE"); env != "" {
-			return env, ""
-		}
-		if exists(localThinUltimateTag) {
-			return localThinUltimateTag, ""
-		}
-		return "", "thin variant requested but local `" + localThinUltimateTag + "` is not available; run `cell build` to enable"
-	case "pure":
-		if pureEnv != "" {
-			return pureEnv, ""
-		}
-		if exists(localPureUltimateTag) {
-			return localPureUltimateTag, ""
-		}
-		return "", "pure variant requested but neither DEVCELL_TEST_PURE_IMAGE nor local `" + localPureUltimateTag + "` is available; run `task image:pure:build:ultimate` to enable"
-	case "impure", "":
-		if impureEnv != "" {
-			return impureEnv, ""
-		}
-		return "", ""
-	default:
+func imageTagForVariant(variant string, exists func(string) bool) (tag, skipReason string) {
+	if variant != "" {
 		return "", "unknown DEVCELL_TEST_VARIANT: " + variant
 	}
+	if env := os.Getenv("DEVCELL_TEST_IMAGE"); env != "" {
+		return env, ""
+	}
+	if exists(localUltimateTag) {
+		return localUltimateTag, ""
+	}
+	return "", "local `" + localUltimateTag + "` is not available; run `cell build` to enable"
 }
 
 // image returns the test image tag for the current variant (set via
 // DEVCELL_TEST_VARIANT). Priority:
-//  1. Variant-specific env override (DEVCELL_TEST_PURE_IMAGE for pure,
-//     DEVCELL_TEST_IMAGE for default)
-//  2. Locally-loaded variant tag (devcell-user:ultimate-pure, etc.)
+//  1. DEVCELL_TEST_IMAGE env override
+//  2. Locally-loaded variant tag (devcell-user:ultimate)
 //  3. Panic with a setup hint
 func image() string {
-	variant := os.Getenv("DEVCELL_TEST_VARIANT")
-	tag, skip := imageTagForVariant(
-		variant,
-		os.Getenv("DEVCELL_TEST_PURE_IMAGE"),
-		os.Getenv("DEVCELL_TEST_IMAGE"),
-		imageExists,
-	)
+	tag, skip := imageTagForVariant(os.Getenv("DEVCELL_TEST_VARIANT"), imageExists)
 	if tag != "" {
 		return tag
 	}
 	if skip != "" {
 		panic("image: " + skip)
 	}
-	panic("image: no prebuilt test image available; set DEVCELL_TEST_IMAGE or DEVCELL_TEST_PURE_IMAGE, or run `devcell build`")
+	panic("image: no prebuilt test image available; set DEVCELL_TEST_IMAGE or run `devcell build`")
 }
 
 // requirePrebuiltImage skips short tests when image() would have to build one.
@@ -313,12 +285,7 @@ func requirePrebuiltImage(t *testing.T) {
 	if !testing.Short() {
 		return
 	}
-	tag, _ := imageTagForVariant(
-		os.Getenv("DEVCELL_TEST_VARIANT"),
-		os.Getenv("DEVCELL_TEST_PURE_IMAGE"),
-		os.Getenv("DEVCELL_TEST_IMAGE"),
-		imageExists,
-	)
+	tag, _ := imageTagForVariant(os.Getenv("DEVCELL_TEST_VARIANT"), imageExists)
 	if tag == "" {
 		t.Skip("short: no prebuilt test image; set DEVCELL_TEST_IMAGE or run `devcell build`")
 	}
@@ -457,9 +424,10 @@ func testdataImage() string {
 	return testdataTag
 }
 
-// isThinVariant returns true when running integration tests against the thin image.
-func isThinVariant() bool {
-	return os.Getenv("DEVCELL_TEST_VARIANT") == "thin"
+// hasNixVolume returns true when integration tests run with a nix store volume.
+// Nix-volume is the only mode; returns true unless an explicit non-default variant is set.
+func hasNixVolume() bool {
+	return os.Getenv("DEVCELL_TEST_VARIANT") == ""
 }
 
 // ensureDockerHost bridges testcontainers-go and non-default Docker runtimes
@@ -510,10 +478,9 @@ func startContainer(t *testing.T, env map[string]string) testcontainers.Containe
 			WithStartupTimeout(30 * 1e9),
 	}
 
-	// Thin variant: mount the nix store volume
-	if isThinVariant() {
+	if hasNixVolume() {
 		req.Mounts = testcontainers.Mounts(
-			testcontainers.VolumeMount(thinVolumeName(), "/nix"),
+			testcontainers.VolumeMount(nixVolumeName(), "/nix"),
 		)
 	}
 

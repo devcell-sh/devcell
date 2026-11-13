@@ -1,7 +1,7 @@
 // Package docker is the docker engine: it builds `docker run`, `docker exec`
-// and thin-image build argv, manages images, the shared nix-store volume and
+// and nix-build argv, manages images, the shared nix-store volume and
 // devcell containers, watches in-container boot progress, and implements
-// `cell build df`, `cell build prune` and `cell cleanup`.
+// `cell build df`, `cell clean` and `cell build prune`.
 package docker
 
 import (
@@ -60,16 +60,10 @@ func FlakeNixImage() string {
 	return cfg.NixSection{}.ResolvedImage()
 }
 
-// UserImageTag returns the user's local image tag — the bare-name local
-// devcell image. Unchanged across the 2026-05-15 flip: this name is the
-// user's "current image" concept and existing local images keep working.
+// UserImageTag returns the user's local image tag.
 //
 // Default (stack-based): devcell-user:<stack> or devcell-user:<stack>-<mod1>-<mod2>-<sha8>
 // Legacy (per_cell_image=true): devcell-user:<cell>
-//
-// Used by:
-//   - `cell <agent> --impure` (PickImageTag(true) → bare local tag)
-//   - `cell build --impure` (docker build → tags this name)
 //
 // Override with DEVCELL_USER_IMAGE env var.
 func UserImageTag() string {
@@ -101,18 +95,6 @@ func localImage(name string) string {
 	return "localhost/" + name
 }
 
-// UserImageTagPure returns the local tag for nix2container-built (pure)
-// images — the DEFAULT path after the 2026-05-15 flip (CELL-189). Same
-// repo as UserImageTag with a "-pure" suffix.
-//
-// Example: UserImageTag()="devcell-user:ultimate" → UserImageTagPure()="devcell-user:ultimate-pure".
-func UserImageTagPure() string {
-	if tag := os.Getenv("DEVCELL_USER_IMAGE_PURE"); tag != "" {
-		return tag
-	}
-	return UserImageTag() + "-pure"
-}
-
 // ResolveBuildTag returns the tag a `cell build` invocation should use:
 // custom (typically from --image) when non-empty, falling back to the
 // auto-derived stack tag. Trims whitespace on custom to forgive copy-paste.
@@ -121,52 +103,6 @@ func ResolveBuildTag(custom, derived string) string {
 		return t
 	}
 	return derived
-}
-
-// UserImageTagThin returns the local tag for thin images — nix store lives
-// on a Docker named volume, not baked into the image.
-//
-// Resolution order:
-//  1. DEVCELL_USER_IMAGE_THIN — legacy explicit override
-//  2. DEVCELL_USER_IMAGE — modern unified override; used as-is (no suffix).
-//     CELL-286 prep: every devcell image we publish is thin, so the
-//     `-thin` suffix on the env-driven path is redundant. CI sets
-//     `DEVCELL_USER_IMAGE=ghcr.io/devcell-sh/devcell:v<ver>-<arch>` and
-//     expects this exact tag at runtime (no suffix appended).
-//  3. UserImageTag() + "-thin" — local-dev fallback, preserves the suffix
-//     convention so `devcell-user:<stack>-thin` doesn't collide with
-//     `-pure`/`-impure` legacy local tags.
-//
-// Example (no env): UserImageTag()="devcell-user:ultimate" → "devcell-user:ultimate-thin".
-func UserImageTagThin() string {
-	if tag := os.Getenv("DEVCELL_USER_IMAGE_THIN"); tag != "" {
-		return tag
-	}
-	if tag := os.Getenv("DEVCELL_USER_IMAGE"); tag != "" {
-		return tag
-	}
-	return UserImageTag() + "-thin"
-}
-
-// PickImageTagThin returns the thin image tag for runtime callers.
-func PickImageTagThin() string {
-	return UserImageTagThin()
-}
-
-// PickImageTag is the single seam every runtime caller (`cell claude`,
-// `cell shell`, `cell codex`, `cell gemini`, …) uses to decide which local
-// image variant to exec into.
-//
-// After the 2026-05-15 flip (CELL-183) + CELL-165 vocab rename, pure is the
-// default and `impure` (was `debian`) is the opt-in legacy path:
-//
-//	impure=false (default):    UserImageTagPure() (nix2container, devcell-user:<stack>-pure)
-//	impure=true  (--impure):   UserImageTag()    (bare Dockerfile-built, devcell-user:<stack>)
-func PickImageTag(impure bool) string {
-	if impure {
-		return UserImageTag()
-	}
-	return UserImageTagPure()
 }
 
 // FS abstracts filesystem stat for testability.
@@ -201,7 +137,7 @@ type RunSpec struct {
 	InheritEnv   []string            // env var names to inherit from host (passed as -e KEY with no value)
 	Getenv       func(string) string // env lookup; defaults to os.Getenv when nil
 	GitConfig    func(string) string // host `git config` lookup (cell.HostGitConfig); nil skips that tier
-	ThinImage    bool                // when true, mount devcell-nix-store volume for /nix
+	NixVolume    bool                // mount the devcell-nix-store volume for /nix
 	BootDir      string              // host-side boot dir for the Go-generated entrypoint script; empty disables the bind-mount
 	TTY          bool                // allocate a pseudo-TTY (-it); set from isatty check on stdin
 	Detach       bool                // run container in detached mode (-d); set by `cell start`
@@ -565,9 +501,9 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 	v(c.ConfigDir + ":/etc/devcell/config")
 	v(c.ConfigDir + ":/home/" + c.HostUser + "/.config/devcell")
 
-	// Thin image: nix store lives on a named Docker volume, not baked into the image
-	if spec.ThinImage {
-		v(ThinStoreVolume() + ":/nix")
+	// Nix volume: nix store lives on a named Docker volume, not baked into the image
+	if spec.NixVolume {
+		v(NixStoreVolume() + ":/nix")
 	}
 
 	// Build-tool cache mounts and env vars (storage-unified experiment)
@@ -900,12 +836,7 @@ func ParseImageMetadata(data []byte) ImageMetadata {
 // Falls back to a runtime `cat /etc/devcell/metadata.json` for older images
 // that predate the manifest-based stamping.
 func ImageMetadataFromContainer(ctx context.Context) ImageMetadata {
-	tag := PickImageTag(false) // false = pure (default after CELL-183)
-	if !ImageExists(ctx, tag) {
-		// Pure image not built/pulled yet; fall back to the debian tag if
-		// that's all we have locally.
-		tag = UserImageTag()
-	}
+	tag := UserImageTag()
 
 	// Fast path — single `docker inspect`, no container spawn. JSON output
 	// covers everything we need from labels + the OCI manifest's Created.
@@ -956,7 +887,7 @@ func imageMetadataFromInspect(created string, labels map[string]string, env []st
 	}
 	// BuildDate fallback: if no label, use the OCI Created field — both
 	// surface the same thing in our build but the Created field is set
-	// at all pure builds whereas the label is a 2026-05-16+ addition.
+	// at all builds whereas the label is a 2026-05-16+ addition.
 	if m.BuildDate == "" {
 		m.BuildDate = created
 	}
@@ -1015,12 +946,7 @@ func ImageVersions(ctx context.Context) (base, user string) {
 	if u := formatImageVersionUser(m); u != "" {
 		return m.BaseImage, u
 	}
-	// Fallback: legacy files (pre-metadata.json images). Uses same tag
-	// preference as ImageMetadataFromContainer above.
-	tag := PickImageTag(false)
-	if !ImageExists(ctx, tag) {
-		tag = UserImageTag()
-	}
+	tag := UserImageTag()
 	out, err := exec.CommandContext(ctx, "docker", "run", "--rm", "--entrypoint", "/bin/sh",
 		tag, "-c",
 		"cat /etc/devcell/base-image-version 2>/dev/null; echo '---'; cat /etc/devcell/user-image-version 2>/dev/null",

@@ -349,7 +349,7 @@ const NixhomeSourceFile = ".devcell-source"
 //   - a local filesystem path (copied as-is via CopyDir)
 //   - a github flake ref like `github:owner/repo/ref?dir=subdir` — cloned via
 //     git (host-side; no nix dependency), then the subdir is treated as the
-//     source. This lets the thin builder mount a populated nixhome even when
+//     source. This lets the nix builder mount a populated nixhome even when
 //     the user has no local checkout (CELL-38 clean-machine path).
 func SyncNixhome(srcPath, configDir string) error {
 	if strings.HasPrefix(srcPath, "github:") {
@@ -419,7 +419,7 @@ func syncNixhomeFromLocal(srcPath, configDir, origin string) error {
 //
 // Host-side fetch — no nix dependency. Mirrors what nix would have done with
 // `nix flake metadata` materialization but works on machines without nix
-// (the thin-mode promise).
+// (no nix on the host).
 func materializeGithubFlakeRef(ref string) (string, func(), error) {
 	parsed, err := ParseGithubFlakeRef(ref)
 	if err != nil {

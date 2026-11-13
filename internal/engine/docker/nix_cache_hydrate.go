@@ -68,7 +68,7 @@ func HydrateNixCache(ctx context.Context, volumeName, registry, arch string) err
 		sp.Warn(label + " — pull failed, building from scratch")
 		ux.Debugf("nix cache pull: %v", err)
 		// Remove the partially-populated volume so Docker auto-populates
-		// it from the core image on first mount, giving the thin builder
+		// it from the core image on first mount, giving the nix builder
 		// a clean /nix with valid /etc symlinks.
 		removeVolume(ctx, volumeName)
 		return nil

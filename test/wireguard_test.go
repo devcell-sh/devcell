@@ -111,11 +111,11 @@ fi
 exec ` + innerCmd
 }
 
-// wgBaseArgs returns docker run args with thin volume if needed.
+// wgBaseArgs returns docker run args with nix volume if needed.
 func wgBaseArgs(img string, env map[string]string, extraArgs ...string) []string {
 	args := []string{"run", "--rm", "--user", "0"}
-	if isThinVariant() {
-		args = append(args, "-v", thinVolumeName()+":/nix")
+	if hasNixVolume() {
+		args = append(args, "-v", nixVolumeName()+":/nix")
 	}
 	for k, v := range env {
 		args = append(args, "-e", k+"="+v)
@@ -129,8 +129,8 @@ func wgBaseArgs(img string, env map[string]string, extraArgs ...string) []string
 func requireWgQuick(t *testing.T, img string) {
 	t.Helper()
 	args := []string{"run", "--rm"}
-	if isThinVariant() {
-		args = append(args, "-v", thinVolumeName()+":/nix")
+	if hasNixVolume() {
+		args = append(args, "-v", nixVolumeName()+":/nix")
 	}
 	args = append(args, img, "bash", "-lc", "command -v wg-quick")
 	out, err := osexec.Command("docker", args...).CombinedOutput()

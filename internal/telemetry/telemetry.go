@@ -76,13 +76,13 @@ func Track(event string, props map[string]any) {
 	client.Enqueue(c)
 }
 
-func TrackCommandRun(command, engine, stack string, modules []string, thin bool) {
+func TrackCommandRun(command, engine, stack string, modules []string, nixVolume bool) {
 	Track("command_run", map[string]any{
-		"command": command,
-		"engine":  engine,
-		"stack":   stack,
-		"modules": modules,
-		"thin":    thin,
+		"command":    command,
+		"engine":     engine,
+		"stack":      stack,
+		"modules":    modules,
+		"nix_volume": nixVolume,
 	})
 }
 

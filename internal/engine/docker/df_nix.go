@@ -137,11 +137,11 @@ func ParseNixStoreReport(volume, out string) (NixStoreReport, error) {
 	return r, nil
 }
 
-// CollectNixStore runs the report against the thin store volume. Any
+// CollectNixStore runs the report against the nix store volume. Any
 // failure returns ok=false — the df section is simply omitted, matching
 // the CELL-390 degrade-to-silence contract.
 func CollectNixStore(ctx context.Context) (NixStoreReport, bool) {
-	volume := ThinStoreVolume()
+	volume := NixStoreVolume()
 	out, err := exec.CommandContext(ctx, "docker", "run", "--rm",
 		"-v", volume+":/nix", NixCoreImage, "/bin/sh", "-c", NixDFReportScript,
 	).CombinedOutput()

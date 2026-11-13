@@ -37,7 +37,7 @@ func TestDockerBindProbeArgvUsesStrictBindMount(t *testing.T) {
 		t.Fatalf("probe must not use legacy -v for the host path: %v", argv)
 	}
 	if !strings.Contains(joined, "devcell-nix-store:/nix") {
-		t.Fatalf("thin probe must attach the Nix volume: %v", argv)
+		t.Fatalf("probe must attach the Nix volume: %v", argv)
 	}
 	if !strings.Contains(joined, "/__devcell_bind_probe/.devcell.toml") {
 		t.Fatalf("probe marker missing: %v", argv)
