@@ -5,6 +5,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-13
+
+### Removed
+
+- **`[cell] thin`, `--thin`/`--no-thin`/`--thick` flags, and `DEVCELL_USER_IMAGE_THIN` env var are gone** — configs containing these keys are now rejected; delete them from your devcell.toml
+- **`devcell cleanup` command removed** — use `cell clean {cache,build,nix,solitary}` instead
+
+### Added
+
+- `cell clean {cache,build,nix,solitary}` subcommands for granular cleanup instead of one destructive wipe
+- `cell reap` stops stale oneshot containers with no active session, reclaiming resources from crashed or orphaned runs
+- `--no-nix-volume` experimental flag on `cell build` bakes /nix into image layers for portable, volume-free deployment
+- `peer-memory` MCP server for cross-agent memory sharing: Claude and Cursor agents can read each other's project memories
+- New config sections `[storage]`, `[solitary]`, `[agents]` for storage caches, solitary isolation, and peer-memory wiring
+- s6 entrypoint creates the session user via direct /etc/passwd edits with GID support and boot diagnostics
+- Stealth-fingerprint MCP test suite and cross-architecture validation; `[stealth] arch` on an incompatible host now fails with a clear error
+- `chunk_size` and `upload_jobs` in `[build]` make nix-cache push concurrency and chunk size configurable via TOML
+
+### Changed
+
+- All `thin_*.go` files renamed to `nix_*.go` and `Thin*` symbols to `Nix*` — no user-facing impact
+- CI builds moved off paid ARM runners, cross-compiling arm64 via QEMU
+
+### Fixed
+
+- `cell build prune` no longer force-kills running containers by default — prevents accidental termination of active builds
+- Interrupted nix builds now report as interrupted instead of failed — clearer error message on Ctrl-C
+- Nixhome falls back to main when it has no matching release tag — prevents build failures on new releases
+
 ## [0.11.0] - 2026-11-04
 
 ### Added
