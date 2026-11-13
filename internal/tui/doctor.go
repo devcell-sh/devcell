@@ -128,6 +128,12 @@ func (m doctorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "h", "4":
 			m.active = screenHealth
 			return m, nil
+		case "right", "tab":
+			m.active = (m.active + 1) % 4
+			return m, nil
+		case "left", "shift+tab":
+			m.active = (m.active + 3) % 4
+			return m, nil
 		}
 
 	case spinner.TickMsg:
@@ -174,7 +180,7 @@ func (m doctorModel) View() string {
 
 	help := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#8b949e")).
-		Render("  [o]verview  [d]isk  [c]ells  [h]ealth  [R]efresh  [q]uit")
+		Render("  ←/→ tabs  [o]verview  [d]isk  [c]ells  [h]ealth  [R]efresh  [q]uit")
 
 	return header + "\n\n" + body + "\n\n" + help + "\n"
 }
@@ -191,13 +197,14 @@ func renderTabs(active screen) string {
 	}
 	activeStyle := lipgloss.NewStyle().Bold(true).Underline(true)
 	inactiveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#8b949e"))
+	bracketStyle := lipgloss.NewStyle().Foreground(ux.StyleInfo.GetForeground())
 
 	var parts []string
 	for _, n := range names {
 		if n.s == active {
-			parts = append(parts, activeStyle.Render(n.label))
+			parts = append(parts, bracketStyle.Render("[")+activeStyle.Render(n.label)+bracketStyle.Render("]"))
 		} else {
-			parts = append(parts, inactiveStyle.Render(n.label))
+			parts = append(parts, " "+inactiveStyle.Render(n.label)+" ")
 		}
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top, joinWith(parts, "  ")...)

@@ -46,15 +46,26 @@ func (m cellsModel) View() string {
 		statsMap[s.Name] = s
 	}
 
+	// Build profile hash lookup from live closures
+	profileMap := make(map[string]string)
+	if m.data.build.LiveClosures != nil {
+		for _, lc := range m.data.build.LiveClosures {
+			if h := docker.StoreHash(lc.ProfilePath); h != "" {
+				profileMap[lc.Container] = h
+			}
+		}
+	}
+
 	// Detect own cell
 	ownCellID := os.Getenv("DEVCELL_CELL_ID")
 
 	// Header
 	b.WriteString(fmt.Sprintf("  %s\n\n", sectionStyle.Render("Running Cells")))
-	b.WriteString(fmt.Sprintf("  %-24s %-10s %-8s %-12s %-6s %-8s\n",
+	b.WriteString(fmt.Sprintf("  %-24s %-10s %-12s %-10s %-12s %-6s %-8s\n",
 		mutedStyle.Render("CELL"),
 		mutedStyle.Render("WORKSPACE"),
-		mutedStyle.Render("ENGINE"),
+		mutedStyle.Render("STACK"),
+		mutedStyle.Render("PROFILE"),
 		mutedStyle.Render("UPTIME"),
 		mutedStyle.Render("CPU"),
 		mutedStyle.Render("MEM"),
@@ -80,8 +91,20 @@ func (m cellsModel) View() string {
 			mem = st.MemUsage
 		}
 
-		line := fmt.Sprintf("  %s %-24s %-10s %-8s %-12s %-6s %-8s",
-			status, cellName, c.Workspace, "docker", c.Uptime, cpu, mem)
+		stack := c.Stack
+		if stack == "" {
+			stack = "-"
+		}
+
+		profile := "-"
+		if h, ok := profileMap[c.Name]; ok && len(h) >= 8 {
+			profile = h[:8]
+		} else if h != "" {
+			profile = h
+		}
+
+		line := fmt.Sprintf("  %s %-24s %-10s %-12s %-10s %-12s %-6s %-8s",
+			status, cellName, c.Workspace, stack, profile, c.Uptime, cpu, mem)
 
 		if isSelf {
 			line = lipgloss.NewStyle().Foreground(ux.StyleInfo.GetForeground()).Render(line)

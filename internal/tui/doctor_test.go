@@ -59,6 +59,53 @@ func TestDoctorModel_TabSwitching(t *testing.T) {
 	}
 }
 
+func TestDoctorModel_TabCycling(t *testing.T) {
+	m := newDoctorModel()
+	m.scanning = false
+	m.width = 80
+	m.height = 24
+
+	// Start at overview (0), right arrow cycles forward
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(doctorModel)
+	if m.active != screenDisk {
+		t.Errorf("right from overview: got %d, want %d", m.active, screenDisk)
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(doctorModel)
+	if m.active != screenCells {
+		t.Errorf("right from disk: got %d, want %d", m.active, screenCells)
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(doctorModel)
+	if m.active != screenHealth {
+		t.Errorf("right from cells: got %d, want %d", m.active, screenHealth)
+	}
+
+	// Wrap around from health back to overview
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(doctorModel)
+	if m.active != screenOverview {
+		t.Errorf("right from health: got %d, want %d", m.active, screenOverview)
+	}
+
+	// Left arrow wraps to health
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = updated.(doctorModel)
+	if m.active != screenHealth {
+		t.Errorf("left from overview: got %d, want %d", m.active, screenHealth)
+	}
+
+	// Left again to cells
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = updated.(doctorModel)
+	if m.active != screenCells {
+		t.Errorf("left from health: got %d, want %d", m.active, screenCells)
+	}
+}
+
 func TestDoctorModel_QuitCmd(t *testing.T) {
 	m := newDoctorModel()
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
@@ -435,22 +482,29 @@ func TestCellsModel_RendersCellTable(t *testing.T) {
 		data: &scanResultMsg{
 			cells: scan.CellsResult{
 				Cells: []docker.CellInfo{
-					{Name: "cell-devcell-30", Status: "running", Workspace: "main", CellID: "30", Uptime: "4 hours"},
-					{Name: "cell-fm1-110", Status: "running", Workspace: "main", CellID: "110", Uptime: "2 days"},
+					{Name: "cell-devcell-30", Status: "running", Workspace: "main", CellID: "30", Uptime: "4 hours", Stack: "ultimate"},
+					{Name: "cell-fm1-110", Status: "running", Workspace: "main", CellID: "110", Uptime: "2 days", Stack: "base"},
 				},
 				Stats: []docker.CellStats{
 					{Name: "cell-devcell-30", CPUPercent: 2.1, MemUsage: "1.8GiB / 16GiB"},
 					{Name: "cell-fm1-110", CPUPercent: 0.3, MemUsage: "900MiB / 16GiB"},
 				},
 			},
-			build:     scan.BuildResult{},
+			build: scan.BuildResult{
+				LiveClosures: []docker.LiveClosure{
+					{Container: "cell-devcell-30", ProfilePath: "/nix/store/afd6v6z8abcdef-home-manager-path"},
+				},
+			},
 			scannedAt: time.Now(),
 		},
-		width:  120,
+		width:  160,
 		height: 40,
 	}
 	out := m.View()
-	for _, want := range []string{"cell-devcell-30", "cell-fm1-110", "2.1%", "0.3%", "Running Cells"} {
+	for _, want := range []string{
+		"cell-devcell-30", "cell-fm1-110", "2.1%", "0.3%", "Running Cells",
+		"STACK", "PROFILE", "ultimate", "base", "afd6v6z8",
+	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("cells view missing %q:\n%s", want, out)
 		}

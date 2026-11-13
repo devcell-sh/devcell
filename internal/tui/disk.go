@@ -90,6 +90,30 @@ func (m *diskModel) rebuild() {
 				indent: 1,
 				detail: fmt.Sprintf("stack=%s", meta.Stack),
 			}
+			child.children = append(child.children, diskRow{
+				label:  fmt.Sprintf("stack: %s", meta.Stack),
+				indent: 2,
+			})
+			if meta.Nixpkgs != "" {
+				rev := meta.Nixpkgs
+				if len(rev) > 12 {
+					rev = rev[:12]
+				}
+				child.children = append(child.children, diskRow{
+					label:  fmt.Sprintf("nixpkgs: %s", rev),
+					indent: 2,
+				})
+			}
+			for _, cellName := range strings.Split(meta.Cell, ",") {
+				cellName = strings.TrimSpace(cellName)
+				if cellName != "" {
+					child.children = append(child.children, diskRow{
+						label:  cellName,
+						indent: 2,
+						detail: "(cell)",
+					})
+				}
+			}
 			totalClosure += meta.ClosureBytes
 			profileRow.children = append(profileRow.children, child)
 		}
