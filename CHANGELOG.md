@@ -22,17 +22,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - s6 entrypoint creates the session user via direct /etc/passwd edits with GID support and boot diagnostics
 - Stealth-fingerprint MCP test suite and cross-architecture validation; `[stealth] arch` on an incompatible host now fails with a clear error
 - `chunk_size` and `upload_jobs` in `[build]` make nix-cache push concurrency and chunk size configurable via TOML
+- Auto-rebuild when a baked image is missing a config-implied nix module
+- Solitary-mode clone helpers for project and home directory isolation
+- Internal `storage` package for shared build-tool cache planning
+- Host UID/GID and host base-dir override threaded through Config and Cell
+- Boot popup title now shows the active stack name
+- Cells auto-clean stale nix GC state and the registry cache on every start
+- Missing config options added to the `cell init` template
 
 ### Changed
 
 - All `thin_*.go` files renamed to `nix_*.go` and `Thin*` symbols to `Nix*` — no user-facing impact
 - CI builds moved off paid ARM runners, cross-compiling arm64 via QEMU
+- CI workflows migrated off Blacksmith runners
+- Bumped nixpkgs to 26.05 (Go 1.26.10), go-nixoci to v0.4.0
 
 ### Fixed
 
 - `cell build prune` no longer force-kills running containers by default — prevents accidental termination of active builds
 - Interrupted nix builds now report as interrupted instead of failed — clearer error message on Ctrl-C
 - Nixhome falls back to main when it has no matching release tag — prevents build failures on new releases
+- CI timeout failures and broken tag push on PR builds fixed
+- CI timeouts tuned to match cold-push duration for nix-cache publish
 
 ## [0.11.0] - 2026-11-04
 
