@@ -28,7 +28,7 @@ func TestList_NamesCarryGroupPrefix(t *testing.T) {
 			t.Errorf("%s: needs a one-line Summary for docs and the listing", x.Name)
 		}
 	}
-	for _, x := range []experiments.Experiment{experiments.Cage, experiments.BootPopup, experiments.Windows, experiments.NoNixVolume} {
+	for _, x := range []experiments.Experiment{experiments.Cage, experiments.BootPopup, experiments.Windows, experiments.NoNixVolume, experiments.Doctor} {
 		if !seen[x.Name] {
 			t.Errorf("%s is not in List()", x.Name)
 		}

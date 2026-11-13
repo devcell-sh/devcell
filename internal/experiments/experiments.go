@@ -45,10 +45,17 @@ var (
 		Name:    "build-no-nix-volume",
 		Summary: "cell build --no-nix-volume: bake nix into the image filesystem instead of a Docker named volume",
 	}
+	// Doctor enables `cell doctor`: a full-screen interactive TUI dashboard
+	// for browsing disk usage, nix closures, running cells, and system health.
+	Doctor = Experiment{
+		Name:    "ui-doctor",
+		Summary: "cell doctor: interactive TUI dashboard with disk breakdown, nix closure explorer, and service health",
+		Ticket: "CELL-671",
+	}
 )
 
 // all is the iteration order for List, docs and error messages.
-var all = []Experiment{Cage, BootPopup, Windows, SharedCache, NoNixVolume}
+var all = []Experiment{Cage, BootPopup, Windows, SharedCache, NoNixVolume, Doctor}
 
 // List returns every registered experiment, active or not.
 func List() []Experiment { return append([]Experiment(nil), all...) }

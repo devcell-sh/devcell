@@ -214,6 +214,7 @@ Off by default. Turn one on with `--experimental=<name>`, `DEVCELL_EXPERIMENTAL=
 | `engine-windows` | Windows guest (--os windows or winpe): a Windows PE + WSL VM run by the winkit engine on vz or QEMU | [README.md#engines-and-guests](README.md#engines-and-guests) | - |
 | `storage-unified` | unified shared cache: Go mod/build, npm, uv and winkit caches shared across cells via host bind mounts | - | - |
 | `build-no-nix-volume` | cell build --no-nix-volume: bake nix into the image filesystem instead of a Docker named volume | - | - |
+| `ui-doctor` | cell doctor: interactive TUI dashboard with disk breakdown, nix closure explorer, and service health | - | CELL-671 |
 <!-- experiments:end -->
 
 Run `devcell experimental` to see what is on. Details, lifecycle and how to add one: [docs/experimental.md](docs/experimental.md).

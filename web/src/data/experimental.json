@@ -38,5 +38,13 @@
     "doc": "",
     "ticket": "",
     "state": "active"
+  },
+  {
+    "name": "ui-doctor",
+    "group": "ui",
+    "summary": "cell doctor: interactive TUI dashboard with disk breakdown, nix closure explorer, and service health",
+    "doc": "",
+    "ticket": "CELL-671",
+    "state": "active"
   }
 ]
