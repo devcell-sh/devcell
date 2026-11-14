@@ -136,6 +136,7 @@ var titles = map[string]string{
 	"s6.ready":             "Session services ready",
 	"nix.starting":         "Configuring nix",
 	"nix.ready":            "Nix ready",
+	"nix-daemon.up":        "Nix daemon",
 	"shell.starting":       "Configuring shell",
 	"shell.ready":          "Shell ready",
 	"nix-lib.starting":     "Wiring nix library paths",
