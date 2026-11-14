@@ -239,9 +239,25 @@ func (p *BootPanel) Message(text string, s streak.Status) {
 func (p *BootPanel) SetBoot(group, step string, s streak.Status, title string) {
 	if r, c, ok := p.resolve(group, step); ok {
 		_ = p.loader.Set(r, c, s)
-		if title != "" {
-			_ = p.loader.RowMessage(r, title, s)
+		if title == "" {
+			return
 		}
+		// A Running step's message takes priority: don't let a Done
+		// event overwrite the row label while another dot is still
+		// blinking. The user sees the active work, not the last
+		// completion.
+		if s == streak.Done {
+			snap := p.loader.Snapshot()
+			for ci := 0; ci < snap.RowCols(r); ci++ {
+				if ci == c {
+					continue
+				}
+				if st, _ := snap.Get(r, ci); st == streak.Running {
+					return
+				}
+			}
+		}
+		_ = p.loader.RowMessage(r, title, s)
 	}
 }
 
