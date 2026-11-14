@@ -24,7 +24,7 @@ func init() {
 	buildCmd.Flags().String("stack", "", "override [cell].stack for this build (base, dev, go, node, python, fullstack, electronics, ultimate, bbb)")
 	buildCmd.Flags().String("image", "", "override the built image tag (e.g. devcell-user:dev); env DEVCELL_BUILD_IMAGE has lower precedence")
 	buildCmd.Flags().Bool("force", false, "recreate VM even if it already exists (tart only)")
-	buildCmd.Flags().Bool("no-cache", false, "re-download OCI image, bypassing tart cache (tart only)")
+	buildCmd.Flags().Bool("no-cache", false, "skip preflight caches and force re-evaluation; re-download OCI image (tart)")
 	buildCmd.Flags().String("stage", "full", `build stage: "base" (infra only) or "full" (default, includes stack activation) (tart only)`)
 	buildCmd.Flags().Int("build-threads", 0, "nix download threads (max-substitution-jobs + http-connections); default 128; env DEVCELL_BUILD_THREADS")
 	buildCmd.Flags().Bool("no-nix-volume", false, "bake nix into the image filesystem instead of a Docker named volume (experimental: build-no-nix-volume)")
@@ -58,12 +58,13 @@ func runBuild(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("loading config: %w", err)
 	}
 
+	exp, err := experimental(cellCfg.Cell)
+	if err != nil {
+		return err
+	}
+
 	noNixVolume, _ := cmd.Flags().GetBool("no-nix-volume")
 	if noNixVolume {
-		exp, err := experimental(cellCfg.Cell)
-		if err != nil {
-			return err
-		}
 		if err := experiments.Require(exp, experiments.NoNixVolume, "--no-nix-volume"); err != nil {
 			return err
 		}
@@ -73,7 +74,9 @@ func runBuild(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	return e.Build(context.Background(), buildOpts(cmd, engineCell(c, cellCfg)))
+	opts := buildOpts(cmd, engineCell(c, cellCfg))
+	opts.Experiments = exp
+	return e.Build(context.Background(), opts)
 }
 
 // buildOpts is the engine.BuildOpts for `devcell build` on cell c: every build

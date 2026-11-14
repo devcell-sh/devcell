@@ -169,6 +169,8 @@ type BuildOpts struct {
 	// NoNixVolume bakes nix into the image filesystem instead of mounting
 	// a Docker named volume (--no-nix-volume). Experimental (build-no-nix-volume).
 	NoNixVolume bool
+	// Experiments is the resolved set of enabled experiments (e.g. storage-unified).
+	Experiments map[string]bool
 }
 
 // InitOpts configures Engine.Init.

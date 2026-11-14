@@ -7,6 +7,7 @@ import (
 
 	"github.com/devcell-sh/devcell/internal/config"
 	"github.com/devcell-sh/devcell/internal/engine"
+	"github.com/devcell-sh/devcell/internal/experiments"
 )
 
 // Engine runs a cell as a docker container whose /nix lives on the shared
@@ -27,8 +28,11 @@ func init() {
 // runs home-manager and `docker build` in a builder container. opts.Stack
 // (else DEVCELL_STACK) overrides the stack, opts.Image the tag, and
 // opts.Update empties the nix-store volume first. opts.DryRun, opts.Force,
-// opts.NoCache and opts.Stage are not honored.
+// opts.NoCache skips preflight caches. opts.Stage is not honored.
 func (Engine) Build(ctx context.Context, opts engine.BuildOpts) error {
+	if err := CheckDockerDaemon(ctx); err != nil {
+		return err
+	}
 	p, err := newBuildParams(opts, os.Getenv)
 	if err != nil {
 		return err
@@ -36,6 +40,8 @@ func (Engine) Build(ctx context.Context, opts engine.BuildOpts) error {
 	if p.threads > 0 {
 		os.Setenv("DEVCELL_BUILD_THREADS", strconv.Itoa(p.threads))
 	}
+	expSet := experiments.Set(opts.Experiments)
+	p.sharedCache = expSet.Enabled(experiments.SharedCache)
 	useCell(opts.Cell)
 	return build(ctx, opts.Cell, p)
 }

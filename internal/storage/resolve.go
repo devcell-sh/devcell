@@ -14,6 +14,7 @@ const (
 	GuestNpm     = GuestBase + "/npm"
 	GuestUv      = GuestBase + "/uv"
 	GuestWinkit  = GuestBase + "/winkit"
+	GuestMise    = GuestBase + "/mise"
 )
 
 // Mount is one host:guest bind-mount pair with its env var name.
@@ -29,12 +30,13 @@ type Plan struct {
 	GoBuild Mount
 	Npm     Mount
 	Uv      Mount
+	Mise    Mount
 	Winkit  Mount
 }
 
 // Mounts returns all mounts in a stable order.
 func (p Plan) Mounts() []Mount {
-	return []Mount{p.GoMod, p.GoBuild, p.Npm, p.Uv, p.Winkit}
+	return []Mount{p.GoMod, p.GoBuild, p.Npm, p.Uv, p.Mise, p.Winkit}
 }
 
 // Input holds the values needed to resolve a storage plan.
@@ -82,6 +84,11 @@ func Resolve(in Input) Plan {
 			GuestPath: GuestUv,
 			EnvVar:    "UV_CACHE_DIR",
 		},
+		Mise: Mount{
+			HostPath:  MiseCachePath(in.CacheDir),
+			GuestPath: GuestMise,
+			EnvVar:    "MISE_DATA_DIR",
+		},
 		Winkit: Mount{
 			HostPath:  winkitPath(in.CacheDir),
 			GuestPath: GuestWinkit,
@@ -114,6 +121,11 @@ func envScopedPath(scope, stackTag, tool string, shared bool) string {
 
 func winkitPath(cacheDir string) string {
 	return filepath.Join(cacheDir, "v1", "shared", "winkit")
+}
+
+// MiseCachePath returns the shared mise install cache directory on the host.
+func MiseCachePath(cacheDir string) string {
+	return filepath.Join(cacheDir, "v1", "shared", "mise")
 }
 
 // EnsureHostDirs creates all host-side cache directories.

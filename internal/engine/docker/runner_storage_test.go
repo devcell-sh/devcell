@@ -55,6 +55,7 @@ func TestBuildArgv_StorageEnvVarsPresent(t *testing.T) {
 		"GOCACHE":                 "/var/cache/devcell/go/build",
 		"npm_config_cache":        "/var/cache/devcell/npm",
 		"UV_CACHE_DIR":            "/var/cache/devcell/uv",
+		"MISE_DATA_DIR":           "/var/cache/devcell/mise",
 		"DEVCELL_WINKIT_CACHE_DIR": "/var/cache/devcell/winkit",
 	}
 	for k, v := range wantEnvs {
@@ -62,6 +63,23 @@ func TestBuildArgv_StorageEnvVarsPresent(t *testing.T) {
 		if !hasArg(argv, want) {
 			t.Errorf("expected env %q in argv", want)
 		}
+	}
+}
+
+func TestBuildArgv_StorageMiseMountPresent(t *testing.T) {
+	plan := storage.Resolve(storage.Input{
+		CacheDir:    "/test/cache",
+		SharedCache: true,
+		StackTag:    "go",
+	})
+	argv := storageArgv(&plan)
+	wantVolume := "/test/cache/v1/shared/mise:/var/cache/devcell/mise"
+	if !hasArg(argv, wantVolume) {
+		t.Errorf("expected mise volume %q in argv", wantVolume)
+	}
+	wantEnv := "MISE_DATA_DIR=/var/cache/devcell/mise"
+	if !hasArg(argv, wantEnv) {
+		t.Errorf("expected mise env %q in argv", wantEnv)
 	}
 }
 
@@ -90,6 +108,11 @@ func TestBuildArgv_StoragePrivatePaths(t *testing.T) {
 		if !strings.Contains(m.HostPath, "/v1/private/") {
 			t.Errorf("%s host path should be under /v1/private/, got %q", m.EnvVar, m.HostPath)
 		}
+	}
+
+	// Mise should still be shared
+	if !strings.Contains(plan.Mise.HostPath, "/v1/shared/mise") {
+		t.Errorf("mise should be shared even in private mode, got %q", plan.Mise.HostPath)
 	}
 
 	// Winkit should still be shared

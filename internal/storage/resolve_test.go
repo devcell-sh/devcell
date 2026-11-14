@@ -97,10 +97,24 @@ func TestResolve_GuestPathsStable(t *testing.T) {
 	}
 }
 
-func TestResolve_MountsReturnsFive(t *testing.T) {
+func TestResolve_MountsReturnsSix(t *testing.T) {
 	p := Resolve(Input{CacheDir: "/cache", SharedCache: true, StackTag: "x"})
-	if got := len(p.Mounts()); got != 5 {
-		t.Errorf("Mounts() should return 5, got %d", got)
+	if got := len(p.Mounts()); got != 6 {
+		t.Errorf("Mounts() should return 6, got %d", got)
+	}
+}
+
+func TestResolve_MiseAlwaysShared(t *testing.T) {
+	p := Resolve(Input{
+		CacheDir:      "/cache",
+		SharedCache:   false,
+		WorkspaceName: "main",
+		CellName:      "proj-0",
+		BaseDir:       "/x",
+		StackTag:      "go",
+	})
+	if !strings.Contains(p.Mise.HostPath, "/v1/shared/mise") {
+		t.Errorf("mise should always be shared, got %q", p.Mise.HostPath)
 	}
 }
 

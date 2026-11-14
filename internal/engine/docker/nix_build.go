@@ -427,6 +427,8 @@ cores = ${DEVCELL_NIX_CORES:-0}
 sandbox = %s
 filter-syscalls = %s
 %s
+extra-substituters = https://nix-community.cachix.org
+extra-trusted-public-keys = nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
 ssl-cert-file = $CACERT
 NIXCONF
 
@@ -539,6 +541,9 @@ export PATH="/nix/var/nix/profiles/devcell-tools/bin:$PATH"
 
 echo "Running home-manager switch (nix store on volume)..."
 HM_EXTRA_FLAGS=""
+if [ "${DEVCELL_DEBUG:-}" = "true" ]; then
+  HM_EXTRA_FLAGS="$HM_EXTRA_FLAGS --verbose --print-build-logs"
+fi
 if [ -n "${DEVCELL_NIX_OVERRIDE_INPUTS:-}" ]; then
   IFS=',' read -ra _overrides <<< "$DEVCELL_NIX_OVERRIDE_INPUTS"
   for _ov in "${_overrides[@]}"; do
@@ -606,13 +611,24 @@ export NIX_LD_LIBRARY_PATH="${GLIBC_LIB:+$GLIBC_LIB}${GCC_LIB:+:$GCC_LIB}"
 # Populate mise shims (go, node, tofu, kubectl etc.)
 export PATH="/nix/var/nix/profiles/per-user/root/profile/bin:$PATH"
 if command -v mise >/dev/null 2>&1; then
-  export MISE_DATA_DIR="$HOME/.local/share/mise"
+  _MISE_LOCAL="$HOME/.local/share/mise"
+  if [ -n "${DEVCELL_MISE_CACHE:-}" ] && [ -d "$DEVCELL_MISE_CACHE" ]; then
+    export MISE_DATA_DIR="$DEVCELL_MISE_CACHE"
+  else
+    export MISE_DATA_DIR="$_MISE_LOCAL"
+  fi
   export MISE_GLOBAL_CONFIG_FILE="$HOME/.config/mise/config.toml"
   mkdir -p "$HOME/.gnupg" && chmod 700 "$HOME/.gnupg"
   export MISE_NODE_VERIFY=false
   echo "Installing mise tools..."
   mise install --yes 2>&1 || true
   mise reshim 2>&1 || true
+  # Baked builds (--no-nix-volume) have no runtime mount, so copy installs
+  # into the image. Volume builds mount the cache at runtime instead.
+  if [ "$DEVCELL_BASE_IMAGE" = "baked" ] && [ "$MISE_DATA_DIR" != "$_MISE_LOCAL" ] && [ -d "$MISE_DATA_DIR/installs" ]; then
+    mkdir -p "$_MISE_LOCAL"
+    cp -a "$MISE_DATA_DIR/installs" "$_MISE_LOCAL/installs"
+  fi
 fi
 
 # Restore ownership

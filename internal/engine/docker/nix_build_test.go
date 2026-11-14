@@ -106,6 +106,14 @@ func TestNixBuildArgv_RunsHomeManagerSwitch(t *testing.T) {
 	}
 }
 
+func TestNixBuildArgv_HomeManagerSwitchVerboseOnDebug(t *testing.T) {
+	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
+	script := argv[len(argv)-1]
+	if !strings.Contains(script, `DEVCELL_DEBUG`) || !strings.Contains(script, `HM_EXTRA_FLAGS="$HM_EXTRA_FLAGS --verbose --print-build-logs"`) {
+		t.Errorf("home-manager switch should add --verbose --print-build-logs when DEVCELL_DEBUG is set")
+	}
+}
+
 func TestNixBuildArgv_RunsDockerBuild(t *testing.T) {
 	argv := nixBuildArgvHelper(testCoreImage, testContainer, testVolume, testNixhome, testImageTag, testStack, "aarch64")
 	script := argv[len(argv)-1]

@@ -19,6 +19,7 @@ import (
 	"github.com/devcell-sh/devcell/internal/engine"
 	"github.com/devcell-sh/devcell/internal/nixhome"
 	"github.com/devcell-sh/devcell/internal/scaffold"
+	"github.com/devcell-sh/devcell/internal/storage"
 	"github.com/devcell-sh/devcell/internal/ux"
 	"github.com/devcell-sh/devcell/internal/version"
 )
@@ -31,6 +32,8 @@ type buildParams struct {
 	updateFlake   bool   // --update: run nix flake update before building
 	threads       int    // --build-threads, exported as DEVCELL_BUILD_THREADS; 0 leaves it alone
 	noNixVolume   bool   // --no-nix-volume: bake nix into the image instead of a named volume
+	noCache       bool   // --no-cache: skip preflight caches and force re-evaluation
+	sharedCache   bool   // storage-unified experiment: mount host caches into builder
 }
 
 // newBuildParams resolves opts for build. getenv is os.Getenv outside tests.
@@ -50,6 +53,7 @@ func newBuildParams(opts engine.BuildOpts, getenv func(string) string) (buildPar
 		updateFlake:   opts.Update,
 		threads:       opts.BuildThreads,
 		noNixVolume:   opts.NoNixVolume,
+		noCache:       opts.NoCache,
 	}, nil
 }
 
@@ -87,12 +91,6 @@ func resolveStackOverride(flagValue string, getenv func(string) string) (string,
 //     - home-manager switch (reuses volume-cached /nix/store)
 //     - docker build (inside container, via socket) → user image
 func build(ctx context.Context, c engine.Cell, p buildParams) error {
-	// Daemon preflight — surface the actionable error when docker is down
-	// before any pull/build attempt (CELL-44). Run probes before its
-	// auto-build too; this guards direct `cell build` callers.
-	if err := DockerDaemonReachable(ctx); err != nil {
-		return err
-	}
 	logDiagnostics(ctx, hostConfig(c))
 
 	cellCfg := c.Config
@@ -139,12 +137,17 @@ func build(ctx context.Context, c engine.Cell, p buildParams) error {
 		nixhomeFlake := "path:" + filepath.Join(c.BuildDir, "nixhome")
 		targetSystem := DetectArch() + "-linux"
 		preLabel := fmt.Sprintf("Platform compatibility check (%s)", targetSystem)
-		sp := ux.NewProgressSpinner(preLabel)
-		if err := nixhome.PreflightPlatformCheck(ctx, nixhomeFlake, targetSystem); err != nil {
-			sp.Fail(preLabel)
-			return err
+		if !p.noCache && nixhome.PreflightCacheValid(c.BuildDir) {
+			ux.Debugf("%s — cached, skipping", preLabel)
+		} else {
+			sp := ux.NewProgressSpinner(preLabel)
+			if err := nixhome.PreflightPlatformCheck(ctx, nixhomeFlake, targetSystem); err != nil {
+				sp.Fail(preLabel)
+				return err
+			}
+			sp.Success(preLabel)
+			nixhome.PreflightCacheWrite(c.BuildDir)
 		}
-		sp.Success(preLabel)
 	}
 
 	// ── Package summary ───────────────────────────────────────────────────
@@ -283,6 +286,22 @@ func build(ctx context.Context, c engine.Cell, p buildParams) error {
 		argv = NixBuildArgvBaked(coreImage, containerName, nixhomeRef, tag, homeManagerTarget, DetectArch(), stack, modulesCSV, projectName, packageCounts)
 	} else {
 		argv = NixBuildArgvWithPackages(coreImage, containerName, volumeName, nixhomeRef, tag, homeManagerTarget, DetectArch(), stack, modulesCSV, projectName, packageCounts)
+	}
+
+	// Pass debug flag into the builder so home-manager switch runs verbose.
+	if ux.Verbose {
+		argv = append(argv, "-e", "DEVCELL_DEBUG=true")
+	}
+
+	// Mount shared mise cache so tool downloads persist across builds.
+	if p.sharedCache {
+		miseHost := storage.MiseCachePath(cellCfg.Storage.ResolvedCacheDir())
+		if err := os.MkdirAll(miseHost, 0o755); err != nil {
+			ux.Debugf("mise cache dir: %v", err)
+		} else {
+			argv = append(argv, "-v", miseHost+":"+storage.GuestMise)
+			argv = append(argv, "-e", "DEVCELL_MISE_CACHE="+storage.GuestMise)
+		}
 	}
 
 	// Log the resolved build resource config under --debug.
