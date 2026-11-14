@@ -129,25 +129,28 @@ type groupOpts struct {
 }
 
 // titles maps "<component>.<state>" to a human title for boot panel rows.
+// Two event sources land here: the entrypoint emits short names with
+// "starting"/"ready", while s6 services emit their full name with
+// "activating"/"up". Both need coverage to avoid the raw fallback.
 var titles = map[string]string{
+	// --- Entrypoint (system-scope) events: short names ---
 	"container.ready":      "Container started",
 	"entrypoint.ready":     "Entrypoint ready",
 	"s6.starting":          "Activating session services",
 	"s6.ready":             "Session services ready",
-	"nix.starting":         "Configuring nix",
+	"nix.starting":         "Configuring Nix",
 	"nix.ready":            "Nix ready",
-	"nix-daemon.up":        "Nix daemon",
 	"shell.starting":       "Configuring shell",
 	"shell.ready":          "Shell ready",
-	"nix-lib.starting":     "Wiring nix library paths",
+	"nix-lib.starting":     "Wiring Nix library paths",
 	"nix-lib.ready":        "Nix library paths ready",
-	"mise.starting":        "Loading mise tools",
+	"mise.starting":        "Loading Mise tools",
 	"mise.ready":           "Mise ready",
 	"home.starting":        "Setting up home directory",
 	"home.ready":           "Home directory ready",
 	"secrets.starting":     "Injecting secrets",
 	"secrets.ready":        "Secrets ready",
-	"chromium.starting":    "Releasing chromium locks",
+	"chromium.starting":    "Releasing Chromium locks",
 	"chromium.ready":       "Chromium ready",
 	"claude.starting":      "Initializing Claude",
 	"claude.ready":         "Claude ready",
@@ -167,6 +170,47 @@ var titles = map[string]string{
 	"pulseaudio.ready":     "Audio server ready",
 	"dbus-session.ready":   "D-Bus session ready",
 	"boot.ready":           "",
+
+	// --- s6 service (service-scope) events: full service names ---
+	// .activating — shown while the oneshot/longrun is starting.
+	"nix-daemon.activating":      "Starting Nix daemon",
+	"shell-rc.activating":        "Configuring shell",
+	"mise.activating":            "Loading Mise tools",
+	"homedir.activating":         "Setting up home directory",
+	"claude-config.activating":   "Initializing Claude",
+	"codex-config.activating":    "Initializing Codex",
+	"gemini-config.activating":   "Initializing Gemini",
+	"opencode-config.activating": "Initializing OpenCode",
+	"mcp-toggle.activating":      "Configuring MCP",
+	"secrets.activating":         "Injecting secrets",
+	"gui-config.activating":      "Configuring GUI",
+	"pulseaudio.activating":      "Starting audio server",
+	"xvfb.activating":            "Starting display server",
+	"window-manager.activating":  "Starting window manager",
+	"xrdp.activating":            "Starting remote desktop",
+	"dbus-session.activating":    "Starting D-Bus session",
+	"postgres.activating":        "Starting PostgreSQL",
+	"postgres-init.activating":   "Initializing PostgreSQL",
+
+	// .up — shown when the service finishes successfully.
+	"nix-daemon.up":      "Nix daemon ready",
+	"shell-rc.up":        "Shell ready",
+	"mise.up":            "Mise ready",
+	"homedir.up":         "Home directory ready",
+	"claude-config.up":   "Claude ready",
+	"codex-config.up":    "Codex ready",
+	"gemini-config.up":   "Gemini ready",
+	"opencode-config.up": "OpenCode ready",
+	"mcp-toggle.up":      "MCP ready",
+	"secrets.up":         "Secrets ready",
+	"gui-config.up":      "GUI ready",
+	"pulseaudio.up":      "Audio server ready",
+	"xvfb.up":            "Display server ready",
+	"window-manager.up":  "Window manager ready",
+	"xrdp.up":            "Remote desktop ready",
+	"dbus-session.up":    "D-Bus session ready",
+	"postgres.up":        "PostgreSQL ready",
+	"postgres-init.up":   "PostgreSQL initialized",
 }
 
 func titleFor(component, state string) string {
