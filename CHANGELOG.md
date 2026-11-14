@@ -5,6 +5,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-14
+
+### Added
+
+- [CELL-671] `cell doctor`: experimental TUI dashboard with tab-cycling overview, disk, cells, and health panels
+- [CELL-671] `internal/scan` package for disk, docker, nix, and cache introspection behind `cell doctor` and `cell clean`
+- Docker daemon preflight with 5s timeout, spinner, and start hints for Colima, Docker Desktop, and systemd
+- Platform compatibility check cached by flake.nix/flake.lock hash; `--no-cache` bypasses it
+- Shared mise cache mount in the builder under the `storage-unified` experiment
+- `--debug` runs home-manager switch with `--verbose --print-build-logs`
+- nix-community cachix substituter added to the builder
+- Nix-store volume mounted into flake lock/update with `accept-flake-config = true`
+- Nix profile modules shown in `cell clean` output and `cell doctor` disk view
+- Container storage I/O error classified with Colima recovery steps
+
+### Changed
+
+- `FlakeLockArgv` extracted from `UpdateFlakeLock` for testability
+
+### Fixed
+
+- Boot panel shows "Nix daemon" instead of raw "nix-daemon up"
+- Nix store reclaim hint updated from `cell build prune` to `cell clean`
+- Local nixhome sync skips `tests/results` to avoid bloating the build context
+- Preflight errors no longer printed twice
+
 ## [0.12.0] - 2026-11-13
 
 ### Removed
