@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-14
+
+### Added
+
+- Boot panel shows human-readable titles for every s6 service event instead of raw service names
+
+### Fixed
+
+- Boot panel keeps the row label on the step that is still running instead of flickering to a completed step
+
 ## [0.13.0] - 2026-11-14
 
 ### Added
