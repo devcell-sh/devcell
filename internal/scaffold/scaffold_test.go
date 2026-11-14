@@ -249,6 +249,34 @@ func TestSyncNixhome_SkipsSourceBuildDir(t *testing.T) {
 	}
 }
 
+func TestSyncNixhome_SkipsTestResults(t *testing.T) {
+	srcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(srcDir, "flake.nix"), []byte("# nixhome flake"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	resultsDir := filepath.Join(srcDir, "tests", "results", "2026-01-01")
+	if err := os.MkdirAll(resultsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(resultsDir, "screenshot.png"), []byte("fake"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "tests", "helper_test.bash"), []byte("# test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	configDir := t.TempDir()
+	if err := scaffold.SyncNixhome(srcDir, configDir); err != nil {
+		t.Fatalf("SyncNixhome failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(configDir, "nixhome", "tests", "results")); !os.IsNotExist(err) {
+		t.Errorf("tests/results must not be copied (stat err: %v)", err)
+	}
+	if _, err := os.Stat(filepath.Join(configDir, "nixhome", "tests", "helper_test.bash")); err != nil {
+		t.Errorf("tests/helper_test.bash should be copied: %v", err)
+	}
+}
+
 // TestSyncNixhome_ErrorOnMissingPath — SyncNixhome returns error for non-existent source.
 func TestSyncNixhome_ErrorOnMissingPath(t *testing.T) {
 	configDir := t.TempDir()

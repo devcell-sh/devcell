@@ -393,9 +393,11 @@ func syncNixhomeFromLocal(srcPath, configDir, origin string) error {
 		return fmt.Errorf("remove old nixhome: %w", err)
 	}
 	os.Remove(filepath.Join(configDir, "flake.lock"))
-	// Skip the source's own .devcell/ build dir: a nixhome checkout opened
-	// as a cell project has one, with a nested git repo that breaks git add.
-	if err := copyDirSkipping(srcPath, dest, ".devcell"); err != nil {
+	// Skip the source's own .devcell/ build dir (a nixhome checkout opened
+	// as a cell project has one, with a nested git repo that breaks git add)
+	// and gitignored output dirs that exist locally but don't belong in the
+	// build context.
+	if err := copyDirSkipping(srcPath, dest, ".devcell", filepath.Join("tests", "results")); err != nil {
 		return err
 	}
 	if err := os.WriteFile(filepath.Join(dest, NixhomeSourceFile), []byte(origin+"\n"), 0644); err != nil {
