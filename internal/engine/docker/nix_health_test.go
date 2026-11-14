@@ -166,7 +166,7 @@ func TestNixStoreHealth_SummaryStaleWithFewHashes(t *testing.T) {
 	if tag != "unhealthy" {
 		t.Errorf("tag = %q, want %q (stale+orphaned without bloat)", tag, "unhealthy")
 	}
-	for _, want := range []string{"2 stale root", "5 orphaned generation", "cell build prune"} {
+	for _, want := range []string{"2 stale root", "5 orphaned generation", "cell clean"} {
 		if !strings.Contains(detail, want) {
 			t.Errorf("findings detail missing %q, got %q", want, detail)
 		}
@@ -185,8 +185,8 @@ func TestNixStoreHealth_SummaryBloating(t *testing.T) {
 	if !strings.Contains(detail, "4 profile hashes (old builds)") {
 		t.Errorf("detail must explain old builds, got %q", detail)
 	}
-	if !strings.Contains(detail, "cell build prune") {
-		t.Errorf("detail must include prune hint, got %q", detail)
+	if !strings.Contains(detail, "cell clean") {
+		t.Errorf("detail must include clean hint, got %q", detail)
 	}
 }
 

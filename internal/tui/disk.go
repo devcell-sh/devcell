@@ -84,16 +84,25 @@ func (m *diskModel) rebuild() {
 		profileRow := diskRow{label: "Nix profiles", indent: 0}
 		var totalClosure int64
 		for _, meta := range nix.NixReport.Metas {
+			shortHash := meta.Hash[:min(8, len(meta.Hash))]
 			child := diskRow{
-				label:  fmt.Sprintf("%s (cell=%s)", meta.Hash[:min(8, len(meta.Hash))], meta.Cell),
+				label:  shortHash,
 				bytes:  meta.ClosureBytes,
 				indent: 1,
-				detail: fmt.Sprintf("stack=%s", meta.Stack),
+				detail: fmt.Sprintf("cell=%s stack=%s", meta.Cell, meta.Stack),
 			}
-			child.children = append(child.children, diskRow{
-				label:  fmt.Sprintf("stack: %s", meta.Stack),
-				indent: 2,
-			})
+			if meta.Stack != "" {
+				child.children = append(child.children, diskRow{
+					label:  fmt.Sprintf("stack: %s", meta.Stack),
+					indent: 2,
+				})
+			}
+			if meta.Modules != "" {
+				child.children = append(child.children, diskRow{
+					label:  fmt.Sprintf("modules: %s", meta.Modules),
+					indent: 2,
+				})
+			}
 			if meta.Nixpkgs != "" {
 				rev := meta.Nixpkgs
 				if len(rev) > 12 {
@@ -108,9 +117,8 @@ func (m *diskModel) rebuild() {
 				cellName = strings.TrimSpace(cellName)
 				if cellName != "" {
 					child.children = append(child.children, diskRow{
-						label:  cellName,
+						label:  fmt.Sprintf("cell: %s", cellName),
 						indent: 2,
-						detail: "(cell)",
 					})
 				}
 			}

@@ -296,6 +296,9 @@ func writeNixMetaTable(metas []docker.NixRootMeta) {
 		if stack == "" {
 			stack = "-"
 		}
+		if m.Modules != "" {
+			stack += "+" + m.Modules
+		}
 		size := "-"
 		if m.ClosureBytes > 0 {
 			size = ux.HumanBytes(m.ClosureBytes)

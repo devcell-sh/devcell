@@ -128,7 +128,7 @@ func TestFormatNixStoreSection_ShowsCountsNamesMetaAndHints(t *testing.T) {
 		"dikb1y8-profile", "dikb1y8-generation",
 		"old4321-profile", "(stale)",
 		"cell=devcell", "stack=ultimate", "nixpkgs=9f8e7d6",
-		"cell build prune",
+		"cell clean",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("nix section missing %q\noutput:\n%s", want, out)
@@ -176,6 +176,44 @@ meta hash=abc12345 project=legacy-proj stack=base
 	}
 	if r.Metas[0].Cell != "legacy-proj" {
 		t.Errorf("Cell = %q, want %q (project= fallback)", r.Metas[0].Cell, "legacy-proj")
+	}
+}
+
+func TestParseNixStoreReport_ModulesField(t *testing.T) {
+	out := `total=1 stale=0 hashes=1 generations=1 orphaned=0
+meta hash=abc12345 cell=myproj stack=ultimate modules=llm,electronics nixpkgs=rev1 size=5000
+`
+	r, err := docker.ParseNixStoreReport("v", out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Metas) != 1 {
+		t.Fatalf("want 1 meta, got %d", len(r.Metas))
+	}
+	if r.Metas[0].Modules != "llm,electronics" {
+		t.Errorf("Modules = %q, want %q", r.Metas[0].Modules, "llm,electronics")
+	}
+}
+
+// modules= is rendered as its own field, not concatenated onto stack=.
+func TestFormatNixStoreSection_ModulesSeparateField(t *testing.T) {
+	r := docker.NixStoreReport{
+		Volume: "v",
+		Health: docker.NixStoreHealth{TotalRoots: 1, ProfileHashes: 1},
+		Roots:  []docker.NixRootEntry{{Name: "aaa1111-profile"}},
+		Metas:  []docker.NixRootMeta{{Hash: "aaa1111", Cell: "proj", Stack: "ultimate", Modules: "llm,electronics"}},
+	}
+	var b strings.Builder
+	docker.FormatNixStoreSection(r, &b)
+	out := b.String()
+	if !strings.Contains(out, "stack=ultimate") {
+		t.Errorf("stack must not include modules, got:\n%s", out)
+	}
+	if !strings.Contains(out, "modules=llm,electronics") {
+		t.Errorf("modules must appear as its own field, got:\n%s", out)
+	}
+	if strings.Contains(out, "stack=ultimate+") {
+		t.Errorf("stack must not concatenate modules with +, got:\n%s", out)
 	}
 }
 

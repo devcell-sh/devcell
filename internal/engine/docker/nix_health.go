@@ -207,7 +207,7 @@ func (h NixStoreHealth) Summary() (tag, detail string, severity NixStoreSeverity
 	if h.ProfileHashes > 3 {
 		findings = append(findings, hashPart+" (old builds)")
 	}
-	detail = strings.Join(findings, ", ") + " — run: cell build prune"
+	detail = strings.Join(findings, ", ") + " — run: cell clean"
 
 	severity = NixStoreWarn
 	switch {

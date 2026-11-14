@@ -18,7 +18,7 @@ import (
 // nixRootsListScript emits one line per devcell root and one per meta:
 //
 //	root name=<file> stale=0|1
-//	meta hash=<h> cell=<c> stack=<s> nixpkgs=<rev> size=<bytes>
+//	meta hash=<h> cell=<c> stack=<s> modules=<csv> nixpkgs=<rev> size=<bytes>
 //
 // size is the closure size (sum of nix-store --query --size over the
 // transitive closure). Zero when the profile link is stale or absent.
@@ -41,7 +41,7 @@ for m in /nix/var/nix/gcroots/devcell/*-meta; do
       sz=$((sz + _s))
     done
   fi
-  echo "meta hash=$h cell=$c stack=$(grep '^stack=' "$m" 2>/dev/null | cut -d= -f2) nixpkgs=$(grep '^nixpkgs=' "$m" 2>/dev/null | cut -d= -f2) size=$sz"
+  echo "meta hash=$h cell=$c stack=$(grep '^stack=' "$m" 2>/dev/null | cut -d= -f2) modules=$(grep '^modules=' "$m" 2>/dev/null | cut -d= -f2) nixpkgs=$(grep '^nixpkgs=' "$m" 2>/dev/null | cut -d= -f2) size=$sz"
 done
 _vb=$(du -sb /nix 2>/dev/null | cut -f1)
 echo "volume_bytes=${_vb:-0}"
@@ -64,6 +64,7 @@ type NixRootMeta struct {
 	Hash         string
 	Cell         string // comma-separated cell names sharing this hash
 	Stack        string
+	Modules      string // comma-separated module names; empty when none
 	Nixpkgs      string
 	ClosureBytes int64 // sum of nix-store --query --size over the closure; 0 if stale/unknown
 }
@@ -123,6 +124,7 @@ func ParseNixStoreReport(volume, out string) (NixStoreReport, error) {
 					Hash:         kv["hash"],
 					Cell:         cell,
 					Stack:        kv["stack"],
+					Modules:      kv["modules"],
 					Nixpkgs:      kv["nixpkgs"],
 					ClosureBytes: closureBytes,
 				})
@@ -189,6 +191,9 @@ func FormatNixStoreSection(r NixStoreReport, w io.Writer) {
 			if m.Stack != "" {
 				parts = append(parts, "stack="+m.Stack)
 			}
+			if m.Modules != "" {
+				parts = append(parts, "modules="+m.Modules)
+			}
 			if m.Nixpkgs != "" {
 				parts = append(parts, "nixpkgs="+shortRev(m.Nixpkgs))
 			}
@@ -201,5 +206,5 @@ func FormatNixStoreSection(r NixStoreReport, w io.Writer) {
 		}
 		fmt.Fprintln(w, line)
 	}
-	fmt.Fprintln(w, "  To reclaim: cell build prune")
+	fmt.Fprintln(w, "  To reclaim: cell clean")
 }
