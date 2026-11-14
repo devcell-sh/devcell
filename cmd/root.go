@@ -24,8 +24,9 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:          "devcell",
-	SilenceUsage: true, // don't dump usage after handled errors
+	Use:           "devcell",
+	SilenceUsage:  true, // don't dump usage after handled errors
+	SilenceErrors: true, // we render errors ourselves in Execute()
 	Short:        "Run AI coding agents in a DevCell container",
 	Long: `DevCell launches AI coding agents (claude, codex, opencode) and utility
 tools inside a consistent Docker dev environment.`,
@@ -246,10 +247,21 @@ func Execute() {
 	}
 	applyDefaultCommand()
 	if err := rootCmd.Execute(); err != nil {
-		var ue *usageError
-		if errors.As(err, &ue) {
+		// Preflight errors (e.g. daemon unreachable) already printed styled
+		// output at the call site — exit without re-printing.
+		var pe *ux.ErrPreflight
+		if errors.As(err, &pe) {
 			os.Exit(1)
 		}
+		// Usage/flag errors: cobra already printed them before SilenceErrors;
+		// now that we silence, we print ourselves without the version banner.
+		var ue *usageError
+		if errors.As(err, &ue) {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+		// Default: print error with version info for bug reports.
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		fmt.Fprintf(os.Stderr, "\n devcell %s\n", version.Full())
 		baseVer, userVer := docker.ImageVersions(context.Background())
 		if baseVer != "" {

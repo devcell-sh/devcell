@@ -138,11 +138,14 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 	}
 
 	// ── Image acquisition ────────────────────────────────────────────────────
-	// Daemon preflight: surface a single actionable error if docker is down
-	// before any pull/build attempt (CELL-44). Skip in dry-run.
+	// Daemon preflight moved into the boot panel's "Docker" phase below so
+	// the check is visible as the first Prepare dot (CELL-44).
 	if !dryRun {
 		if err := DockerDaemonReachable(ctx); err != nil {
-			return err
+			// Panel not built yet — fall back to styled standalone output.
+			ux.FailMsg("Docker daemon — not running")
+			printDaemonHints()
+			return &ux.ErrPreflight{Err: err}
 		}
 		logDiagnostics(ctx, c)
 	}

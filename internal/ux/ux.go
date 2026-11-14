@@ -205,6 +205,13 @@ func (ps *ProgressSpinner) Fail(message string) *ProgressSpinner {
 	return ps
 }
 
+// ErrPreflight wraps an error whose user-facing output was already printed
+// at the call site. The top-level Execute handler exits without re-printing.
+type ErrPreflight struct{ Err error }
+
+func (e *ErrPreflight) Error() string { return e.Err.Error() }
+func (e *ErrPreflight) Unwrap() error { return e.Err }
+
 // ErrUserAborted is returned when the user presses Esc during a prompt.
 var ErrUserAborted = huh.ErrUserAborted
 
