@@ -2419,3 +2419,43 @@ func TestTmpdir_SocketRoundTrip(t *testing.T) {
 		t.Fatalf("server: %v", err)
 	}
 }
+
+// --- FlakeLockArgv ---
+
+func TestFlakeLockArgv_MountsNixVolume(t *testing.T) {
+	argv := docker.FlakeLockArgv("/tmp/configdir", false)
+	joined := strings.Join(argv, " ")
+	if !strings.Contains(joined, "-v "+docker.NixStoreVolume()+":/nix") {
+		t.Errorf("expected nix store volume mount, got: %s", joined)
+	}
+}
+
+func TestFlakeLockArgv_AcceptFlakeConfig(t *testing.T) {
+	argv := docker.FlakeLockArgv("/tmp/configdir", false)
+	found := false
+	for _, a := range argv {
+		if strings.Contains(a, "accept-flake-config = true") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected accept-flake-config = true in NIX_CONFIG, got: %v", argv)
+	}
+}
+
+func TestFlakeLockArgv_LockOnlyUsesLockCmd(t *testing.T) {
+	argv := docker.FlakeLockArgv("/tmp/configdir", true)
+	last := argv[len(argv)-1]
+	if !strings.Contains(last, "nix flake lock") {
+		t.Errorf("lockOnly=true should use 'nix flake lock', got: %s", last)
+	}
+}
+
+func TestFlakeLockArgv_UpdateUsesUpdateCmd(t *testing.T) {
+	argv := docker.FlakeLockArgv("/tmp/configdir", false)
+	last := argv[len(argv)-1]
+	if !strings.Contains(last, "nix flake update") {
+		t.Errorf("lockOnly=false should use 'nix flake update', got: %s", last)
+	}
+}

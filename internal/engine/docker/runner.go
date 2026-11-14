@@ -962,22 +962,30 @@ func ImageVersions(ctx context.Context) (base, user string) {
 	return
 }
 
-// UpdateFlakeLock runs nix flake lock (or update) inside a lightweight
-// nixos/nix container with configDir bind-mounted.
-func UpdateFlakeLock(ctx context.Context, configDir string, lockOnly bool, verbose bool, out io.Writer) error {
+// FlakeLockArgv returns the docker-run argv for nix flake lock/update.
+// Extracted so tests can verify the argv without shelling out.
+func FlakeLockArgv(configDir string, lockOnly bool) []string {
 	nixCmd := "nix flake update"
 	if lockOnly {
 		nixCmd = "nix flake lock"
 	}
-	args := []string{
-		"run", "--rm",
+	return []string{
+		"docker", "run", "--rm",
 		"-v", configDir + ":/work",
-		"-e", "NIX_CONFIG=experimental-features = nix-command flakes",
+		"-v", NixStoreVolume() + ":/nix",
+		"-e", "NIX_CONFIG=experimental-features = nix-command flakes\naccept-flake-config = true",
 		"--entrypoint", "/bin/sh",
 		FlakeNixImage(),
 		"-c", "cd /work && " + nixCmd,
 	}
-	cmd := exec.CommandContext(ctx, "docker", args...)
+}
+
+// UpdateFlakeLock runs nix flake lock (or update) inside a lightweight
+// nixos/nix container with configDir bind-mounted. The shared nix-store
+// volume is mounted so resolved inputs are cached across runs.
+func UpdateFlakeLock(ctx context.Context, configDir string, lockOnly bool, verbose bool, out io.Writer) error {
+	args := FlakeLockArgv(configDir, lockOnly)
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	cmd.Cancel = func() error {
 		if cmd.Process != nil {
