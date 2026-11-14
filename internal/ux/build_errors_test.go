@@ -89,6 +89,17 @@ func TestClassifyBuildOutput_GenericDockerFallback(t *testing.T) {
 	}
 }
 
+func TestClassifyBuildOutput_ContainerdIOError(t *testing.T) {
+	output := `Error response from daemon: rpc error: code = Unknown desc = blob sha256:53b5ec518b expected at /var/lib/containerd/io.containerd.content.v1.content/blobs/sha256/53b5ec518b: open /var/lib/containerd/io.containerd.content.v1.content/blobs/sha256/53b5ec518b: input/output error`
+	hint := ClassifyBuildOutput(output)
+	if hint == nil {
+		t.Fatal("expected hint for containerd I/O error, got nil")
+	}
+	if !strings.Contains(strings.ToLower(hint.Title), "storage") {
+		t.Errorf("unexpected title: %q", hint.Title)
+	}
+}
+
 func TestClassifyBuildOutput_DockerDaemonBeforeFallback(t *testing.T) {
 	// daemon error must match before the generic fallback even though both patterns present
 	output := `Cannot connect to the Docker daemon at unix:///var/run/docker.sock

@@ -88,6 +88,17 @@ var buildErrorPatterns = []struct {
 		},
 	},
 	{
+		needle: "input/output error",
+		hint: BuildErrorHint{
+			Title: "Container storage I/O error",
+			Body:  "The container runtime's storage has corrupt or unreadable data.",
+			Fixes: []string{
+				"colima restart                   # restart Colima VM",
+				"colima delete && colima start    # reset Colima (removes all containers/images)",
+			},
+		},
+	},
+	{
 		needle: "cannot connect to the docker daemon",
 		hint: BuildErrorHint{
 			Title: "Docker daemon is not running",
