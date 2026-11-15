@@ -20,6 +20,13 @@ var LogPlainText bool
 // Implies LogPlainText. Set by --debug.
 var Verbose bool
 
+// PanelActive is true while an animated BootPanel owns the terminal.
+// Code that would prompt on stdin must treat this as non-TTY: the panel
+// has disabled echo and is redrawing the screen, so a prompt is invisible
+// and stdin reads stall. The flag is set by NewBootPanel (non-plain mode)
+// and cleared by Finish/FinishError.
+var PanelActive bool
+
 // Color palette — adaptive hex pairs for light/dark terminal themes.
 // Info/spinner: brand orange. Success: brand lime (softened). Error/Warning: Primer (semantic clarity).
 var (

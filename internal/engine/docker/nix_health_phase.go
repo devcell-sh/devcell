@@ -103,8 +103,8 @@ func staleCellNudge(baseDir string, h NixStoreHealth, probed, staleWarn bool) er
 		ux.Debugf("stale check: cell is current (or revs unknown) — no nudge")
 		return nil
 	}
-	isTTY := isatty.IsTerminal(os.Stdin.Fd())
-	ux.Debugf("stale check: nudging user (tty=%v, default=proceed)", isTTY)
+	isTTY := isatty.IsTerminal(os.Stdin.Fd()) && !ux.PanelActive
+	ux.Debugf("stale check: nudging user (tty=%v, panel=%v, default=proceed)", isTTY, ux.PanelActive)
 	if ConfirmProceed(os.Stdout, os.Stdin, isTTY, warning) {
 		ux.Debugf("stale check: user chose to proceed with the stale closure")
 		return nil
@@ -143,8 +143,8 @@ func closureCheckPhase(ctx context.Context, pr ux.Phaser, imageTag string, dryRu
 		return nil
 	}
 
-	isTTY := isatty.IsTerminal(os.Stdin.Fd())
-	ux.Debugf("closure check: dead closure detected (tty=%v)", isTTY)
+	isTTY := isatty.IsTerminal(os.Stdin.Fd()) && !ux.PanelActive
+	ux.Debugf("closure check: dead closure detected (tty=%v, panel=%v)", isTTY, ux.PanelActive)
 
 	if !ConfirmProceed(os.Stdout, os.Stdin, isTTY, warning) {
 		return fmt.Errorf("launch aborted — rebuild with: cell build")

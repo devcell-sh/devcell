@@ -72,6 +72,10 @@ func NewBootPanel(groups []PanelGroup) *BootPanel {
 	loader := streak.NewLoader(grid, opts...)
 	loader.Start()
 
+	if !LogPlainText && !Verbose {
+		PanelActive = true
+	}
+
 	return &BootPanel{
 		loader:     loader,
 		groups:     groups,
@@ -301,11 +305,13 @@ func (p *BootPanel) PromoteRunning() {
 
 // Finish stops the Loader and draws the final frame.
 func (p *BootPanel) Finish(text string) {
+	PanelActive = false
 	p.loader.Finish(text, streak.Done)
 }
 
 // FinishError stops the Loader with an error status.
 func (p *BootPanel) FinishError(text string) {
+	PanelActive = false
 	p.loader.Finish(text, streak.Error)
 }
 

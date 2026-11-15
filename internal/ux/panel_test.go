@@ -153,6 +153,48 @@ func TestBootPanel_SetBootWithGroup(t *testing.T) {
 	panel.Finish("done")
 }
 
+func TestBootPanel_PanelActiveLifecycle(t *testing.T) {
+	// In plain mode (test init sets LogPlainText=true), PanelActive stays false.
+	PanelActive = false
+	panel := NewBootPanel(testGroups("Step A"))
+	if PanelActive {
+		t.Error("PanelActive should be false in plain mode")
+	}
+	panel.Finish("done")
+	if PanelActive {
+		t.Error("PanelActive should be false after Finish")
+	}
+
+	// Simulate non-plain mode.
+	old := LogPlainText
+	LogPlainText = false
+	defer func() { LogPlainText = old }()
+
+	panel2 := NewBootPanel(testGroups("Step A"))
+	if !PanelActive {
+		t.Error("PanelActive should be true in non-plain mode")
+	}
+	panel2.Finish("done")
+	if PanelActive {
+		t.Error("PanelActive should be false after Finish")
+	}
+}
+
+func TestBootPanel_PanelActiveClearedOnFinishError(t *testing.T) {
+	old := LogPlainText
+	LogPlainText = false
+	defer func() { LogPlainText = old }()
+
+	panel := NewBootPanel(testGroups("Step A"))
+	if !PanelActive {
+		t.Error("PanelActive should be true")
+	}
+	panel.FinishError("failed")
+	if PanelActive {
+		t.Error("PanelActive should be false after FinishError")
+	}
+}
+
 func TestBootPanel_PromotePending(t *testing.T) {
 	groups := []PanelGroup{
 		{Label: "Prepare", Steps: []string{"Docker", "Network"}},
