@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-15
+
+### Added
+
+- `PanelActive` flag set by non-plain `BootPanel` and cleared on `Finish`/`FinishError`
+
+### Fixed
+
+- Boot panel no longer stalls on an invisible prompt when `--debug` is off: stale-closure and dead-closure prompts are skipped while the animated panel is drawing
+
 ## [0.14.0] - 2026-11-14
 
 ### Added
