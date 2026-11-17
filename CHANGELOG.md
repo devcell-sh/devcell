@@ -5,15 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-## [0.15.0] - 2026-11-15
+## [0.15.0] - 2026-11-17
 
 ### Added
 
+- `[cell] boot_timeout` and `DEVCELL_BOOT_TIMEOUT` env var to configure how long `cell` waits for boot (Go duration, default raised from 90s to 3m)
 - `PanelActive` flag set by non-plain `BootPanel` and cleared on `Finish`/`FinishError`
 
 ### Fixed
 
 - Boot panel no longer stalls on an invisible prompt when `--debug` is off: stale-closure and dead-closure prompts are skipped while the animated panel is drawing
+- Boot timeout error now reports the actual configured limit instead of a hardcoded value
 
 ## [0.14.0] - 2026-11-14
 
