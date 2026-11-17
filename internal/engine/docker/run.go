@@ -818,10 +818,10 @@ func (Engine) Run(ctx context.Context, opts engine.RunOpts) error {
 				}
 				return fmt.Errorf("boot did not complete")
 			}
-		case <-time.After(90 * time.Second):
+		case <-time.After(cellCfg.Cell.ResolvedBootTimeout()):
 			logWatcher.Close()
 			panel.FinishError("boot timed out")
-			err := bootTimeoutError(c.ContainerName, 90*time.Second)
+			err := bootTimeoutError(c.ContainerName, cellCfg.Cell.ResolvedBootTimeout())
 			if sess != nil {
 				_ = sess.Finish(c.BaseDir, err)
 			}

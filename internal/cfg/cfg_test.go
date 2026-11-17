@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/devcell-sh/devcell/internal/cfg"
 )
@@ -4252,5 +4253,36 @@ func TestMerge_SolitaryDefaultWhenBothUnset(t *testing.T) {
 	}
 	if merged.Solitary.Directories.ResolvedMounts() != cfg.SolitaryEmpty {
 		t.Errorf("default mounts should be empty when both layers unset")
+	}
+}
+
+// --- BootTimeout ---
+
+func TestCellSection_ResolvedBootTimeout_Default(t *testing.T) {
+	c := cfg.CellSection{}
+	if got := c.ResolvedBootTimeout(); got != cfg.DefaultBootTimeout {
+		t.Errorf("want %v, got %v", cfg.DefaultBootTimeout, got)
+	}
+}
+
+func TestCellSection_ResolvedBootTimeout_TOML(t *testing.T) {
+	c := cfg.CellSection{BootTimeout: "5m"}
+	if got := c.ResolvedBootTimeout(); got != 5*time.Minute {
+		t.Errorf("want 5m, got %v", got)
+	}
+}
+
+func TestCellSection_ResolvedBootTimeout_Env(t *testing.T) {
+	t.Setenv("DEVCELL_BOOT_TIMEOUT", "2m30s")
+	c := cfg.CellSection{BootTimeout: "5m"}
+	if got := c.ResolvedBootTimeout(); got != 2*time.Minute+30*time.Second {
+		t.Errorf("env should override toml: want 2m30s, got %v", got)
+	}
+}
+
+func TestCellSection_ResolvedBootTimeout_InvalidFallsBack(t *testing.T) {
+	c := cfg.CellSection{BootTimeout: "nope"}
+	if got := c.ResolvedBootTimeout(); got != cfg.DefaultBootTimeout {
+		t.Errorf("invalid duration should fall back to default: want %v, got %v", cfg.DefaultBootTimeout, got)
 	}
 }

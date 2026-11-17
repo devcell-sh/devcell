@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	wg "github.com/hydrz/wireguard"
@@ -75,6 +76,7 @@ type CellSection struct {
 	Volumes          []string          `toml:"volumes"`                 // shorthand volume list: "/path", "/host:/container", "/host:/container:ro"
 	Ports            []string          `toml:"ports"`                   // shorthand port forwards: "3000", "8080:3000" (merged into [ports] forward)
 	Mcps             []string          `toml:"mcps"`                    // shorthand MCP servers to enable: ["playwright", "aws-api"] (merged into [mcp] enabled)
+	BootTimeout      string            `toml:"boot_timeout"`            // max time to wait for container boot (Go duration, e.g. "3m"); default: "3m"; env: DEVCELL_BOOT_TIMEOUT
 }
 
 // StaleWarningEnabled reports whether the CELL-391 stale-cell nudge should
@@ -205,6 +207,25 @@ func (c CellSection) FlakeEnabled() bool {
 		return *c.Flake
 	}
 	return false
+}
+
+// DefaultBootTimeout is how long `cell` waits for the container to finish
+// booting before giving up. Override with [cell] boot_timeout or DEVCELL_BOOT_TIMEOUT.
+const DefaultBootTimeout = 3 * time.Minute
+
+// ResolvedBootTimeout returns the effective boot timeout: env > toml > 3m.
+func (c CellSection) ResolvedBootTimeout() time.Duration {
+	if v := os.Getenv("DEVCELL_BOOT_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	if c.BootTimeout != "" {
+		if d, err := time.ParseDuration(c.BootTimeout); err == nil && d > 0 {
+			return d
+		}
+	}
+	return DefaultBootTimeout
 }
 
 // ResolvedTartSSHPort returns the effective SSH port: env > toml > default 22.

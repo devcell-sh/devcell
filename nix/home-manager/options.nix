@@ -53,6 +53,7 @@ in
     volumes = opt (types.listOf types.str);
     ports = opt (types.listOf types.str);
     mcps = opt (types.listOf types.str);
+    boot_timeout = opt types.str;
   };
   docker = {
     privileged = opt types.bool;

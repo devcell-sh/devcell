@@ -70,6 +70,10 @@
           "description": "keep VM/container running after shell exit; default: false; env: DEVCELL_BACKGROUND",
           "type": "boolean"
         },
+        "boot_timeout": {
+          "description": "max time to wait for container boot (Go duration, e.g. \"3m\"); default: \"3m\"; env: DEVCELL_BOOT_TIMEOUT",
+          "type": "string"
+        },
         "default_command": {
           "description": "subcommand to run when `cell` is invoked with no args; env: DEVCELL_DEFAULT_COMMAND",
           "type": "string"
