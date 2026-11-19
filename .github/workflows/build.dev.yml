@@ -157,7 +157,7 @@ jobs:
         if: inputs.skip_nix_cache != true
         run: |
           HASH=${{ github.sha }}
-          ./bin/devdevcell nix-store pull \
+          ./bin/devcell nix-store pull \
             --image "${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}" \
             --fallback "${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest" \
             --volume "devcell-nix-store-${{ matrix.arch }}" \
@@ -247,7 +247,7 @@ jobs:
       - name: Hydrate /nix volume from GHCR cache
         run: |
           HASH=${{ github.sha }}
-          ./bin/devdevcell nix-store pull \
+          ./bin/devcell nix-store pull \
             --image "${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-${HASH}" \
             --fallback "${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-${{ matrix.arch }}-latest" \
             --volume "devcell-nix-store-${{ matrix.arch }}" \
@@ -314,7 +314,7 @@ jobs:
       - name: Hydrate /nix volume from GHCR cache
         run: |
           HASH=${{ github.sha }}
-          ./bin/devdevcell nix-store pull \
+          ./bin/devcell nix-store pull \
             --image "${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-amd64-${HASH}" \
             --fallback "${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:nix-cache-amd64-latest" \
             --volume "devcell-nix-store" \
