@@ -44,6 +44,16 @@ api/swagger/
 .nixhome-tmp/
 .rendered-ps1/
 
+# Nix build output symlink
+result
+
+# Vagrant state
+.vagrant/
+
+# Core dumps
+*.core
+core
+
 # macOS
 .DS_Store
 
