@@ -398,6 +398,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
           SHORT_SHA: ${{ env.SHORT_SHA }}
+          # Pin the tag: on a release commit HEAD also carries vX.Y.Z, and
+          # GoReleaser would otherwise pick the highest tag, publishing the
+          # dev cask against a release that has no dev assets.
+          GORELEASER_CURRENT_TAG: ${{ env.RELEASE_VERSION }}
 
       - name: Publish release
         env:
