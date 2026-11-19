@@ -5,28 +5,37 @@
 // drives the browser via MCP JSON-RPC. Each site is a table entry with a URL,
 // wait time, JS extraction function, and assertion list.
 //
+// Browser profiles control WHICH chromium binary and stealth config is used.
+// Each profile is an independent test dimension: results are tracked per
+// (profile, site) pair.
+//
 // Usage:
-//   node test/js/stealth-fingerprint-test.js [--only creepjs,sannysoft,...] [--wait-mult N]
+//   node test/js/stealth-fingerprint-test.js [--only creepjs,sannysoft,...] [--wait-mult N] [--profile name,...]
 //
 // --wait-mult  Multiplier for per-site wait times (default: 1). Use 0.5 for
 //              fast networks or 2 for slow CI.
+// --profile    Comma-separated profile names (default: patchright).
+//              Use "all" to run every non-skipped profile.
 //
 // Exits 0 on all-pass, 1 on any failure.
 
 'use strict';
 
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const readline = require('readline');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 // ── Minimal MCP stdio client ────────────────────────────────────────────────
 
 class McpClient {
-  constructor(command, args) {
+  constructor(command, args, env) {
     this._nextId = 1;
     this._pending = new Map();
     this._proc = spawn(command, args, {
       stdio: ['pipe', 'pipe', 'inherit'],
-      env: { ...process.env },
+      env: { ...process.env, ...(env || {}) },
     });
     this._rl = readline.createInterface({ input: this._proc.stdout });
     this._rl.on('line', (line) => {
@@ -88,27 +97,31 @@ class McpClient {
 
 // ── Assertion tracker ───────────────────────────────────────────────────────
 
-const failures = [];
-const passes = [];
+function makeTracker() {
+  const failures = [];
+  const passes = [];
 
-function assert(name, actual, expected, cmp) {
-  const op = cmp || '===';
-  let pass;
-  if (op === '===') pass = actual === expected;
-  else if (op === '!==') pass = actual !== expected;
-  else if (op === 'includes') pass = typeof actual === 'string' && actual.includes(expected);
-  else if (op === '!includes') pass = typeof actual !== 'string' || !actual.includes(expected);
-  else if (op === '<') pass = actual < expected;
-  else if (op === '>=') pass = actual >= expected;
-  else if (op === '>') pass = actual > expected;
-  else pass = actual === expected;
+  function assert(name, actual, expected, cmp) {
+    const op = cmp || '===';
+    let pass;
+    if (op === '===') pass = actual === expected;
+    else if (op === '!==') pass = actual !== expected;
+    else if (op === 'includes') pass = typeof actual === 'string' && actual.includes(expected);
+    else if (op === '!includes') pass = typeof actual !== 'string' || !actual.includes(expected);
+    else if (op === '<') pass = actual < expected;
+    else if (op === '>=') pass = actual >= expected;
+    else if (op === '>') pass = actual > expected;
+    else pass = actual === expected;
 
-  const status = pass ? 'PASS' : 'FAIL';
-  const line = `  [${status}] ${name}: got ${JSON.stringify(actual)}` +
-    (pass ? '' : `, want ${op} ${JSON.stringify(expected)}`);
-  console.log(line);
-  if (pass) passes.push(name);
-  else failures.push(name);
+    const status = pass ? 'PASS' : 'FAIL';
+    const line = `  [${status}] ${name}: got ${JSON.stringify(actual)}` +
+      (pass ? '' : `, want ${op} ${JSON.stringify(expected)}`);
+    console.log(line);
+    if (pass) passes.push(name);
+    else failures.push(name);
+  }
+
+  return { failures, passes, assert };
 }
 
 // ── MCP result parsing ──────────────────────────────────────────────────────
@@ -134,6 +147,194 @@ async function evaluate(mcp, fn, timeoutMs = 30000) {
   return extractJson(result);
 }
 
+// ── Browser profiles ───────────────────────────────────────────────────────
+//
+// Each profile defines HOW chromium is launched. The test matrix is
+// profiles x sites. Profiles that can't run on the current arch are skipped.
+
+const ARCH = os.arch();      // 'arm64' or 'x64'
+const UNAME_M = execSync('uname -m').toString().trim(); // 'aarch64' or 'x86_64'
+
+function hasRosetta() {
+  if (UNAME_M !== 'aarch64') return false;
+  try {
+    const x86Chrome = execSync(
+      "grep '_CHROMIUM_X86=' $(readlink -f $(which patchright-mcp-cell)) | head -1",
+      { encoding: 'utf8' }
+    ).match(/"([^"]+)"/);
+    if (!x86Chrome) return false;
+    execSync(`timeout 10 "${x86Chrome[1]}" --version`, { stdio: 'pipe' });
+    return true;
+  } catch { return false; }
+}
+
+function findNixpkgsArm64Chrome() {
+  if (UNAME_M !== 'aarch64') return null;
+  try {
+    // The user nix profile has a chromium wrapper; trace it to the
+    // unwrapped binary (the actual ELF we can pass as executablePath).
+    const profileBin = fs.realpathSync(
+      `${process.env.HOME}/.local/state/nix/profiles/profile/bin/chromium`
+    );
+    // profileBin is /nix/store/<hash>-chromium-<ver>/bin/chromium (a wrapper script).
+    // The unwrapped binary lives in a sibling store path named chromium-unwrapped-<ver>.
+    const wrapperSrc = fs.readFileSync(profileBin, 'utf8');
+    const unwrapMatch = wrapperSrc.match(/(\/nix\/store\/[^\s"']+chromium-unwrapped[^\s"']*\/libexec\/chromium\/chromium)/);
+    if (unwrapMatch && fs.existsSync(unwrapMatch[1])) return unwrapMatch[1];
+    // Fallback: scan nix store for aarch64 chromium-unwrapped binaries
+    const found = execSync(
+      `find /nix/store -maxdepth 5 -name 'chromium' -path '*/chromium-unwrapped*/libexec/*' 2>/dev/null | ` +
+      `xargs -I{} sh -c 'readelf -h "{}" 2>/dev/null | grep -q AArch64 && echo "{}"' | head -1`,
+      { encoding: 'utf8', timeout: 15000 }
+    ).trim();
+    return found || null;
+  } catch { return null; }
+}
+
+function findSpeechdLib() {
+  try {
+    // Check nix-ld libs first (fastest), then search nix store
+    const nldPath = '/opt/devcell/.nix-ld-libs/libspeechd.so.2';
+    if (fs.existsSync(nldPath)) return path.dirname(nldPath);
+    const found = execSync(
+      "find /nix/store -maxdepth 4 -name 'libspeechd.so.2' 2>/dev/null | head -1",
+      { encoding: 'utf8', timeout: 10000 }
+    ).trim();
+    return found ? path.dirname(found) : null;
+  } catch { return null; }
+}
+
+const _rosetta = hasRosetta();
+const _arm64Chrome = UNAME_M === 'aarch64' ? findNixpkgsArm64Chrome() : null;
+const _speechdLib = findSpeechdLib();
+const _tmpWrappers = [];
+
+function generatePatchedWrapper(opts) {
+  const originalPath = execSync('readlink -f $(which patchright-mcp-cell)', { encoding: 'utf8' }).trim();
+  let src = fs.readFileSync(originalPath, 'utf8');
+
+  // Fix _SHARE: the original derives it from $0's location, which breaks
+  // when the wrapper lives in /tmp. Hardcode the original share path.
+  const originalShare = path.join(path.dirname(path.dirname(originalPath)), 'share', 'patchright');
+  src = src.replace(
+    '_SELF="$(readlink -f "$0")"',
+    `_SELF="${originalPath}"`
+  );
+  src = src.replace(
+    '_SHARE="$(dirname "$(dirname "$_SELF")")/share/patchright"',
+    `_SHARE="${originalShare}"`
+  );
+
+  if (opts.execPath) {
+    src = src.replace(
+      /^_EXEC_PATH_OVERRIDE=""$/m,
+      `_EXEC_PATH_OVERRIDE="${opts.execPath}"`
+    );
+  }
+
+  if (opts.speechFlag) {
+    src = src.replace(
+      /\["--user-agent=" \+ \$ua\]/,
+      '["--user-agent=" + $ua, "--enable-speech-dispatcher"]'
+    );
+  }
+
+  if (opts.speechdLib) {
+    src = src.replace(
+      /^export LD_LIBRARY_PATH="/m,
+      `export LD_LIBRARY_PATH="${opts.speechdLib}:`
+    );
+  }
+
+
+  if (opts.noShims) {
+    // Replace init-script content with empty file (keeps the flag but no JS)
+    src = src.replace(
+      /printf '%s\\n' "\$_STEALTH_PREAMBLE" > "\$_STEALTH_INIT"/,
+      'printf "" > "$_STEALTH_INIT"'
+    );
+    src = src.replace(
+      /if \[ -f "\$_SHARE\/stealth-init\.js" \]; then\n\s*cat "\$_SHARE\/stealth-init\.js" >> "\$_STEALTH_INIT"\nfi/,
+      '# stealth-init.js skipped (bare profile)'
+    );
+  }
+
+  const tmpPath = path.join(os.tmpdir(), `patchright-mcp-cell-${opts.name}-${process.pid}`);
+  fs.writeFileSync(tmpPath, src, { mode: 0o755 });
+  _tmpWrappers.push(tmpPath);
+  return tmpPath;
+}
+
+function cleanupWrappers() {
+  for (const p of _tmpWrappers) {
+    try { fs.unlinkSync(p); } catch {}
+  }
+}
+
+const PROFILES = {
+  'x86-rosetta': {
+    desc: 'nixpkgs x86_64 chromium (Rosetta)',
+    skip: () => {
+      if (UNAME_M !== 'aarch64') return false;
+      if (!_rosetta) return 'no Rosetta available on aarch64';
+      return false;
+    },
+    spawn: () => ({
+      command: 'patchright-mcp-cell',
+      args: ['--browser', 'chromium'],
+      env: { DEVCELL_STEALTH_ARCH: 'x86' },
+    }),
+  },
+
+  'patchright': {
+    desc: 'patchright builtin + stealth shims (production)',
+    skip: () => false,
+    spawn: () => ({
+      command: 'patchright-mcp-cell',
+      args: ['--browser', 'chromium'],
+      env: {},
+    }),
+  },
+
+  'arm64-bare': {
+    desc: 'nixpkgs arm64 chromium, no stealth shims',
+    skip: () => {
+      if (UNAME_M !== 'aarch64') return 'not on aarch64';
+      if (!_arm64Chrome) return 'no native aarch64 nixpkgs chromium found';
+      return false;
+    },
+    spawn: () => {
+      const wrapper = generatePatchedWrapper({
+        name: 'arm64-bare',
+        execPath: _arm64Chrome,
+        speechFlag: true,
+        speechdLib: _speechdLib,
+        noShims: true,
+      });
+      return { command: wrapper, args: ['--browser', 'chromium'], env: {} };
+    },
+  },
+
+  'arm64-shims': {
+    desc: 'nixpkgs arm64 chromium + stealth shims',
+    skip: () => {
+      if (UNAME_M !== 'aarch64') return 'not on aarch64';
+      if (!_arm64Chrome) return 'no native aarch64 nixpkgs chromium found';
+      return false;
+    },
+    spawn: () => {
+      const wrapper = generatePatchedWrapper({
+        name: 'arm64-shims',
+        execPath: _arm64Chrome,
+        speechFlag: true,
+        speechdLib: _speechdLib,
+        noShims: false,
+      });
+      return { command: wrapper, args: ['--browser', 'chromium'], env: {} };
+    },
+  },
+};
+
 // ── Site test table ─────────────────────────────────────────────────────────
 //
 // Each entry: { url, waitSec, extract (JS string), assertions (fn) }
@@ -158,7 +359,7 @@ const SITES = {
         text: text.substring(0, 300)
       });
     }`,
-    assertions: (r) => {
+    assertions: (r, assert) => {
       assert('cloudflare-not-challenged', r.challenged, false);
     },
   },
@@ -173,7 +374,7 @@ const SITES = {
         loaded: text.length > 200,
       });
     }`,
-    assertions: (r) => {
+    assertions: (r, assert) => {
       assert('akamai-not-blocked', r.blocked, false);
       assert('akamai-loaded', r.loaded, true);
     },
@@ -190,7 +391,7 @@ const SITES = {
         title: document.title,
       });
     }`,
-    assertions: (r) => {
+    assertions: (r, assert) => {
       assert('bet365-not-blocked', r.blocked, false);
       assert('bet365-loaded', r.loaded, true);
     },
@@ -206,7 +407,7 @@ const SITES = {
         loaded: text.length > 50,
       });
     }`,
-    assertions: (r) => {
+    assertions: (r, assert) => {
       assert('datadome-not-blocked', r.blocked, false);
     },
   },
@@ -221,7 +422,7 @@ const SITES = {
         loaded: text.length > 100,
       });
     }`,
-    assertions: (r) => {
+    assertions: (r, assert) => {
       assert('fingerprint-no-bot', r.botDetected, false);
       assert('fingerprint-loaded', r.loaded, true);
     },
@@ -252,7 +453,7 @@ const SITES = {
         details: results,
       });
     }`,
-    assertions: (r) => {
+    assertions: (r, assert) => {
       assert('sannysoft-no-failures', r.failed, 0);
       assert('sannysoft-webgl-vendor-pass', r.details?.['WebGL Vendor']?.pass, true);
       assert('sannysoft-webdriver', r.details?.['WebDriver (New)']?.value, 'missing (passed)');
@@ -275,6 +476,7 @@ const SITES = {
       const featMatch = text.match(/Features:\\s*(\\S+)/);
       r.featureVersion = featMatch ? featMatch[1] : 'unknown';
       const speechMatch = text.match(/Speech[\\s\\S]*?local \\((\\d+)\\):\\s*(\\S+)/);
+      r.speechLocalCount = speechMatch ? parseInt(speechMatch[1]) : 0;
       r.speechLocalStatus = speechMatch ? speechMatch[2] : 'unknown';
       const fontMatch = text.match(/Fonts[\\s\\S]*?load \\((\\d+)\\/(\\d+)\\)/);
       r.fontsLoaded = fontMatch ? parseInt(fontMatch[1]) : -1;
@@ -292,11 +494,12 @@ const SITES = {
       r.webglRenderer = wgl ? wgl[2].trim().substring(0, 120) : 'unknown';
       return JSON.stringify(r);
     }`,
-    assertions: (r) => {
+    assertions: (r, assert) => {
       assert('creepjs-stealth-pct', r.stealth || 0, 10, '<');
       assert('creepjs-like-headless-pct', r.likeHeadless || 0, 50, '<');
       assert('creepjs-feature-version-not-113', r.featureVersion, '113-115+', '!==');
       assert('creepjs-speech-not-blocked', r.speechLocalStatus, 'blocked', '!==');
+      assert('creepjs-speech-local-voices', r.speechLocalCount, 0, '>');
       assert('creepjs-fonts-loaded', r.fontsLoaded, 15, '>=');
       assert('creepjs-webgpu-supported', r.webgpu, 'unsupported', '!==');
       const wv = (r.workerUADBrand.match(/(\d+)/) || [])[1];
@@ -324,7 +527,7 @@ const SITES = {
         text: text.substring(0, 500),
       });
     }`,
-    assertions: (r) => {
+    assertions: (r, assert) => {
       assert('browserscan-loaded', r.loaded, true);
       if (r.authenticityPct >= 0) {
         assert('browserscan-authenticity', r.authenticityPct, 80, '>=');
@@ -346,7 +549,7 @@ const SITES = {
         noProxy: text.includes('No proxy detected'),
       });
     }`,
-    assertions: (r) => {
+    assertions: (r, assert) => {
       assert('pixelscan-consistent', r.consistent, true);
       assert('pixelscan-not-inconsistent', r.inconsistent, false);
       assert('pixelscan-timezone-not-spoofed', r.timezoneSpoofed, false);
@@ -383,24 +586,41 @@ const onlyTests = onlyIdx !== -1
 const waitMultIdx = process.argv.indexOf('--wait-mult');
 const WAIT_MULT = waitMultIdx !== -1 ? parseFloat(process.argv[waitMultIdx + 1]) : 1;
 
-// ── Main ────────────────────────────────────────────────────────────────────
+const profileIdx = process.argv.indexOf('--profile');
+const profileArg = profileIdx !== -1 ? process.argv[profileIdx + 1] : 'patchright';
+const selectedProfiles = profileArg === 'all'
+  ? Object.keys(PROFILES)
+  : profileArg.split(',');
 
-async function main() {
-  console.log('Spawning patchright-mcp-cell (production MCP wrapper)...');
-  console.log(`Sites: ${onlyTests.join(', ')}`);
-  console.log(`Wait multiplier: ${WAIT_MULT}x`);
-  console.log('---');
+// ── Run sites against one profile ──────────────────────────────────────────
 
-  const mcp = new McpClient('patchright-mcp-cell', ['--browser', 'chromium']);
+async function runProfile(profileName) {
+  const profile = PROFILES[profileName];
+  if (!profile) {
+    console.log(`Unknown profile: ${profileName}`);
+    return { passes: [], failures: [`${profileName}-unknown`], skipped: false };
+  }
+
+  const skipReason = profile.skip();
+  if (skipReason) {
+    console.log(`  SKIP: ${skipReason}`);
+    return { passes: [], failures: [], skipped: true, skipReason };
+  }
+
+  const tracker = makeTracker();
+  const { command, args, env } = profile.spawn();
+
+  console.log(`  Spawning: ${path.basename(command)} ${args.join(' ')}`);
+  const mcp = new McpClient(command, args, env);
   await mcp.initialize();
-  console.log('MCP initialized.\n');
+  console.log('  MCP initialized.\n');
 
   try {
     for (const name of onlyTests) {
       const site = SITES[name];
-      if (!site) { console.log(`Unknown site: ${name}`); continue; }
+      if (!site) { console.log(`  Unknown site: ${name}`); continue; }
 
-      console.log(`=== ${name.toUpperCase()} ===`);
+      console.log(`  --- ${name.toUpperCase()} ---`);
       const waitMs = Math.round(site.waitSec * WAIT_MULT * 1000);
 
       try {
@@ -410,30 +630,81 @@ async function main() {
         const r = await evaluate(mcp, site.extract);
         if (!r) {
           console.log(`  Failed to extract data from ${name}`);
-          failures.push(`${name}-extract`);
+          tracker.failures.push(`${name}-extract`);
           continue;
         }
 
         console.log(JSON.stringify(r, null, 2));
-        console.log('Assertions:');
-        site.assertions(r);
+        console.log('  Assertions:');
+        site.assertions(r, tracker.assert);
       } catch (err) {
         console.log(`  ERROR: ${err.message}`);
-        failures.push(`${name}-error`);
+        tracker.failures.push(`${name}-error`);
       }
       console.log('');
     }
   } finally {
-    console.log('Closing browser...');
+    console.log('  Closing browser...');
     await mcp.close();
   }
 
-  console.log(`\n--- ${passes.length} PASSED, ${failures.length} FAILED ---`);
-  if (failures.length > 0) {
-    console.log('Failures:');
-    for (const f of failures) console.log(`  - ${f}`);
-    process.exit(1);
-  }
+  return { passes: tracker.passes, failures: tracker.failures, skipped: false };
 }
 
-main().catch(err => { console.error(err); process.exit(1); });
+// ── Main ────────────────────────────────────────────────────────────────────
+
+async function main() {
+  console.log(`Sites: ${onlyTests.join(', ')}`);
+  console.log(`Profiles: ${selectedProfiles.join(', ')}`);
+  console.log(`Wait multiplier: ${WAIT_MULT}x`);
+  if (_arm64Chrome) console.log(`nixpkgs arm64 chromium: ${_arm64Chrome}`);
+  if (_speechdLib) console.log(`speechd lib: ${_speechdLib}`);
+  console.log('');
+
+  const results = {};
+  let totalPasses = 0;
+  let totalFailures = 0;
+
+  for (const profileName of selectedProfiles) {
+    console.log(`\n${'='.repeat(70)}`);
+    console.log(`PROFILE: ${profileName} — ${(PROFILES[profileName] || {}).desc || '?'}`);
+    console.log('='.repeat(70));
+
+    try {
+      results[profileName] = await runProfile(profileName);
+    } catch (err) {
+      console.log(`  PROFILE ERROR: ${err.message}`);
+      results[profileName] = { passes: [], failures: [`${profileName}-launch-error`], skipped: false };
+    }
+
+    const r = results[profileName];
+    if (!r.skipped) {
+      totalPasses += r.passes.length;
+      totalFailures += r.failures.length;
+      console.log(`\n  Profile result: ${r.passes.length} PASSED, ${r.failures.length} FAILED`);
+    }
+  }
+
+  // Summary
+  console.log(`\n${'='.repeat(70)}`);
+  console.log('SUMMARY');
+  console.log('='.repeat(70));
+  for (const [name, r] of Object.entries(results)) {
+    if (r.skipped) {
+      console.log(`  ${name}: SKIPPED (${r.skipReason})`);
+    } else {
+      const status = r.failures.length === 0 ? 'PASS' : 'FAIL';
+      console.log(`  ${name}: ${status} (${r.passes.length} passed, ${r.failures.length} failed)`);
+      if (r.failures.length > 0) {
+        for (const f of r.failures) console.log(`    - ${f}`);
+      }
+    }
+  }
+  console.log(`\nTOTAL: ${totalPasses} PASSED, ${totalFailures} FAILED`);
+
+  cleanupWrappers();
+
+  if (totalFailures > 0) process.exit(1);
+}
+
+main().catch(err => { console.error(err); cleanupWrappers(); process.exit(1); });
