@@ -5,17 +5,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-## [0.15.0] - 2026-11-17
+## [0.16.0] - 2026-11-19
 
 ### Added
 
 - `[cell] boot_timeout` and `DEVCELL_BOOT_TIMEOUT` env var to configure how long `cell` waits for boot (Go duration, default raised from 90s to 3m)
+
+### Fixed
+
+- `devcell build` no longer fails when the local nixhome has a dangling nix `result` symlink
+- Boot timeout error now reports the actual configured limit instead of a hardcoded value
+
+### Changed
+
+- Build output labels the preflight as "Nix platform compatibility check" instead of "Platform compatibility check"
+- Stealth fingerprint test supports browser profiles for comparing multiple chromium builds side by side
+- `.gitignore` covers nix `result` symlink, `.vagrant/` state, and core dumps
+
+## [0.15.0] - 2026-11-17
+
+### Added
+
 - `PanelActive` flag set by non-plain `BootPanel` and cleared on `Finish`/`FinishError`
 
 ### Fixed
 
 - Boot panel no longer stalls on an invisible prompt when `--debug` is off: stale-closure and dead-closure prompts are skipped while the animated panel is drawing
-- Boot timeout error now reports the actual configured limit instead of a hardcoded value
 
 ## [0.14.0] - 2026-11-14
 
