@@ -521,6 +521,16 @@ func copyDirSkipping(src, dst string, skip ...string) error {
 		if info.IsDir() {
 			return os.MkdirAll(target, info.Mode())
 		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			// Symlink: try to copy the resolved content (valid symlink).
+			// If the target doesn't exist (dangling, e.g. nix `result`
+			// pointing into /nix/store), skip silently.
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return nil
+			}
+			return os.WriteFile(target, data, 0644)
+		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return err

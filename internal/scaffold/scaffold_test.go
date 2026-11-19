@@ -277,6 +277,58 @@ func TestSyncNixhome_SkipsTestResults(t *testing.T) {
 	}
 }
 
+// TestSyncNixhome_SkipsDanglingSymlinks — nix build leaves a `result` symlink
+// pointing into /nix/store which doesn't exist on the host. The copy must
+// silently skip any dangling symlink rather than failing the entire build.
+func TestSyncNixhome_SkipsDanglingSymlinks(t *testing.T) {
+	srcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(srcDir, "flake.nix"), []byte("# nixhome flake"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("/nonexistent/nix/store/abc-pkg", filepath.Join(srcDir, "result")); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+
+	configDir := t.TempDir()
+	if err := scaffold.SyncNixhome(srcDir, configDir); err != nil {
+		t.Fatalf("SyncNixhome should skip dangling symlinks, got: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(configDir, "nixhome", "result")); !os.IsNotExist(err) {
+		t.Errorf("dangling symlink should not be copied (lstat err: %v)", err)
+	}
+	if _, err := os.Stat(filepath.Join(configDir, "nixhome", "flake.nix")); err != nil {
+		t.Errorf("regular files should still be copied: %v", err)
+	}
+}
+
+// TestSyncNixhome_CopiesValidSymlinkContent — valid symlinks are resolved and
+// their target content is copied as a regular file.
+func TestSyncNixhome_CopiesValidSymlinkContent(t *testing.T) {
+	srcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(srcDir, "flake.nix"), []byte("# nixhome flake"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	realFile := filepath.Join(srcDir, "real.txt")
+	if err := os.WriteFile(realFile, []byte("content via symlink"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(realFile, filepath.Join(srcDir, "link.txt")); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+
+	configDir := t.TempDir()
+	if err := scaffold.SyncNixhome(srcDir, configDir); err != nil {
+		t.Fatalf("SyncNixhome failed: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(configDir, "nixhome", "link.txt"))
+	if err != nil {
+		t.Fatalf("valid symlink target should be copied as regular file: %v", err)
+	}
+	if string(data) != "content via symlink" {
+		t.Errorf("expected resolved content, got: %s", string(data))
+	}
+}
+
 // TestSyncNixhome_ErrorOnMissingPath — SyncNixhome returns error for non-existent source.
 func TestSyncNixhome_ErrorOnMissingPath(t *testing.T) {
 	configDir := t.TempDir()
