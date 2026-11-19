@@ -119,7 +119,7 @@ func build(ctx context.Context, p buildParams) error {
 	}
 
 	// --- Platform compatibility preflight ---
-	if err := pr.PhaseDetailed("Platform compatibility check", func() (string, error) {
+	if err := pr.PhaseDetailed("Nix platform compatibility check", func() (string, error) {
 		flakeRef := nixhome.ResolveNixhomeRef(version.Version)
 		if err := nixhome.PreflightPlatformCheck(ctx, flakeRef, "aarch64-darwin"); err != nil {
 			return "", err

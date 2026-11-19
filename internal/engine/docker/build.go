@@ -136,7 +136,7 @@ func build(ctx context.Context, c engine.Cell, p buildParams) error {
 	{
 		nixhomeFlake := "path:" + filepath.Join(c.BuildDir, "nixhome")
 		targetSystem := DetectArch() + "-linux"
-		preLabel := fmt.Sprintf("Platform compatibility check (%s)", targetSystem)
+		preLabel := fmt.Sprintf("Nix platform compatibility check (%s)", targetSystem)
 		if !p.noCache && nixhome.PreflightCacheValid(c.BuildDir) {
 			ux.Debugf("%s — cached, skipping", preLabel)
 		} else {

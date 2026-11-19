@@ -72,7 +72,7 @@ func TestTartDarwinIntegration(t *testing.T) {
 	})
 
 	// Reproduces the first phase of the tart auto-build
-	// (internal/engine/tart/engine_darwin.go "Platform compatibility check"), which fails
+	// (internal/engine/tart/engine_darwin.go "Nix platform compatibility check"), which fails
 	// when a nixhome module pulls in a Linux-only package (e.g. CELL: the
 	// vm module's virtiofsd broke `devcell claude --os macos`).
 	t.Run("platform-preflight", func(t *testing.T) {
