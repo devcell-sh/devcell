@@ -53,6 +53,9 @@
 # Keep the container/VM running after the shell exits. Default: false. Env: DEVCELL_BACKGROUND.
 # background = false
 #
+# Max time to wait for the container to boot (Go duration). Default: "3m". Env: DEVCELL_BOOT_TIMEOUT.
+# boot_timeout = "3m"
+#
 # Mount /var/run/docker.sock into the container. Default: true. Env: DEVCELL_DOCKER_SOCKET.
 # docker_socket = true
 #
@@ -96,6 +99,7 @@
 # mem_limit = "4g"                 # "0" = uncapped. Env: DEVCELL_DOCKER_MEM_LIMIT
 # cpu_limit = "2"                  # "0" = no quota. Env: DEVCELL_DOCKER_CPU_LIMIT
 # shm_size = "1g"                  # Env: DEVCELL_DOCKER_SHM_SIZE
+# devices = ["/dev/dri"]           # extra --device flags passed to docker run
 
 # --- Image build limits (cell build) ---
 # [build]

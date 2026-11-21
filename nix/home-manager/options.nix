@@ -61,6 +61,7 @@ in
     mem_limit = opt types.str;
     cpu_limit = opt types.str;
     shm_size = opt types.str;
+    devices = opt (types.listOf types.str);
   };
   build = {
     memory = opt types.str;

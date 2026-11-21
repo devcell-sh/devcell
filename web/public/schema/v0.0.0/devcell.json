@@ -369,6 +369,13 @@
           "description": "docker --cpus quota (e.g. \"2\"); \"0\" = no quota; env: DEVCELL_DOCKER_CPU_LIMIT",
           "type": "string"
         },
+        "devices": {
+          "description": "extra --device flags (e.g. [\"/dev/dri\", \"virtio/gpu=all\"])",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "mem_limit": {
           "description": "docker --memory ceiling (e.g. \"4g\"); \"0\" = uncapped; env: DEVCELL_DOCKER_MEM_LIMIT",
           "type": "string"

@@ -557,6 +557,30 @@ func TestLoadFile_GUIDefaultsTrue(t *testing.T) {
 	}
 }
 
+func TestMerge_DevicesUnionDedup(t *testing.T) {
+	global := cfg.CellConfig{Docker: cfg.DockerSection{Devices: []string{"/dev/dri", "/dev/snd"}}}
+	project := cfg.CellConfig{Docker: cfg.DockerSection{Devices: []string{"/dev/dri", "virtio/gpu=all"}}}
+	merged := cfg.Merge(global, project)
+	want := map[string]bool{"/dev/dri": true, "/dev/snd": true, "virtio/gpu=all": true}
+	if len(merged.Docker.Devices) != len(want) {
+		t.Fatalf("expected %d devices, got %d: %v", len(want), len(merged.Docker.Devices), merged.Docker.Devices)
+	}
+	for _, d := range merged.Docker.Devices {
+		if !want[d] {
+			t.Errorf("unexpected device %q in merged result", d)
+		}
+	}
+}
+
+func TestMerge_DevicesGlobalKeptWhenProjectEmpty(t *testing.T) {
+	global := cfg.CellConfig{Docker: cfg.DockerSection{Devices: []string{"/dev/dri"}}}
+	project := cfg.CellConfig{}
+	merged := cfg.Merge(global, project)
+	if len(merged.Docker.Devices) != 1 || merged.Docker.Devices[0] != "/dev/dri" {
+		t.Errorf("global devices should be kept when project has none; got %v", merged.Docker.Devices)
+	}
+}
+
 func TestMerge_GUIProjectTrueOverGlobalFalse(t *testing.T) {
 	global := cfg.CellConfig{Cell: cfg.CellSection{GUI: boolPtr(false)}}
 	project := cfg.CellConfig{Cell: cfg.CellSection{GUI: boolPtr(true)}}

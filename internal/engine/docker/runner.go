@@ -255,6 +255,22 @@ func BuildArgv(spec RunSpec, fs FS, lookPath func(string) (string, error)) []str
 		dockerRunFlags = append(dockerRunFlags, "--device=/dev/net/tun")
 		dockerRunFlags = append(dockerRunFlags, "--sysctl", "net.ipv4.conf.all.src_valid_mark=1")
 	}
+	// User-configured devices from [docker] devices = [...]
+	if len(spec.CellCfg.Docker.Devices) > 0 {
+		existing := make(map[string]bool)
+		for _, f := range dockerRunFlags {
+			if strings.HasPrefix(f, "--device=") {
+				existing[f] = true
+			}
+		}
+		for _, d := range spec.CellCfg.Docker.Devices {
+			flag := "--device=" + d
+			if !existing[flag] {
+				dockerRunFlags = append(dockerRunFlags, flag)
+			}
+		}
+	}
+
 	if spec.CellCfg.Docker.Privileged && !dp.DenyPrivileged() {
 		dockerRunFlags = append(dockerRunFlags, "--privileged")
 	}

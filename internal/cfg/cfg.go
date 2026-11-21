@@ -967,6 +967,7 @@ type DockerSection struct {
 	MemLimit   string   `toml:"mem_limit"`  // docker --memory ceiling (e.g. "4g"); "0" = uncapped; env: DEVCELL_DOCKER_MEM_LIMIT
 	CPULimit   string   `toml:"cpu_limit"`  // docker --cpus quota (e.g. "2"); "0" = no quota; env: DEVCELL_DOCKER_CPU_LIMIT
 	ShmSize    string   `toml:"shm_size"`   // docker --shm-size (e.g. "1g"); env: DEVCELL_DOCKER_SHM_SIZE
+	Devices    []string `toml:"devices"`    // extra --device flags (e.g. ["/dev/dri", "virtio/gpu=all"])
 }
 
 // ResolvedMemLimit returns the effective memory limit: env > toml > default "4g".
@@ -1711,6 +1712,9 @@ func Merge(global, project CellConfig) CellConfig {
 	}
 	if project.Docker.ShmSize != "" {
 		out.Docker.ShmSize = project.Docker.ShmSize
+	}
+	if len(project.Docker.Devices) > 0 {
+		out.Docker.Devices = unionDedupStrings(global.Docker.Devices, project.Docker.Devices)
 	}
 
 	// Nix: project wins when non-empty
